@@ -1,19 +1,35 @@
 <script setup>
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { Button } from '@/components/ui/button'
-import { LayoutGridIcon, UtensilsIcon, QrCodeIcon, SettingsIcon, LogOutIcon } from '@lucide/vue'
+import {
+  ClipboardListIcon,
+  LayoutGridIcon,
+  UtensilsIcon,
+  QrCodeIcon,
+  BarChart3Icon,
+  SettingsIcon,
+  LogOutIcon,
+} from '@lucide/vue'
 import { toast } from 'vue-sonner'
 
 const auth = useAuthStore()
 const router = useRouter()
 
-const nav = [
-  { to: { name: 'kategori' }, label: 'Kategori', icon: LayoutGridIcon },
-  { to: { name: 'produk' }, label: 'Produk', icon: UtensilsIcon },
-  { to: { name: 'meja' }, label: 'Meja', icon: QrCodeIcon },
-  { to: { name: 'pengaturan' }, label: 'Pengaturan', icon: SettingsIcon },
-]
+const nav = computed(() => {
+  const items = [{ to: { name: 'pesanan' }, label: 'Pesanan', icon: ClipboardListIcon }]
+  if (auth.isAdmin) {
+    items.push(
+      { to: { name: 'kategori' }, label: 'Kategori', icon: LayoutGridIcon },
+      { to: { name: 'produk' }, label: 'Produk', icon: UtensilsIcon },
+      { to: { name: 'meja' }, label: 'Meja', icon: QrCodeIcon },
+      { to: { name: 'laporan' }, label: 'Laporan', icon: BarChart3Icon },
+      { to: { name: 'pengaturan' }, label: 'Pengaturan', icon: SettingsIcon }
+    )
+  }
+  return items
+})
 
 async function onLogout() {
   await auth.logout()
@@ -43,6 +59,7 @@ async function onLogout() {
       <div class="border-t px-3 py-3">
         <p class="truncate px-1 text-xs text-muted-foreground">
           Masuk sebagai <span class="font-medium text-foreground">{{ auth.user?.username }}</span>
+          <span class="text-muted-foreground/70">({{ auth.user?.role }})</span>
         </p>
         <Button variant="ghost" size="sm" class="mt-1 w-full justify-start gap-2" @click="onLogout">
           <LogOutIcon class="size-4" />

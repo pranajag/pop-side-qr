@@ -147,15 +147,30 @@ async function onSubmit() {
   }
 }
 
+// AlertDialogAction closes the dialog itself on click, which fires our
+// @update:open handler and nulls deleteTarget — *before* the @click
+// handler below gets its turn, not just racing it. A plain (non-reactive)
+// variable set on open and read on confirm sidesteps that entirely,
+// since nothing but this file's own code ever touches it.
+let pendingDelete = null
+
+function openDelete(product) {
+  deleteTarget.value = product
+  pendingDelete = product
+}
+
 async function onDeleteConfirm() {
+  const target = pendingDelete
+  if (!target) return
+
   deleting.value = true
   try {
-    await store.remove(deleteTarget.value.id)
+    await store.remove(target.id)
     toast.success('Produk dihapus')
-    deleteTarget.value = null
   } catch (err) {
     toast.error(formatApiError(err))
   } finally {
+    pendingDelete = null
     deleting.value = false
   }
 }
@@ -219,7 +234,7 @@ async function onDeleteConfirm() {
               <Button variant="ghost" size="icon" @click="openEdit(p)">
                 <PencilIcon class="size-4" />
               </Button>
-              <Button variant="ghost" size="icon" @click="deleteTarget = p">
+              <Button variant="ghost" size="icon" @click="openDelete(p)">
                 <Trash2Icon class="size-4" />
               </Button>
             </TableCell>

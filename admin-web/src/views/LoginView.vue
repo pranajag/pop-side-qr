@@ -22,7 +22,7 @@ async function onSubmit() {
   submitting.value = true
   try {
     await auth.login(username.value, password.value)
-    router.replace(route.query.redirect || { name: 'kategori' })
+    router.replace(route.query.redirect || { name: 'pesanan' })
   } catch (err) {
     error.value = err.status === 401 ? 'Username atau password salah' : err.message
   } finally {
