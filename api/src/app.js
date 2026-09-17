@@ -14,6 +14,8 @@ const categoryRoutes = require('./routes/category.routes');
 const productRoutes = require('./routes/product.routes');
 const tableRoutes = require('./routes/table.routes');
 const settingsRoutes = require('./routes/settings.routes');
+const orderManagementRoutes = require('./routes/orderManagement.routes');
+const reportRoutes = require('./routes/report.routes');
 const publicRoutes = require('./routes/public.routes');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -96,6 +98,8 @@ app.use('/api/admin/categories', categoryRoutes);
 app.use('/api/admin/products', productRoutes);
 app.use('/api/admin/tables', tableRoutes);
 app.use('/api/admin/settings', settingsRoutes);
+app.use('/api/admin/orders', orderManagementRoutes);
+app.use('/api/admin/reports', reportRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });

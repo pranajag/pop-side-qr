@@ -121,6 +121,7 @@ model OrderStatusLog {
   statusTo      OrderStatus @map("status_to")
   changedBy     Int?        @map("changed_by")
   changedByUser User?       @relation(fields: [changedBy], references: [id])
+  catatan       String?
   createdAt     DateTime    @default(now()) @map("created_at")
 
   @@index([orderId])
