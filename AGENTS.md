@@ -64,11 +64,50 @@ popside-qr-system/
 
 ## Cara Jalanin Lokal
 
+0. Nyalakan MySQL dulu (lihat "Database Lokal" di bawah — **bukan** XAMPP di mesin ini).
 1. `cd api && npm install && npx prisma migrate dev && npm run dev`
 2. `cd public-web && npm install && npm run dev`
 3. `cd admin-web && npm install && npm run dev`
 
 Env variables ada contohnya di `api/.env.example` — copy jadi `.env`, isi `DATABASE_URL`, `SESSION_SECRET`, `QR_HMAC_SECRET`, `TZ=Asia/Jakarta`.
+
+## Database Lokal (khusus mesin dev ini)
+
+XAMPP MySQL di mesin ini punya corruption di storage engine Aria (`mysql.plugin`/`mysql.db` gagal dibaca, server tidak mau nyala) — **bukan disebabkan project ini**, dan diputuskan untuk tidak diotak-atik lagi karena dipakai bareng project lain di luar Popside. Jangan diperbaiki ulang tanpa izin eksplisit.
+
+Sebagai gantinya, project ini pakai instalasi MySQL 8.4 resmi yang terpisah, khusus untuk Popside, jalan di **port 3307** (bukan 3306, supaya tidak bentrok kalau XAMPP dinyalakan lagi untuk keperluan lain). `DATABASE_URL` di `api/.env` sudah mengarah ke `localhost:3307`.
+
+Seluruh folder `.mysql-data/` (data dir + config) di-gitignore karena isinya file database + path absolut yang spesifik ke mesin ini. Kalau belum ada / hilang, bikin ulang dari root project:
+
+```
+mkdir .mysql-data\data
+```
+
+`.mysql-data\my.ini`:
+```ini
+[mysqld]
+port=3307
+datadir=D:/popside - qr - system/.mysql-data/data
+default-storage-engine=INNODB
+character-set-server=utf8mb4
+collation-server=utf8mb4_unicode_ci
+default-time-zone='+07:00'
+```
+
+Lalu:
+```
+"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" --defaults-file=".mysql-data\my.ini" --initialize-insecure
+"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" --defaults-file=".mysql-data\my.ini"
+```
+
+Start manual tiap sesi dev (belum didaftarkan sebagai Windows Service) — jalankan baris `mysqld.exe` kedua di atas (tanpa `--initialize-insecure`, cukup sekali di awal).
+
+Akun: `root` tanpa password (dev only) + `popside_app` (password ada di `api/.env`), privilege cuma di database `popside_qr`:
+```sql
+CREATE DATABASE popside_qr CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'popside_app'@'localhost' IDENTIFIED BY '<sama dengan DATABASE_URL di api/.env>';
+GRANT ALL PRIVILEGES ON popside_qr.* TO 'popside_app'@'localhost';
+```
 
 ## BOLEH
 
