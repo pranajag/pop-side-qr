@@ -57,15 +57,23 @@ app.use(cookieParser());
 // Token-issuing route mounted before the blanket CSRF check below.
 app.get('/api/auth/csrf-token', authController.csrfToken);
 
-// Applied globally so every current and future mutating route is protected
-// by default (GET/HEAD/OPTIONS are exempt via csrf-csrf's own defaults).
+// /api/public/* (customer-facing, no login — menu, table-token verify,
+// cart total, and Sprint 4's order creation) never carries a session
+// cookie, so CSRF protection doesn't apply and would only break it: CSRF
+// defends against a browser's *ambient* cookie being replayed from another
+// site, which requires a cookie-authenticated action in the first place.
+// Mounted before doubleCsrfProtection so these routes never reach it.
+app.use('/api/public', publicRoutes);
+
+// Applied to everything below so every mutating admin/kasir route stays
+// protected by default (GET/HEAD/OPTIONS are exempt via csrf-csrf's own
+// defaults).
 app.use(doubleCsrfProtection);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin/categories', categoryRoutes);
 app.use('/api/admin/products', productRoutes);
 app.use('/api/admin/tables', tableRoutes);
-app.use('/api/public', publicRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });

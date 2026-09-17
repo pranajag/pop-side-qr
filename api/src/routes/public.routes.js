@@ -2,6 +2,11 @@ const { Router } = require('express');
 const path = require('path');
 const AppError = require('../utils/AppError');
 const { PRODUCTS_DIR } = require('../services/productPhoto.service');
+const menuController = require('../controllers/menu.controller');
+const cartController = require('../controllers/cart.controller');
+const tableController = require('../controllers/table.controller');
+const validate = require('../middleware/validate');
+const { cartTotalSchema } = require('../validators/cart.validator');
 
 // Filenames are always our own randomUUID() + extension (see
 // productPhoto.service) — anything else, including a crafted `../`
@@ -31,5 +36,9 @@ router.get('/products/photo/:filename', (req, res, next) => {
     next(err.code === 'ENOENT' ? new AppError(404, 'File tidak ditemukan') : err);
   });
 });
+
+router.get('/menu', menuController.getMenu);
+router.get('/tables/:token', tableController.verifyToken);
+router.post('/cart/total', validate(cartTotalSchema), cartController.total);
 
 module.exports = router;

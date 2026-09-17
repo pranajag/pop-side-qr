@@ -1,4 +1,5 @@
 const tableService = require('../services/table.service');
+const AppError = require('../utils/AppError');
 
 async function list(req, res) {
   const tables = await tableService.list();
@@ -31,4 +32,12 @@ async function qrImage(req, res) {
   res.send(buffer);
 }
 
-module.exports = { list, create, update, remove, resetToken, qrImage };
+async function verifyToken(req, res) {
+  const table = await tableService.verifyToken(req.params.token);
+  if (!table) {
+    throw new AppError(404, 'QR tidak valid atau meja tidak aktif. Coba scan ulang atau panggil staff.');
+  }
+  res.json({ table });
+}
+
+module.exports = { list, create, update, remove, resetToken, qrImage, verifyToken };

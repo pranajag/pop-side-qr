@@ -123,4 +123,31 @@ async function generateQrImage(id) {
   return QRCode.toBuffer(tableUrl(table.qrToken), { type: 'png', margin: 2, width: 400 });
 }
 
-module.exports = { list, create, update, remove, resetToken, generateQrImage };
+function timingSafeHexEqual(a, b) {
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
+}
+
+// Public — called when a customer scans a table's QR. The unique index on
+// qrToken is the real gate (an attacker without the right token can't even
+// reach a row); the HMAC recompute below is defense-in-depth against the
+// token column being tampered with directly (bypassing resetToken()).
+async function verifyToken(token) {
+  if (!/^[0-9a-f]{64}$/.test(token)) {
+    return null;
+  }
+
+  const table = await prisma.table.findUnique({ where: { qrToken: token } });
+  if (!table || !table.isActive) {
+    return null;
+  }
+
+  const expected = computeQrToken(table.id, table.tokenSecret);
+  if (!timingSafeHexEqual(expected, token)) {
+    return null;
+  }
+
+  return { id: table.id, nomorMeja: table.nomorMeja };
+}
+
+module.exports = { list, create, update, remove, resetToken, generateQrImage, verifyToken };
