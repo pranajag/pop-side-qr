@@ -25,6 +25,10 @@ function errorHandler(err, req, res, next) {
     return res.status(400).json({ error: message });
   }
 
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ error: 'Origin tidak diizinkan' });
+  }
+
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({ error: err.message });
   }

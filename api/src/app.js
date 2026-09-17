@@ -19,8 +19,28 @@ const isProd = process.env.NODE_ENV === 'production';
 
 const app = express();
 
+// CORS_ORIGIN is comma-separated — admin-web and public-web run on
+// different dev ports (and different real domains later), both need to
+// call this API with credentials.
+const allowedOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN, credentials: true }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // `origin` is undefined for non-browser/same-origin requests (curl,
+      // server-to-server) — those aren't subject to CORS, so allow them.
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(pinoHttp({ logger }));
