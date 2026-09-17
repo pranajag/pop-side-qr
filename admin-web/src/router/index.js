@@ -16,6 +16,7 @@ const routes = [
       { path: 'kategori', name: 'kategori', component: () => import('@/views/CategoriesView.vue') },
       { path: 'produk', name: 'produk', component: () => import('@/views/ProductsView.vue') },
       { path: 'meja', name: 'meja', component: () => import('@/views/TablesView.vue') },
+      { path: 'pengaturan', name: 'pengaturan', component: () => import('@/views/SettingsView.vue') },
     ],
   },
   {

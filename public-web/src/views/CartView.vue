@@ -53,7 +53,7 @@ function photoUrl(filename) {
 }
 
 function onCheckout() {
-  toast('Checkout belum tersedia', { description: 'Fitur bayar & buat pesanan menyusul di update berikutnya.' })
+  router.push({ name: 'checkout' })
 }
 </script>
 

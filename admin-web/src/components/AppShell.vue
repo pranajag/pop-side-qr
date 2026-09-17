@@ -2,7 +2,7 @@
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { Button } from '@/components/ui/button'
-import { LayoutGridIcon, UtensilsIcon, QrCodeIcon, LogOutIcon } from '@lucide/vue'
+import { LayoutGridIcon, UtensilsIcon, QrCodeIcon, SettingsIcon, LogOutIcon } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 
 const auth = useAuthStore()
@@ -12,6 +12,7 @@ const nav = [
   { to: { name: 'kategori' }, label: 'Kategori', icon: LayoutGridIcon },
   { to: { name: 'produk' }, label: 'Produk', icon: UtensilsIcon },
   { to: { name: 'meja' }, label: 'Meja', icon: QrCodeIcon },
+  { to: { name: 'pengaturan' }, label: 'Pengaturan', icon: SettingsIcon },
 ]
 
 async function onLogout() {
