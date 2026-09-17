@@ -1,4 +1,5 @@
 const { ZodError } = require('zod');
+const multer = require('multer');
 const { invalidCsrfTokenError } = require('./csrf');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
@@ -17,6 +18,11 @@ function errorHandler(err, req, res, next) {
 
   if (err === invalidCsrfTokenError || err?.code === 'EBADCSRFTOKEN') {
     return res.status(403).json({ error: 'Invalid or missing CSRF token' });
+  }
+
+  if (err instanceof multer.MulterError) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'Ukuran file maksimal 2MB' : 'Upload gagal';
+    return res.status(400).json({ error: message });
   }
 
   if (err instanceof AppError) {

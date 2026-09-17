@@ -10,7 +10,10 @@ const { doubleCsrfProtection } = require('./middleware/csrf');
 const errorHandler = require('./middleware/errorHandler');
 const authController = require('./controllers/auth.controller');
 const authRoutes = require('./routes/auth.routes');
-const adminRoutes = require('./routes/admin.routes');
+const categoryRoutes = require('./routes/category.routes');
+const productRoutes = require('./routes/product.routes');
+const tableRoutes = require('./routes/table.routes');
+const publicRoutes = require('./routes/public.routes');
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -59,7 +62,10 @@ app.get('/api/auth/csrf-token', authController.csrfToken);
 app.use(doubleCsrfProtection);
 
 app.use('/api/auth', authRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin/categories', categoryRoutes);
+app.use('/api/admin/products', productRoutes);
+app.use('/api/admin/tables', tableRoutes);
+app.use('/api/public', publicRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
