@@ -21,9 +21,10 @@ function withUrl(table) {
 }
 
 async function assertNomorMejaFree(nomorMeja, excludeId) {
-  // nomor_meja has no DB-level unique constraint yet (Sprint 1's schema
-  // didn't add one) — checked here so two tables can't collide in the
-  // meantime. Safe to remove once a migration adds @@unique([nomorMeja]).
+  // nomor_meja is also @unique at the DB level (Sprint 4 migration) — that
+  // catch is the real race-condition guard (see isUniqueConstraintError
+  // below). This pre-check just avoids the round-trip for the common case
+  // and gives a cleaner message than a raw constraint violation.
   const dup = await prisma.table.findFirst({ where: { nomorMeja } });
   if (dup && dup.id !== excludeId) {
     throw new AppError(409, 'Nomor meja sudah dipakai');

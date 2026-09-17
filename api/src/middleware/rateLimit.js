@@ -18,4 +18,28 @@ const loginLimiter = rateLimit({
   },
 });
 
-module.exports = { loginLimiter };
+// AGENTS.md rate limit rule: 10/menit/IP untuk create order.
+const createOrderLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak percobaan order. Coba lagi sebentar.' });
+  },
+});
+
+// AGENTS.md rate limit rule: 5/menit/IP untuk cek status order.
+const orderStatusLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi sebentar.' });
+  },
+});
+
+module.exports = { loginLimiter, createOrderLimiter, orderStatusLimiter };

@@ -30,13 +30,25 @@ enum UserRole {
 
 model Table {
   id          Int     @id @default(autoincrement())
-  nomorMeja   String  @map("nomor_meja")
+  nomorMeja   String  @unique @map("nomor_meja")
   qrToken     String  @unique @map("qr_token")
   tokenSecret String  @map("token_secret")
   isActive    Boolean @default(true) @map("is_active")
   orders      Order[]
 
   @@map("tables")
+}
+
+// Singleton row (always id=1) — store-wide settings that aren't specific
+// to any product/category/table. Currently just the static QRIS image
+// shown at checkout (MEMORY.md: one shared QRIS image for the whole
+// store, not a per-transaction dynamic code).
+model StoreSetting {
+  id        Int      @id @default(1)
+  qrisImage String?  @map("qris_image")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("store_settings")
 }
 
 model Category {

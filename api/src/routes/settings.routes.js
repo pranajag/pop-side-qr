@@ -1,0 +1,14 @@
+const { Router } = require('express');
+const settingsController = require('../controllers/settings.controller');
+const requireAuth = require('../middleware/requireAuth');
+const requireRole = require('../middleware/requireRole');
+const { upload } = require('../middleware/upload');
+
+const router = Router();
+
+router.use(requireAuth, requireRole('admin'));
+
+router.get('/', settingsController.get);
+router.put('/qris', upload.single('foto'), settingsController.updateQris);
+
+module.exports = router;

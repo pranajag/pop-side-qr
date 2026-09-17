@@ -62,10 +62,15 @@ flowchart TD
 erDiagram
     tables {
         int id PK
-        string nomor_meja
+        string nomor_meja UK
         string qr_token
         string token_secret
         boolean is_active
+    }
+    store_settings {
+        int id PK "selalu 1, singleton"
+        string qris_image
+        datetime updated_at
     }
     categories {
         int id PK
@@ -138,7 +143,7 @@ erDiagram
     users ||--o{ payments : "verifikasi oleh"
 ```
 
-Perubahan dari draf awal (lihat riwayat chat untuk alasan lengkap): tambah kolom `catatan` di `orders`/`order_items`, tambah `token_secret` per meja, tambah `track_stock` di `products`, tambah `verified_at` di `payments`, tambah tabel `order_status_log` sebagai audit trail.
+Perubahan dari draf awal (lihat riwayat chat untuk alasan lengkap): tambah kolom `catatan` di `orders`/`order_items`, tambah `token_secret` per meja, tambah `track_stock` di `products`, tambah `verified_at` di `payments`, tambah tabel `order_status_log` sebagai audit trail. Sprint 4: tambah `@unique` di `tables.nomor_meja` (dulu cuma dicek di level aplikasi, sekarang di-enforce DB juga), tambah tabel `store_settings` (singleton, nyimpen gambar QRIS statis toko).
 
 ## Skema Prisma (`api/prisma/schema.prisma`)
 
@@ -175,13 +180,25 @@ enum UserRole {
 
 model Table {
   id          Int     @id @default(autoincrement())
-  nomorMeja   String  @map("nomor_meja")
+  nomorMeja   String  @unique @map("nomor_meja")
   qrToken     String  @unique @map("qr_token")
   tokenSecret String  @map("token_secret")
   isActive    Boolean @default(true) @map("is_active")
   orders      Order[]
 
   @@map("tables")
+}
+
+// Singleton row (always id=1) — store-wide settings that aren't specific
+// to any product/category/table. Currently just the static QRIS image
+// shown at checkout (MEMORY.md: one shared QRIS image for the whole
+// store, not a per-transaction dynamic code).
+model StoreSetting {
+  id        Int      @id @default(1)
+  qrisImage String?  @map("qris_image")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("store_settings")
 }
 
 model Category {
@@ -297,3 +314,4 @@ model Payment {
 - `products.category_id` — FK, filter menu per kategori.
 - `order_status_log.order_id` — FK, tarik riwayat per order.
 - `tables.qr_token` — UNIQUE, lookup saat scan QR.
+- `tables.nomor_meja` — UNIQUE, dua meja tidak boleh punya nomor sama.
