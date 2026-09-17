@@ -61,6 +61,13 @@ function createImageStore(subdir) {
       return next(new AppError(404, 'File tidak ditemukan'));
     }
 
+    // Helmet's default Cross-Origin-Resource-Policy (same-origin) blocks
+    // admin-web/public-web from loading this <img src> at all, since they
+    // run on different ports/origins than the API. These files are public
+    // by design (menu photos, the store's QRIS image), so this is safe to
+    // relax — unlike the JSON API responses, which keep Helmet's default.
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+
     res.sendFile(filePath, { maxAge: '365d', immutable: true }, (err) => {
       if (!err) return;
       next(err.code === 'ENOENT' ? new AppError(404, 'File tidak ditemukan') : err);
