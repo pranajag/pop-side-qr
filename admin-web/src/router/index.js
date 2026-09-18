@@ -15,6 +15,12 @@ const routes = [
       { path: '', redirect: { name: 'pesanan' } },
       // Order handling is core kasir work, not admin-only (MEMORY.md).
       { path: 'pesanan', name: 'pesanan', component: () => import('@/views/OrdersView.vue'), meta: { roles: ['admin', 'kasir'] } },
+      {
+        path: 'pesanan/manual',
+        name: 'pesanan-manual',
+        component: () => import('@/views/ManualOrderView.vue'),
+        meta: { roles: ['admin', 'kasir'] },
+      },
       { path: 'kategori', name: 'kategori', component: () => import('@/views/CategoriesView.vue'), meta: { roles: ['admin'] } },
       { path: 'produk', name: 'produk', component: () => import('@/views/ProductsView.vue'), meta: { roles: ['admin'] } },
       { path: 'meja', name: 'meja', component: () => import('@/views/TablesView.vue'), meta: { roles: ['admin'] } },

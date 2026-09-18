@@ -171,7 +171,9 @@ async function copyKode() {
           {{ order.kodeOrder }}
           <CopyIcon class="size-4 text-muted-foreground" />
         </button>
-        <p class="text-xs text-muted-foreground">Meja {{ order.nomorMeja }}</p>
+        <p class="text-xs text-muted-foreground">
+          {{ order.nomorMeja ? `Meja ${order.nomorMeja}` : 'Bawa Pulang' }}
+        </p>
       </div>
 
       <div v-if="needsQrisPayment" class="space-y-3 rounded-lg border p-4 text-center">

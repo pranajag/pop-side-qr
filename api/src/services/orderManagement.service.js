@@ -35,7 +35,8 @@ function shapeOrder(order) {
     catatan: order.catatan,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
-    nomorMeja: order.table.nomorMeja,
+    nomorMeja: order.table?.nomorMeja ?? null,
+    customerName: order.customerName,
     items: order.items.map((item) => ({
       nama: item.product.nama,
       qty: item.qty,

@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { api } from '@/lib/api'
 
 export const useOrdersStore = defineStore('orders', {
-  state: () => ({ items: [], loading: false, statusFilter: undefined, knownActiveIds: null }),
+  state: () => ({ items: [], loading: false, statusFilter: undefined, knownActiveIds: null, needsActionCount: 0 }),
   actions: {
     // Filter-independent: fetches the full active set regardless of
     // whatever statusFilter the Pesanan grid currently has selected, so a
@@ -15,6 +15,10 @@ export const useOrdersStore = defineStore('orders', {
       const currentIds = new Set(data.orders.map((o) => o.id))
       const freshOrders = this.knownActiveIds ? data.orders.filter((o) => !this.knownActiveIds.has(o.id)) : []
       this.knownActiveIds = currentIds
+      // Sidebar badge count — orders sitting in a state that needs a kasir
+      // to act (confirm payment), independent of whatever filter the
+      // Pesanan grid itself currently has selected.
+      this.needsActionCount = data.orders.filter((o) => o.status === 'pending' || o.status === 'waiting_verif').length
       return freshOrders
     },
     async fetchAll() {
@@ -30,6 +34,11 @@ export const useOrdersStore = defineStore('orders', {
     setFilter(status) {
       this.statusFilter = status
       return this.fetchAll()
+    },
+    async createManual(payload) {
+      const data = await api.post('/admin/orders/manual', payload)
+      this.replaceOrUpdate(data.order)
+      return data.order
     },
     async confirmPayment(id) {
       const data = await api.post(`/admin/orders/${id}/konfirmasi`)

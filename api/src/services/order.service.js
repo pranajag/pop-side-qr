@@ -8,6 +8,69 @@ const tableService = require('./table.service');
 const MAX_CODE_ATTEMPTS = 5;
 const KODE_ORDER_PATTERN = /^ORD-\d{8}-[A-Z0-9]{4}$/;
 
+// Shared by both createOrder (public QR checkout) and createManualOrder
+// (staff-entered counter/takeaway sale) — same stock/variant/pricing rules
+// either way, only who's placing the order and what happens to status
+// after differ.
+async function buildOrderItems(tx, items) {
+  // One batched read for the initial availability/price snapshot (matches
+  // cart.service.js's computeTotal) — safe to batch because it's read-only
+  // and happens entirely before any decrement; the atomic updateMany below
+  // still independently re-checks stock at decrement time regardless of
+  // what this batch saw.
+  const productIds = [...new Set(items.map((i) => i.productId))];
+  const products = await tx.product.findMany({
+    where: { id: { in: productIds } },
+    include: { variantGroups: { include: { options: true } } },
+  });
+  const productById = new Map(products.map((p) => [p.id, p]));
+
+  let totalHarga = 0;
+  const orderItemsData = [];
+
+  for (const item of items) {
+    const product = productById.get(item.productId);
+    if (!product || !product.isAvailable) {
+      throw new AppError(400, `${product?.nama ?? 'Produk'} sudah tidak tersedia`);
+    }
+
+    const resolved = resolveProductVariants(product, item.variantOptionIds);
+    if (resolved.error) {
+      throw new AppError(400, resolved.error);
+    }
+
+    if (product.trackStock) {
+      // Atomic check-and-decrement: the WHERE clause and the write happen
+      // as one statement, so two concurrent orders for the last unit can't
+      // both read stok=1 and both succeed — the second one's UPDATE simply
+      // matches zero rows.
+      const result = await tx.product.updateMany({
+        where: { id: product.id, stok: { gte: item.qty } },
+        data: { stok: { decrement: item.qty } },
+      });
+      if (result.count === 0) {
+        throw new AppError(409, `Stok ${product.nama} tidak cukup`);
+      }
+    }
+
+    const harga = Number(product.harga) + resolved.extraPerUnit;
+    totalHarga += harga * item.qty;
+    orderItemsData.push({
+      productId: product.id,
+      qty: item.qty,
+      hargaSaatOrder: harga,
+      // Snapshot, not re-derived later: whether stock was actually taken
+      // for this line, independent of whatever trackStock is set to by the
+      // time this order might get cancelled.
+      stockDecremented: product.trackStock,
+      catatan: item.catatan,
+      variants: resolved.snapshots.length ? { create: resolved.snapshots } : undefined,
+    });
+  }
+
+  return { orderItemsData, totalHarga };
+}
+
 async function createOrder({ token, metode, catatan, items }) {
   const table = await tableService.verifyToken(token);
   if (!table) {
@@ -22,61 +85,7 @@ async function createOrder({ token, metode, catatan, items }) {
       // lost) rolls back everything — including stock already decremented
       // for earlier items in this same attempt.
       return await prisma.$transaction(async (tx) => {
-        // One batched read for the initial availability/price snapshot
-        // (matches cart.service.js's computeTotal) — safe to batch because
-        // it's read-only and happens entirely before any decrement; the
-        // atomic updateMany below still independently re-checks stock at
-        // decrement time regardless of what this batch saw.
-        const productIds = [...new Set(items.map((i) => i.productId))];
-        const products = await tx.product.findMany({
-          where: { id: { in: productIds } },
-          include: { variantGroups: { include: { options: true } } },
-        });
-        const productById = new Map(products.map((p) => [p.id, p]));
-
-        let totalHarga = 0;
-        const orderItemsData = [];
-
-        for (const item of items) {
-          const product = productById.get(item.productId);
-          if (!product || !product.isAvailable) {
-            throw new AppError(400, `${product?.nama ?? 'Produk'} sudah tidak tersedia`);
-          }
-
-          const resolved = resolveProductVariants(product, item.variantOptionIds);
-          if (resolved.error) {
-            throw new AppError(400, resolved.error);
-          }
-
-          if (product.trackStock) {
-            // Atomic check-and-decrement: the WHERE clause and the write
-            // happen as one statement, so two concurrent orders for the
-            // last unit can't both read stok=1 and both succeed — the
-            // second one's UPDATE simply matches zero rows.
-            const result = await tx.product.updateMany({
-              where: { id: product.id, stok: { gte: item.qty } },
-              data: { stok: { decrement: item.qty } },
-            });
-            if (result.count === 0) {
-              throw new AppError(409, `Stok ${product.nama} tidak cukup`);
-            }
-          }
-
-          const harga = Number(product.harga) + resolved.extraPerUnit;
-          totalHarga += harga * item.qty;
-          orderItemsData.push({
-            productId: product.id,
-            qty: item.qty,
-            hargaSaatOrder: harga,
-            // Snapshot, not re-derived later: whether stock was actually
-            // taken for this line, independent of whatever trackStock is
-            // set to by the time this order might get cancelled.
-            stockDecremented: product.trackStock,
-            catatan: item.catatan,
-            variants: resolved.snapshots.length ? { create: resolved.snapshots } : undefined,
-          });
-        }
-
+        const { orderItemsData, totalHarga } = await buildOrderItems(tx, items);
         return tx.order.create({
           data: {
             kodeOrder,
@@ -95,6 +104,49 @@ async function createOrder({ token, metode, catatan, items }) {
       // Order has exactly one unique column (kode_order), so any unique
       // violation here is a same-day code collision — retry with a fresh
       // code rather than failing the customer's checkout over it.
+      if (isUniqueConstraintError(err)) {
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw new AppError(500, 'Gagal membuat kode order, coba lagi.');
+}
+
+// Staff-entered counter/takeaway sale — no table, created straight into
+// 'confirmed' rather than the dine-in flow's pending -> waiting_verif ->
+// confirmed. That multi-step exists because DIFFERENT people (customer,
+// then kasir) act at different times on the public flow; here the kasir is
+// the one both taking payment and entering the order in the same moment,
+// so there's nothing to wait on. The status_log entry still records the
+// jump for the same audit-trail reason every other transition is logged.
+async function createManualOrder({ customerName, metode, catatan, items, userId }) {
+  for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
+    const kodeOrder = generateOrderCode();
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const { orderItemsData, totalHarga } = await buildOrderItems(tx, items);
+        const order = await tx.order.create({
+          data: {
+            kodeOrder,
+            tableId: null,
+            customerName: customerName || null,
+            status: 'confirmed',
+            metode,
+            totalHarga,
+            catatan,
+            items: { create: orderItemsData },
+            payment: { create: { metode, amount: totalHarga } },
+          },
+          include: { items: true },
+        });
+        await tx.orderStatusLog.create({
+          data: { orderId: order.id, statusFrom: 'pending', statusTo: 'confirmed', changedBy: userId },
+        });
+        return order;
+      });
+    } catch (err) {
       if (isUniqueConstraintError(err)) {
         continue;
       }
@@ -166,7 +218,8 @@ async function getByCode(kodeOrder) {
     catatan: order.catatan,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
-    nomorMeja: order.table.nomorMeja,
+    nomorMeja: order.table?.nomorMeja ?? null,
+    customerName: order.customerName,
     items: order.items.map((item) => ({
       nama: item.product.nama,
       qty: item.qty,
@@ -177,4 +230,4 @@ async function getByCode(kodeOrder) {
   };
 }
 
-module.exports = { createOrder, confirmQrisPayment, getByCode };
+module.exports = { createOrder, createManualOrder, confirmQrisPayment, getByCode };

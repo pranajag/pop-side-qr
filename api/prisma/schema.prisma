@@ -135,19 +135,28 @@ model VariantOption {
 }
 
 model Order {
-  id         Int              @id @default(autoincrement())
-  kodeOrder  String           @unique @map("kode_order")
-  tableId    Int              @map("table_id")
-  table      Table            @relation(fields: [tableId], references: [id])
-  status     OrderStatus      @default(pending)
-  metode     PaymentMethod
-  totalHarga Decimal          @map("total_harga")
-  catatan    String?
-  createdAt  DateTime         @default(now()) @map("created_at")
-  updatedAt  DateTime         @updatedAt @map("updated_at")
-  items      OrderItem[]
-  payment    Payment?
-  statusLogs OrderStatusLog[]
+  id           Int              @id @default(autoincrement())
+  kodeOrder    String           @unique @map("kode_order")
+  // Null = not tied to a physical table — a manual counter/takeaway sale
+  // punched in by staff (order.service.js:createManualOrder), which uses
+  // customerName instead of a table number to identify the order.
+  tableId      Int?             @map("table_id")
+  // onDelete: Restrict (not Prisma's default SetNull for an optional
+  // relation) — a table with real order history must still block deletion
+  // via table.service.js's isForeignKeyError catch, exactly like before
+  // this field became nullable. SetNull would silently orphan those rows,
+  // making past dine-in orders look like manual/takeaway ones in reports.
+  table        Table?           @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  customerName String?          @map("customer_name")
+  status       OrderStatus      @default(pending)
+  metode       PaymentMethod
+  totalHarga   Decimal          @map("total_harga")
+  catatan      String?
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  items        OrderItem[]
+  payment      Payment?
+  statusLogs   OrderStatusLog[]
 
   @@index([status])
   @@index([createdAt])

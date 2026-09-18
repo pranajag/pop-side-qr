@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useOrdersStore } from '@/stores/orders'
 import { useStaffCallsStore } from '@/stores/staffCalls'
@@ -19,10 +20,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { LoaderCircleIcon, CheckIcon, XIcon, BellIcon } from '@lucide/vue'
+import { LoaderCircleIcon, CheckIcon, XIcon, BellIcon, PlusIcon } from '@lucide/vue'
 
 const POLL_MS = 8000
 
+const router = useRouter()
 const store = useOrdersStore()
 const calls = useStaffCallsStore()
 const busyId = ref(null)
@@ -154,9 +156,15 @@ async function onCancelConfirm() {
 
 <template>
   <div class="space-y-6">
-    <div>
-      <h1 class="text-lg font-semibold tracking-tight">Pesanan</h1>
-      <p class="text-sm text-muted-foreground">Konfirmasi pembayaran & update status pesanan.</p>
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-lg font-semibold tracking-tight">Pesanan</h1>
+        <p class="text-sm text-muted-foreground">Konfirmasi pembayaran & update status pesanan.</p>
+      </div>
+      <Button class="gap-2" @click="router.push({ name: 'pesanan-manual' })">
+        <PlusIcon class="size-4" />
+        Pesanan Manual
+      </Button>
     </div>
 
     <div v-if="calls.items.length > 0" class="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
@@ -196,7 +204,10 @@ async function onCancelConfirm() {
         <div class="flex items-start justify-between gap-2">
           <div>
             <p class="font-mono text-sm font-semibold">{{ order.kodeOrder }}</p>
-            <p class="text-xs text-muted-foreground">Meja {{ order.nomorMeja }} &middot; {{ order.metode.toUpperCase() }}</p>
+            <p class="text-xs text-muted-foreground">
+              {{ order.nomorMeja ? `Meja ${order.nomorMeja}` : `Bawa Pulang${order.customerName ? ` · ${order.customerName}` : ''}` }}
+              &middot; {{ order.metode.toUpperCase() }}
+            </p>
           </div>
           <Badge :class="STATUS_BADGE_CLASS[order.status]">{{ STATUS_LABEL[order.status] }}</Badge>
         </div>

@@ -5,6 +5,7 @@ const requireRole = require('../middleware/requireRole');
 const validate = require('../middleware/validate');
 const { validateIdParam } = require('../middleware/validateParams');
 const { updateStatusSchema } = require('../validators/orderManagement.validator');
+const { createManualOrderSchema } = require('../validators/order.validator');
 
 const router = Router();
 
@@ -13,6 +14,7 @@ const router = Router();
 router.use(requireAuth, requireRole('admin', 'kasir'));
 
 router.get('/', orderManagementController.list);
+router.post('/manual', validate(createManualOrderSchema), orderManagementController.createManual);
 router.post('/:id/konfirmasi', validateIdParam, orderManagementController.confirmPayment);
 router.patch('/:id/status', validateIdParam, validate(updateStatusSchema), orderManagementController.updateStatus);
 
