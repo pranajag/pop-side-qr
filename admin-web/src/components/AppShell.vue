@@ -108,6 +108,12 @@ onUnmounted(() => clearInterval(newOrderTimer))
         >
           <component :is="item.icon" class="size-4" />
           {{ item.label }}
+          <span
+            v-if="item.label === 'Pesanan' && orders.needsActionCount > 0"
+            class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold text-white"
+          >
+            {{ orders.needsActionCount > 99 ? '99+' : orders.needsActionCount }}
+          </span>
         </router-link>
       </nav>
       <div class="border-t px-3 py-3">
