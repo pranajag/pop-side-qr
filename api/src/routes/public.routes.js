@@ -6,7 +6,15 @@ const orderController = require('../controllers/order.controller');
 const validate = require('../middleware/validate');
 const { cartTotalSchema } = require('../validators/cart.validator');
 const { createOrderSchema } = require('../validators/order.validator');
-const { createOrderLimiter, orderStatusLimiter, confirmPaymentLimiter, staffCallLimiter } = require('../middleware/rateLimit');
+const {
+  createOrderLimiter,
+  orderStatusLimiter,
+  confirmPaymentLimiter,
+  staffCallLimiter,
+  tableVerifyLimiter,
+  publicReadLimiter,
+  publicImageLimiter,
+} = require('../middleware/rateLimit');
 const productPhoto = require('../services/productPhoto.service');
 const settingsImage = require('../services/settingsImage.service');
 const settingsController = require('../controllers/settings.controller');
@@ -21,13 +29,13 @@ const router = Router();
 // doesn't apply to, since there's nothing sensitive in either. Payment
 // proof uploads (bukti bayar) are a different, private category and must
 // NOT be exposed this way.
-router.get('/products/photo/:filename', productPhoto.serve);
-router.get('/settings/qris-photo/:filename', settingsImage.serve);
+router.get('/products/photo/:filename', publicImageLimiter, productPhoto.serve);
+router.get('/settings/qris-photo/:filename', publicImageLimiter, settingsImage.serve);
 
-router.get('/menu', menuController.getMenu);
-router.get('/settings', settingsController.get);
-router.get('/tables/:token', tableController.verifyToken);
-router.post('/cart/total', validate(cartTotalSchema), cartController.total);
+router.get('/menu', publicReadLimiter, menuController.getMenu);
+router.get('/settings', publicReadLimiter, settingsController.get);
+router.get('/tables/:token', tableVerifyLimiter, tableController.verifyToken);
+router.post('/cart/total', publicReadLimiter, validate(cartTotalSchema), cartController.total);
 
 router.post('/orders', createOrderLimiter, validate(createOrderSchema), orderController.create);
 router.post('/orders/:kodeOrder/bayar', confirmPaymentLimiter, orderController.confirmPayment);

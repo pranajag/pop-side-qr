@@ -32,13 +32,23 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+// Dev-only: match localhost/127.0.0.1/private-LAN on any port, instead of
+// requiring an exact CORS_ORIGIN entry per port. This is what a real phone
+// scanning a real QR code needs — PUBLIC_WEB_URL then points at the dev
+// machine's LAN IP (e.g. http://192.168.1.23:5174) — and exact-match alone
+// already caused two rounds of "forgot to add the origin" bugs in this
+// project before any device testing even started. Never applies in
+// production, where allowedOrigins' exact match is the only path.
+const DEV_LAN_ORIGIN_PATTERN =
+  /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+
 app.use(helmet());
 app.use(
   cors({
     origin: (origin, callback) => {
       // `origin` is undefined for non-browser/same-origin requests (curl,
       // server-to-server) — those aren't subject to CORS, so allow them.
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin) || (!isProd && DEV_LAN_ORIGIN_PATTERN.test(origin))) {
         return callback(null, true);
       }
       callback(new Error('Not allowed by CORS'));

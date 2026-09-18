@@ -71,4 +71,60 @@ const staffCallLimiter = rateLimit({
   },
 });
 
-module.exports = { loginLimiter, createOrderLimiter, orderStatusLimiter, confirmPaymentLimiter, staffCallLimiter };
+// The table-scan endpoint (GET /tables/:token) had no limiter at all —
+// the 64-hex HMAC token itself is what actually blocks guessing (256 bits
+// of entropy makes brute force infeasible regardless of any rate limit),
+// but an unbounded GET still lets anyone hammer this route for cheap
+// resource-exhaustion / scraping. Generous limit since a real customer's
+// own page can legitimately re-verify a few times (reload, back-forward).
+const tableVerifyLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi sebentar.' });
+  },
+});
+
+// Menu/settings reads and the cart-total recompute had no limiter either —
+// same resource-exhaustion/scraping concern as above, just for read-mostly
+// routes instead. Generous enough that normal browsing (menu load, each
+// cart edit debounced at 250ms) never gets close.
+const publicReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak permintaan. Coba lagi sebentar.' });
+  },
+});
+
+// Photo/QRIS-image serving is requested many times per page load (one per
+// product shown) by design, so this needs real headroom — sized to stay
+// out of the way of legitimate browsing while still bounding gross abuse
+// (e.g. someone scripting repeated full-menu-photo scrapes).
+const publicImageLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak permintaan.' });
+  },
+});
+
+module.exports = {
+  loginLimiter,
+  createOrderLimiter,
+  orderStatusLimiter,
+  confirmPaymentLimiter,
+  staffCallLimiter,
+  tableVerifyLimiter,
+  publicReadLimiter,
+  publicImageLimiter,
+};
