@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { useOrdersStore } from '@/stores/orders'
+import { useStaffCallsStore } from '@/stores/staffCalls'
 import { formatApiError } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -18,15 +19,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { LoaderCircleIcon, CheckIcon, XIcon } from '@lucide/vue'
+import { LoaderCircleIcon, CheckIcon, XIcon, BellIcon } from '@lucide/vue'
 
 const POLL_MS = 8000
 
 const store = useOrdersStore()
+const calls = useStaffCallsStore()
 const busyId = ref(null)
 const cancelTarget = ref(null)
 const cancelReason = ref('')
 const cancelling = ref(false)
+const resolvingCallId = ref(null)
 
 const FILTERS = [
   { value: undefined, label: 'Aktif' },
@@ -66,12 +69,28 @@ const CANCELLABLE = new Set(['pending', 'waiting_verif', 'confirmed', 'cooking',
 let pollTimer = null
 onMounted(() => {
   store.fetchAll()
-  pollTimer = setInterval(() => store.fetchAll(), POLL_MS)
+  calls.fetchPending()
+  pollTimer = setInterval(() => {
+    store.fetchAll()
+    calls.fetchPending()
+  }, POLL_MS)
 })
 onUnmounted(() => clearInterval(pollTimer))
 
 function needsPaymentConfirm(order) {
   return (order.metode === 'qris' && order.status === 'waiting_verif') || (order.metode !== 'qris' && order.status === 'pending')
+}
+
+async function onResolveCall(call) {
+  resolvingCallId.value = call.id
+  try {
+    await calls.resolve(call.id)
+  } catch (err) {
+    toast.error(formatApiError(err))
+    calls.fetchPending()
+  } finally {
+    resolvingCallId.value = null
+  }
 }
 
 async function onConfirm(order) {
@@ -138,6 +157,22 @@ async function onCancelConfirm() {
     <div>
       <h1 class="text-lg font-semibold tracking-tight">Pesanan</h1>
       <p class="text-sm text-muted-foreground">Konfirmasi pembayaran & update status pesanan.</p>
+    </div>
+
+    <div v-if="calls.items.length > 0" class="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+      <div v-for="call in calls.items" :key="call.id" class="flex items-center justify-between gap-3">
+        <span class="flex items-center gap-2 text-sm">
+          <BellIcon class="size-4 shrink-0 text-amber-600" />
+          <span>
+            <span class="font-semibold">Meja {{ call.nomorMeja }}</span>
+            <span v-if="call.catatan" class="text-muted-foreground"> · {{ call.catatan }}</span>
+          </span>
+        </span>
+        <Button size="sm" variant="outline" :disabled="resolvingCallId === call.id" @click="onResolveCall(call)">
+          <LoaderCircleIcon v-if="resolvingCallId === call.id" class="size-3.5 animate-spin" />
+          Selesai
+        </Button>
+      </div>
     </div>
 
     <div class="flex flex-wrap gap-2">

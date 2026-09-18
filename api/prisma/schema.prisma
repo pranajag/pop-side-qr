@@ -28,15 +28,39 @@ enum UserRole {
   kasir
 }
 
+enum StaffCallStatus {
+  pending
+  resolved
+}
+
 model Table {
-  id          Int     @id @default(autoincrement())
-  nomorMeja   String  @unique @map("nomor_meja")
-  qrToken     String  @unique @map("qr_token")
-  tokenSecret String  @map("token_secret")
-  isActive    Boolean @default(true) @map("is_active")
+  id          Int         @id @default(autoincrement())
+  nomorMeja   String      @unique @map("nomor_meja")
+  qrToken     String      @unique @map("qr_token")
+  tokenSecret String      @map("token_secret")
+  isActive    Boolean     @default(true) @map("is_active")
   orders      Order[]
+  staffCalls  StaffCall[]
 
   @@map("tables")
+}
+
+// A customer's "need help" tap — no order attached, since it's often
+// unrelated to any specific order (water refill, cutlery, a question).
+model StaffCall {
+  id             Int             @id @default(autoincrement())
+  tableId        Int             @map("table_id")
+  table          Table           @relation(fields: [tableId], references: [id])
+  catatan        String?
+  status         StaffCallStatus @default(pending)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  resolvedAt     DateTime?       @map("resolved_at")
+  resolvedBy     Int?            @map("resolved_by")
+  resolvedByUser User?           @relation(fields: [resolvedBy], references: [id])
+
+  @@index([status])
+  @@index([tableId])
+  @@map("staff_calls")
 }
 
 // Singleton row (always id=1) — store-wide settings that aren't specific
@@ -192,6 +216,7 @@ model User {
   isActive     Boolean          @default(true) @map("is_active")
   statusLogs   OrderStatusLog[]
   payments     Payment[]
+  staffCalls   StaffCall[]
 
   @@map("users")
 }

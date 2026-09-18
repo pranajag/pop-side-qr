@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useOrdersStore } from '@/stores/orders'
+import { useStaffCallsStore } from '@/stores/staffCalls'
 import { Button } from '@/components/ui/button'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 import { playNotifySound } from '@/lib/notifySound'
@@ -22,6 +23,7 @@ import { toast } from 'vue-sonner'
 const auth = useAuthStore()
 const router = useRouter()
 const orders = useOrdersStore()
+const staffCalls = useStaffCallsStore()
 
 const nav = computed(() => {
   const items = [{ to: { name: 'pesanan' }, label: 'Pesanan', icon: ClipboardListIcon }]
@@ -64,6 +66,20 @@ onMounted(() => {
       // on being glanced at within a few seconds.
       toast.success(`Pesanan baru: ${order.kodeOrder}`, {
         description: `Meja ${order.nomorMeja} · ${formatRupiah(order.totalHarga)}`,
+        duration: 10000,
+      })
+    }
+
+    let freshCalls
+    try {
+      freshCalls = await staffCalls.checkForNewCalls()
+    } catch {
+      return
+    }
+    for (const call of freshCalls) {
+      playNotifySound()
+      toast.warning(`Meja ${call.nomorMeja} memanggil staff`, {
+        description: call.catatan || undefined,
         duration: 10000,
       })
     }

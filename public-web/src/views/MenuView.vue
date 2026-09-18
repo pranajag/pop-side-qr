@@ -10,7 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import QtyStepper from '@/components/QtyStepper.vue'
 import VariantPickerDialog from '@/components/VariantPickerDialog.vue'
-import { ImageOffIcon, ChevronRightIcon, QrCodeIcon } from '@lucide/vue'
+import CallStaffDialog from '@/components/CallStaffDialog.vue'
+import { ImageOffIcon, ChevronRightIcon, QrCodeIcon, BellIcon } from '@lucide/vue'
 import { API_URL } from '@/lib/api'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 
@@ -21,6 +22,7 @@ const router = useRouter()
 
 const pickerOpen = ref(false)
 const pickerProduct = ref(null)
+const callStaffOpen = ref(false)
 
 function onTambahClick(product) {
   if (product.variantGroups.length > 0) {
@@ -78,9 +80,19 @@ const estimatedTotal = computed(() =>
   <div v-else class="min-h-svh pb-24">
     <header class="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur">
       <img :src="logoUrl" alt="Popside" class="size-10 shrink-0 rounded-lg" />
-      <span class="rounded-full bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-body">
-        Meja {{ table.nomorMeja }}
-      </span>
+      <div class="flex items-center gap-2">
+        <span class="rounded-full bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-body">
+          Meja {{ table.nomorMeja }}
+        </span>
+        <button
+          type="button"
+          aria-label="Panggil Staff"
+          class="flex size-9 shrink-0 items-center justify-center rounded-full border active:bg-accent"
+          @click="callStaffOpen = true"
+        >
+          <BellIcon class="size-4" />
+        </button>
+      </div>
     </header>
 
     <main class="px-4 py-4">
@@ -170,5 +182,6 @@ const estimatedTotal = computed(() =>
     </div>
 
     <VariantPickerDialog :open="pickerOpen" :product="pickerProduct" @update:open="pickerOpen = $event" />
+    <CallStaffDialog :open="callStaffOpen" @update:open="callStaffOpen = $event" />
   </div>
 </template>

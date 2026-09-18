@@ -58,4 +58,17 @@ const confirmPaymentLimiter = rateLimit({
   },
 });
 
-module.exports = { loginLimiter, createOrderLimiter, orderStatusLimiter, confirmPaymentLimiter };
+// Not an order, so no anti-guessing rationale like the ones above — this
+// is purely spam-prevention against a customer mashing the button.
+const staffCallLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak permintaan. Coba lagi sebentar.' });
+  },
+});
+
+module.exports = { loginLimiter, createOrderLimiter, orderStatusLimiter, confirmPaymentLimiter, staffCallLimiter };

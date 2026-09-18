@@ -6,10 +6,12 @@ const orderController = require('../controllers/order.controller');
 const validate = require('../middleware/validate');
 const { cartTotalSchema } = require('../validators/cart.validator');
 const { createOrderSchema } = require('../validators/order.validator');
-const { createOrderLimiter, orderStatusLimiter, confirmPaymentLimiter } = require('../middleware/rateLimit');
+const { createOrderLimiter, orderStatusLimiter, confirmPaymentLimiter, staffCallLimiter } = require('../middleware/rateLimit');
 const productPhoto = require('../services/productPhoto.service');
 const settingsImage = require('../services/settingsImage.service');
 const settingsController = require('../controllers/settings.controller');
+const staffCallController = require('../controllers/staffCall.controller');
+const { createStaffCallSchema } = require('../validators/staffCall.validator');
 
 const router = Router();
 
@@ -30,5 +32,6 @@ router.post('/cart/total', validate(cartTotalSchema), cartController.total);
 router.post('/orders', createOrderLimiter, validate(createOrderSchema), orderController.create);
 router.post('/orders/:kodeOrder/bayar', confirmPaymentLimiter, orderController.confirmPayment);
 router.get('/orders/:kodeOrder', orderStatusLimiter, orderController.track);
+router.post('/call-staff', staffCallLimiter, validate(createStaffCallSchema), staffCallController.create);
 
 module.exports = router;
