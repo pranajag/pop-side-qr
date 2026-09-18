@@ -24,6 +24,14 @@ const pickerOpen = ref(false)
 const pickerProduct = ref(null)
 const callStaffOpen = ref(false)
 
+// null = "Semua" (no filter). Display-only — menu.categories itself stays
+// untouched so cart/findProduct lookups elsewhere never see a filtered view.
+const activeCategoryId = ref(null)
+const visibleCategories = computed(() => {
+  if (activeCategoryId.value === null) return menu.categories
+  return menu.categories.filter((c) => c.id === activeCategoryId.value)
+})
+
 function onTambahClick(product) {
   if (product.variantGroups.length > 0) {
     pickerProduct.value = product
@@ -95,6 +103,38 @@ const estimatedTotal = computed(() =>
       </div>
     </header>
 
+    <div
+      v-if="menu.categories.length > 1"
+      class="sticky top-[65px] z-10 flex gap-2 overflow-x-auto border-b bg-background/95 px-4 py-2.5 backdrop-blur"
+    >
+      <button
+        type="button"
+        class="shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors"
+        :class="
+          activeCategoryId === null
+            ? 'bg-brand-cta text-heading'
+            : 'border border-border text-muted-foreground hover:text-body'
+        "
+        @click="activeCategoryId = null"
+      >
+        Semua
+      </button>
+      <button
+        v-for="category in menu.categories"
+        :key="category.id"
+        type="button"
+        class="shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors"
+        :class="
+          activeCategoryId === category.id
+            ? 'bg-brand-cta text-heading'
+            : 'border border-border text-muted-foreground hover:text-body'
+        "
+        @click="activeCategoryId = category.id"
+      >
+        {{ category.nama }}
+      </button>
+    </div>
+
     <main class="px-4 py-4">
       <div v-if="menu.loading" class="space-y-6">
         <div v-for="n in 2" :key="n" class="space-y-3">
@@ -114,7 +154,7 @@ const estimatedTotal = computed(() =>
       </p>
 
       <div v-else class="space-y-6">
-        <section v-for="category in menu.categories" :key="category.id">
+        <section v-for="category in visibleCategories" :key="category.id">
           <h2 class="mb-3 flex items-center gap-2 text-base font-bold text-body">
             <span class="h-4 w-1.5 shrink-0 rounded-full bg-brand-cta"></span>
             {{ category.nama }}
