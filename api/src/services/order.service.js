@@ -21,11 +21,20 @@ async function createOrder({ token, metode, catatan, items }) {
       // lost) rolls back everything — including stock already decremented
       // for earlier items in this same attempt.
       return await prisma.$transaction(async (tx) => {
+        // One batched read for the initial availability/price snapshot
+        // (matches cart.service.js's computeTotal) — safe to batch because
+        // it's read-only and happens entirely before any decrement; the
+        // atomic updateMany below still independently re-checks stock at
+        // decrement time regardless of what this batch saw.
+        const productIds = [...new Set(items.map((i) => i.productId))];
+        const products = await tx.product.findMany({ where: { id: { in: productIds } } });
+        const productById = new Map(products.map((p) => [p.id, p]));
+
         let totalHarga = 0;
         const orderItemsData = [];
 
         for (const item of items) {
-          const product = await tx.product.findUnique({ where: { id: item.productId } });
+          const product = productById.get(item.productId);
           if (!product || !product.isAvailable) {
             throw new AppError(400, `${product?.nama ?? 'Produk'} sudah tidak tersedia`);
           }
@@ -50,6 +59,10 @@ async function createOrder({ token, metode, catatan, items }) {
             productId: product.id,
             qty: item.qty,
             hargaSaatOrder: product.harga,
+            // Snapshot, not re-derived later: whether stock was actually
+            // taken for this line, independent of whatever trackStock is
+            // set to by the time this order might get cancelled.
+            stockDecremented: product.trackStock,
             catatan: item.catatan,
           });
         }

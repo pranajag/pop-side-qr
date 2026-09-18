@@ -42,4 +42,20 @@ const orderStatusLimiter = rateLimit({
   },
 });
 
-module.exports = { loginLimiter, createOrderLimiter, orderStatusLimiter };
+// Not separately enumerated in AGENTS.md's rate-limit rule, but this is a
+// mutating action gated by nothing but the same guessable kode_order space
+// as the (5/min) status-check endpoint — arguably higher-stakes, since a
+// hit here flips a real order to "waiting_verif" without any payment
+// having happened. Matches orderStatusLimiter's bound for consistency.
+const confirmPaymentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi sebentar.' });
+  },
+});
+
+module.exports = { loginLimiter, createOrderLimiter, orderStatusLimiter, confirmPaymentLimiter };

@@ -127,12 +127,18 @@ async function updateStatus(orderId, newStatus, userId, catatan) {
 
     if (newStatus === 'cancelled') {
       // Stock was reserved at order creation (Sprint 4) — give it back so
-      // a cancelled order doesn't permanently shrink availability.
-      for (const item of order.items) {
-        const product = await tx.product.findUnique({ where: { id: item.productId } });
-        if (product?.trackStock) {
-          await tx.product.update({ where: { id: item.productId }, data: { stok: { increment: item.qty } } });
-        }
+      // a cancelled order doesn't permanently shrink availability. Uses
+      // each item's own stockDecremented snapshot, not the product's
+      // *current* trackStock — an admin can flip that flag after the
+      // order was placed, which would otherwise restore stock that was
+      // never taken (or skip restoring stock that was).
+      const toRestore = order.items.filter((item) => item.stockDecremented);
+      if (toRestore.length > 0) {
+        await Promise.all(
+          toRestore.map((item) =>
+            tx.product.update({ where: { id: item.productId }, data: { stok: { increment: item.qty } } })
+          )
+        );
       }
     }
 

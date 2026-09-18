@@ -21,5 +21,10 @@ export const useMenuStore = defineStore('menu', {
       }
       return null
     },
+    // null = no stock cap (either untracked, or product not loaded yet).
+    maxQty(productId) {
+      const product = this.findProduct(productId)
+      return product?.trackStock ? product.stok : null
+    },
   },
 })

@@ -16,8 +16,18 @@ function tableUrl(qrToken) {
   return `${PUBLIC_WEB_URL}/t/${qrToken}`;
 }
 
+// Explicit allowlist, not a spread — table rows carry tokenSecret, the
+// per-table HMAC key, which must never leave the server (AGENTS.md rule
+// #9's whole point). qrToken itself is fine to return: it's the value
+// printed on the table's QR code, already public by design.
 function withUrl(table) {
-  return { ...table, url: tableUrl(table.qrToken) };
+  return {
+    id: table.id,
+    nomorMeja: table.nomorMeja,
+    qrToken: table.qrToken,
+    isActive: table.isActive,
+    url: tableUrl(table.qrToken),
+  };
 }
 
 async function assertNomorMejaFree(nomorMeja, excludeId) {

@@ -6,7 +6,7 @@ const orderController = require('../controllers/order.controller');
 const validate = require('../middleware/validate');
 const { cartTotalSchema } = require('../validators/cart.validator');
 const { createOrderSchema } = require('../validators/order.validator');
-const { createOrderLimiter, orderStatusLimiter } = require('../middleware/rateLimit');
+const { createOrderLimiter, orderStatusLimiter, confirmPaymentLimiter } = require('../middleware/rateLimit');
 const productPhoto = require('../services/productPhoto.service');
 const settingsImage = require('../services/settingsImage.service');
 const settingsController = require('../controllers/settings.controller');
@@ -28,7 +28,7 @@ router.get('/tables/:token', tableController.verifyToken);
 router.post('/cart/total', validate(cartTotalSchema), cartController.total);
 
 router.post('/orders', createOrderLimiter, validate(createOrderSchema), orderController.create);
-router.post('/orders/:kodeOrder/bayar', orderController.confirmPayment);
+router.post('/orders/:kodeOrder/bayar', confirmPaymentLimiter, orderController.confirmPayment);
 router.get('/orders/:kodeOrder', orderStatusLimiter, orderController.track);
 
 module.exports = router;

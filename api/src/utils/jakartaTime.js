@@ -31,12 +31,19 @@ function jakartaDayBoundsUTC(dateStr) {
     year = Number(match[1]);
     month = Number(match[2]) - 1;
     day = Number(match[3]);
+    // Date.UTC silently normalizes an out-of-range day/month (e.g.
+    // 2026-02-30 becomes March 2) instead of throwing — round-tripping
+    // through it and comparing catches that, instead of the caller
+    // quietly reporting a different day than the one asked for.
+    const probe = new Date(Date.UTC(year, month, day));
+    if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month || probe.getUTCDate() !== day) {
+      return null;
+    }
   } else {
     ({ year, month, day } = jakartaDateParts());
   }
   const start = new Date(Date.UTC(year, month, day, 0, 0, 0) - JAKARTA_OFFSET_MS);
   const end = new Date(Date.UTC(year, month, day + 1, 0, 0, 0) - JAKARTA_OFFSET_MS);
-  if (Number.isNaN(start.getTime())) return null;
   return { start, end };
 }
 

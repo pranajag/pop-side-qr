@@ -29,6 +29,13 @@ async function resetToken(req, res) {
 async function qrImage(req, res) {
   const buffer = await tableService.generateQrImage(req.params.id);
   res.set('Content-Type', 'image/png');
+  // Same cross-origin gap as product/QRIS photos (see imageStore.js) —
+  // admin-web loads this via <img src> from a different origin (port),
+  // and Helmet's default Cross-Origin-Resource-Policy: same-origin
+  // otherwise makes the browser refuse to render a successfully-fetched
+  // image. This one isn't served through imageStore.js (it's generated
+  // on the fly, not read from the upload store), so it needs its own header.
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
   res.send(buffer);
 }
 

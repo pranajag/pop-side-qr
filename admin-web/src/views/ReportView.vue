@@ -7,9 +7,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { LoaderCircleIcon, WalletIcon } from '@lucide/vue'
 
+// Asia/Jakarta (WIB) is a fixed UTC+7 offset, no DST — computed directly
+// rather than via the browser's local-timezone Date getters, which would
+// silently show yesterday's date (and thus load yesterday's report) during
+// Jakarta 00:00-06:59 on any staff device not itself set to WIB. Mirrors
+// api/src/utils/jakartaTime.js's approach (AGENTS.md rule #15).
 function todayISO() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const jakartaNow = new Date(Date.now() + 7 * 60 * 60 * 1000)
+  const y = jakartaNow.getUTCFullYear()
+  const m = String(jakartaNow.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(jakartaNow.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 const date = ref(todayISO())

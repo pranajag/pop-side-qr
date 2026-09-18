@@ -103,7 +103,11 @@ function onCheckout() {
               class="h-9"
               @update:model-value="(v) => cart.setNote(item.productId, v)"
             />
-            <QtyStepper :qty="item.qty" @update:qty="(q) => cart.setQty(item.productId, q)" />
+            <QtyStepper
+              :qty="item.qty"
+              :max="menu.maxQty(item.productId)"
+              @update:qty="(q) => cart.setQty(item.productId, q)"
+            />
           </div>
         </li>
       </ul>

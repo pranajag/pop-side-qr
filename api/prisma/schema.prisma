@@ -99,14 +99,20 @@ model Order {
 }
 
 model OrderItem {
-  id             Int     @id @default(autoincrement())
-  orderId        Int     @map("order_id")
-  order          Order   @relation(fields: [orderId], references: [id])
-  productId      Int     @map("product_id")
-  product        Product @relation(fields: [productId], references: [id])
-  qty            Int
-  hargaSaatOrder Decimal @map("harga_saat_order")
-  catatan        String?
+  id               Int     @id @default(autoincrement())
+  orderId          Int     @map("order_id")
+  order            Order   @relation(fields: [orderId], references: [id])
+  productId        Int     @map("product_id")
+  product          Product @relation(fields: [productId], references: [id])
+  qty              Int
+  hargaSaatOrder   Decimal @map("harga_saat_order")
+  // Same reasoning as hargaSaatOrder: whether stock was actually decremented
+  // for this line at order time must never be re-derived from the
+  // product's *current* trackStock — an admin can flip that flag later,
+  // which would otherwise make cancellation either restore stock that was
+  // never taken, or skip restoring stock that was.
+  stockDecremented Boolean @default(false) @map("stock_decremented")
+  catatan          String?
 
   @@index([orderId])
   @@index([productId])

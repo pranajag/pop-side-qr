@@ -48,15 +48,27 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(pinoHttp({ logger }));
 
+// /api/public/* (customer-facing, no login — menu, table-token verify,
+// cart total, and Sprint 4's order creation) is mounted before session and
+// CSRF: no public controller ever touches req.session or req.cookies, and
+// mounting it here means these routes never run the session middleware at
+// all, so anonymous traffic (bots, uptime checks, every QR scan) can never
+// allocate a session — with saveUninitialized: true below, a blanket
+// app.use(session(...)) ahead of this line would let anyone grow the
+// in-memory session store for free, with no rate limit on GET /menu or
+// GET /tables/:token to slow them down.
+app.use('/api/public', publicRoutes);
+
 app.use(
   session({
     name: 'popside.sid',
     secret: process.env.SESSION_SECRET,
     resave: false,
-    // No anonymous/customer traffic exists yet (that starts Sprint 3), so
-    // there's no unauthenticated-session-row cost to worry about, and this
-    // guarantees the session used to mint a CSRF token on GET /csrf-token
-    // is still there for the following POST /login.
+    // GET /csrf-token (below) never writes to req.session — it only reads
+    // req.session.id (csrf-csrf's getSessionIdentifier) — so without
+    // saveUninitialized: true that session, and the id the CSRF token gets
+    // bound to, wouldn't be persisted, and the following POST /login would
+    // fail CSRF validation against a session that was never saved.
     saveUninitialized: true,
     rolling: true,
     cookie: {
@@ -79,14 +91,6 @@ app.use(cookieParser());
 
 // Token-issuing route mounted before the blanket CSRF check below.
 app.get('/api/auth/csrf-token', authController.csrfToken);
-
-// /api/public/* (customer-facing, no login — menu, table-token verify,
-// cart total, and Sprint 4's order creation) never carries a session
-// cookie, so CSRF protection doesn't apply and would only break it: CSRF
-// defends against a browser's *ambient* cookie being replayed from another
-// site, which requires a cookie-authenticated action in the first place.
-// Mounted before doubleCsrfProtection so these routes never reach it.
-app.use('/api/public', publicRoutes);
 
 // Applied to everything below so every mutating admin/kasir route stays
 // protected by default (GET/HEAD/OPTIONS are exempt via csrf-csrf's own
