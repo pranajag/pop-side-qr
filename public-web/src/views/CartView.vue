@@ -127,7 +127,12 @@ function onCheckout() {
           {{ formatRupiah(summary?.total ?? 0) }}
         </span>
       </div>
-      <Button size="lg" class="h-12 w-full" :disabled="(summary?.issues?.length ?? 0) > 0" @click="onCheckout">
+      <Button
+        size="lg"
+        class="h-12 w-full bg-brand-cta text-heading hover:bg-brand-cta/90"
+        :disabled="(summary?.issues?.length ?? 0) > 0"
+        @click="onCheckout"
+      >
         Lanjut ke Pembayaran
       </Button>
     </div>

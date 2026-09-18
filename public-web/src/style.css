@@ -55,6 +55,15 @@
     --radius-md: calc(var(--radius) - 2px);
     --radius-lg: var(--radius);
     --radius-xl: calc(var(--radius) + 4px);
+
+    /* Popside brand palette (supplied as a swatch, not yet rolled out to
+       every shadcn slot — see style.css's :root comment). */
+    --color-brand-primary: var(--brand-primary);
+    --color-brand-cta: var(--brand-cta);
+    --color-brand-secondary: var(--brand-secondary);
+    --color-heading: var(--text-heading);
+    --color-body: var(--text-body);
+    --color-caption: var(--text-caption);
 }
 
 :root {
@@ -101,6 +110,17 @@
     --status-ready: oklch(0.768 0.169 145.53);
     --status-completed: oklch(0.518 0.161 146.5);
     --status-cancelled: oklch(0.577 0.245 27.325);
+
+    /* Brand swatch given for the customer-facing menu. Currently only wired
+       into the checkout card (MenuView) and the Lanjut ke Pembayaran button
+       (CartView) — not yet a full re-theme of every shadcn --primary/etc
+       slot above, since those still carry the placeholder brand blue. */
+    --brand-primary: #b4fc15;
+    --brand-cta: #4d9a92;
+    --brand-secondary: #aad9ce;
+    --text-heading: #f7fcff;
+    --text-body: #000000;
+    --text-caption: #9c9696;
 }
 
 .dark {

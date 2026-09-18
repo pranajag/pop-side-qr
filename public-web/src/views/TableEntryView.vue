@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTableStore } from '@/stores/table'
 import { LoaderCircleIcon, TriangleAlertIcon } from '@lucide/vue'
+import logoUrl from '@/assets/pop-side-logo.jpg'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,7 +22,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex min-h-svh flex-col items-center justify-center gap-4 px-6 text-center">
+  <div class="flex min-h-svh flex-col items-center justify-center gap-6 px-6 text-center">
+    <img :src="logoUrl" alt="Popside" class="size-16 rounded-2xl shadow-lg shadow-black/10" />
     <template v-if="failed">
       <TriangleAlertIcon class="size-10 text-destructive" />
       <div class="space-y-1">

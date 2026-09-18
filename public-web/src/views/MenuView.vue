@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import QtyStepper from '@/components/QtyStepper.vue'
-import { ImageOffIcon, ShoppingCartIcon, QrCodeIcon } from '@lucide/vue'
+import { ImageOffIcon, ChevronRightIcon, QrCodeIcon } from '@lucide/vue'
 import { API_URL } from '@/lib/api'
+import logoUrl from '@/assets/pop-side-logo.jpg'
 
 const table = useTableStore()
 const menu = useMenuStore()
@@ -47,7 +48,8 @@ const estimatedTotal = computed(() =>
 </script>
 
 <template>
-  <div v-if="!table.isVerified" class="flex min-h-svh flex-col items-center justify-center gap-4 px-6 text-center">
+  <div v-if="!table.isVerified" class="flex min-h-svh flex-col items-center justify-center gap-6 px-6 text-center">
+    <img :src="logoUrl" alt="Popside" class="size-16 rounded-2xl shadow-lg shadow-black/10" />
     <QrCodeIcon class="size-10 text-muted-foreground" />
     <div class="space-y-1">
       <h1 class="text-lg font-semibold">Scan QR di meja kamu</h1>
@@ -56,9 +58,11 @@ const estimatedTotal = computed(() =>
   </div>
 
   <div v-else class="min-h-svh pb-24">
-    <header class="sticky top-0 z-10 border-b bg-background/95 px-4 py-3 backdrop-blur">
-      <p class="text-xs text-muted-foreground">Meja</p>
-      <h1 class="text-base font-semibold">{{ table.nomorMeja }}</h1>
+    <header class="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur">
+      <img :src="logoUrl" alt="Popside" class="size-10 shrink-0 rounded-lg" />
+      <span class="rounded-full bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-body">
+        Meja {{ table.nomorMeja }}
+      </span>
     </header>
 
     <main class="px-4 py-4">
@@ -81,7 +85,10 @@ const estimatedTotal = computed(() =>
 
       <div v-else class="space-y-6">
         <section v-for="category in menu.categories" :key="category.id">
-          <h2 class="mb-3 text-sm font-semibold text-muted-foreground">{{ category.nama }}</h2>
+          <h2 class="mb-3 flex items-center gap-2 text-base font-bold text-body">
+            <span class="h-4 w-1.5 shrink-0 rounded-full bg-brand-cta"></span>
+            {{ category.nama }}
+          </h2>
           <p v-if="category.products.length === 0" class="text-sm text-muted-foreground">Belum ada produk.</p>
           <ul class="space-y-4">
             <li v-for="product in category.products" :key="product.id" class="flex gap-3">
@@ -124,14 +131,24 @@ const estimatedTotal = computed(() =>
       </div>
     </main>
 
-    <div v-if="!cart.isEmpty" class="fixed inset-x-0 bottom-0 border-t bg-background p-3">
-      <Button size="lg" class="h-12 w-full justify-between px-4" @click="router.push({ name: 'cart' })">
-        <span class="flex items-center gap-2">
-          <ShoppingCartIcon class="size-4" />
-          {{ cart.totalQty }} item
+    <div v-if="!cart.isEmpty" class="fixed inset-x-0 bottom-0 z-10 px-3 pb-3">
+      <button
+        type="button"
+        class="flex w-full items-center gap-3 rounded-2xl bg-brand-cta p-3 pr-4 shadow-lg shadow-black/15 transition-transform active:scale-[0.99]"
+        @click="router.push({ name: 'cart' })"
+      >
+        <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-primary text-sm font-bold text-body">
+          {{ cart.totalQty }}
         </span>
-        <span>{{ formatRupiah(estimatedTotal) }}</span>
-      </Button>
+        <span class="min-w-0 flex-1 text-left">
+          <span class="block text-[11px] font-medium text-brand-secondary">Total Pesanan</span>
+          <span class="block truncate text-base font-semibold text-heading">{{ formatRupiah(estimatedTotal) }}</span>
+        </span>
+        <span class="flex shrink-0 items-center gap-0.5 text-sm font-semibold text-heading">
+          Checkout
+          <ChevronRightIcon class="size-4" />
+        </span>
+      </button>
     </div>
   </div>
 </template>
