@@ -169,4 +169,35 @@ async function serveBuktiBayar(orderId, res, next) {
   paymentProof.serveFile(payment.buktiFile, res, next);
 }
 
-module.exports = { list, confirmPayment, updateStatus, serveBuktiBayar };
+// Surfaces the audit trail every status transition already writes (both
+// staff-driven changes and the customer's own "sudah bayar" click) — no
+// new tracking needed, just reading data this system has captured since
+// Sprint 1 but never shown anyone. changedBy is null for the one
+// customer-triggered transition (pending -> waiting_verif), and for any
+// order cancelled by the public "batal" flow.
+async function listActivity(limit) {
+  const capped = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const logs = await prisma.orderStatusLog.findMany({
+    take: capped,
+    orderBy: { id: 'desc' },
+    include: {
+      order: { select: { kodeOrder: true, customerName: true, table: { select: { nomorMeja: true } } } },
+      changedByUser: { select: { username: true, role: true } },
+    },
+  });
+  return logs.map((log) => ({
+    id: log.id,
+    orderId: log.orderId,
+    kodeOrder: log.order.kodeOrder,
+    nomorMeja: log.order.table?.nomorMeja ?? null,
+    customerName: log.order.customerName,
+    statusFrom: log.statusFrom,
+    statusTo: log.statusTo,
+    changedBy: log.changedByUser?.username ?? null,
+    changedByRole: log.changedByUser?.role ?? null,
+    catatan: log.catatan,
+    createdAt: log.createdAt,
+  }));
+}
+
+module.exports = { list, confirmPayment, updateStatus, serveBuktiBayar, listActivity };

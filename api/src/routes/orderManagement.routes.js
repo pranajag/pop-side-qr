@@ -14,6 +14,9 @@ const router = Router();
 router.use(requireAuth, requireRole('admin', 'kasir'));
 
 router.get('/', orderManagementController.list);
+// Admin-only, unlike the rest of this router — this is oversight of staff
+// actions (who confirmed/cancelled what), not day-to-day order handling.
+router.get('/activity-log', requireRole('admin'), orderManagementController.activityLog);
 router.post('/manual', validate(createManualOrderSchema), orderManagementController.createManual);
 router.post('/:id/konfirmasi', validateIdParam, orderManagementController.confirmPayment);
 router.patch('/:id/status', validateIdParam, validate(updateStatusSchema), orderManagementController.updateStatus);

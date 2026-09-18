@@ -30,4 +30,9 @@ async function buktiBayar(req, res, next) {
   await orderManagementService.serveBuktiBayar(req.params.id, res, next);
 }
 
-module.exports = { list, createManual, confirmPayment, updateStatus, buktiBayar };
+async function activityLog(req, res) {
+  const logs = await orderManagementService.listActivity(req.query.limit);
+  res.json({ logs });
+}
+
+module.exports = { list, createManual, confirmPayment, updateStatus, buktiBayar, activityLog };

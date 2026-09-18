@@ -14,6 +14,7 @@ import {
   UtensilsIcon,
   QrCodeIcon,
   BarChart3Icon,
+  HistoryIcon,
   UsersIcon,
   SettingsIcon,
   LogOutIcon,
@@ -33,6 +34,7 @@ const nav = computed(() => {
       { to: { name: 'produk' }, label: 'Produk', icon: UtensilsIcon },
       { to: { name: 'meja' }, label: 'Meja', icon: QrCodeIcon },
       { to: { name: 'laporan' }, label: 'Laporan', icon: BarChart3Icon },
+      { to: { name: 'riwayat' }, label: 'Riwayat Aktivitas', icon: HistoryIcon },
       { to: { name: 'akun' }, label: 'Akun Staff', icon: UsersIcon },
       { to: { name: 'pengaturan' }, label: 'Pengaturan', icon: SettingsIcon }
     )

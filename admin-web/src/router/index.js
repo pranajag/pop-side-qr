@@ -25,6 +25,7 @@ const routes = [
       { path: 'produk', name: 'produk', component: () => import('@/views/ProductsView.vue'), meta: { roles: ['admin'] } },
       { path: 'meja', name: 'meja', component: () => import('@/views/TablesView.vue'), meta: { roles: ['admin'] } },
       { path: 'laporan', name: 'laporan', component: () => import('@/views/ReportView.vue'), meta: { roles: ['admin'] } },
+      { path: 'riwayat', name: 'riwayat', component: () => import('@/views/ActivityLogView.vue'), meta: { roles: ['admin'] } },
       { path: 'akun', name: 'akun', component: () => import('@/views/UsersView.vue'), meta: { roles: ['admin'] } },
       { path: 'pengaturan', name: 'pengaturan', component: () => import('@/views/SettingsView.vue'), meta: { roles: ['admin'] } },
     ],

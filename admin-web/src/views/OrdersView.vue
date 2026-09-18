@@ -6,6 +6,7 @@ import { useOrdersStore } from '@/stores/orders'
 import { useStaffCallsStore } from '@/stores/staffCalls'
 import { formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
+import { STATUS_LABEL, STATUS_BADGE_CLASS } from '@/lib/orderStatus'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -53,24 +54,6 @@ const FILTERS = [
   { value: 'all', label: 'Semua' },
 ]
 
-const STATUS_LABEL = {
-  pending: 'Menunggu Pembayaran',
-  waiting_verif: 'Menunggu Verifikasi',
-  confirmed: 'Dikonfirmasi',
-  cooking: 'Dimasak',
-  ready: 'Siap',
-  completed: 'Selesai',
-  cancelled: 'Dibatalkan',
-}
-const STATUS_BADGE_CLASS = {
-  pending: 'bg-status-pending text-white',
-  waiting_verif: 'bg-status-waiting-verif text-white',
-  confirmed: 'bg-status-confirmed text-white',
-  cooking: 'bg-status-cooking text-white',
-  ready: 'bg-status-ready text-white',
-  completed: 'bg-status-completed text-white',
-  cancelled: 'bg-status-cancelled text-white',
-}
 const NEXT_ACTION = {
   confirmed: { status: 'cooking', label: 'Mulai Masak' },
   cooking: { status: 'ready', label: 'Siap Diambil' },
