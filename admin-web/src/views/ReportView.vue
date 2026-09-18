@@ -5,22 +5,39 @@ import { api, formatApiError } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 import { LoaderCircleIcon, WalletIcon } from '@lucide/vue'
 
 // Asia/Jakarta (WIB) is a fixed UTC+7 offset, no DST — computed directly
 // rather than via the browser's local-timezone Date getters, which would
-// silently show yesterday's date (and thus load yesterday's report) during
-// Jakarta 00:00-06:59 on any staff device not itself set to WIB. Mirrors
-// api/src/utils/jakartaTime.js's approach (AGENTS.md rule #15).
+// silently shift a day during Jakarta 00:00-06:59 on any staff device not
+// itself set to WIB. Mirrors api/src/utils/jakartaTime.js's approach.
+function jakartaNow() {
+  return new Date(Date.now() + 7 * 60 * 60 * 1000)
+}
+function toISO(d) {
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 function todayISO() {
-  const jakartaNow = new Date(Date.now() + 7 * 60 * 60 * 1000)
-  const y = jakartaNow.getUTCFullYear()
-  const m = String(jakartaNow.getUTCMonth() + 1).padStart(2, '0')
-  const d = String(jakartaNow.getUTCDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
+  return toISO(jakartaNow())
+}
+function startOfWeekISO() {
+  const d = jakartaNow()
+  const dow = d.getUTCDay()
+  d.setUTCDate(d.getUTCDate() - (dow === 0 ? 6 : dow - 1)) // Monday start
+  return toISO(d)
+}
+function startOfMonthISO() {
+  const d = jakartaNow()
+  d.setUTCDate(1)
+  return toISO(d)
 }
 
-const date = ref(todayISO())
+const from = ref(todayISO())
+const to = ref(todayISO())
 const report = ref(null)
 const loading = ref(false)
 
@@ -29,12 +46,20 @@ const METODE_LABEL = { qris: 'QRIS', tunai: 'Tunai', debit: 'Debit' }
 async function load() {
   loading.value = true
   try {
-    report.value = (await api.get(`/admin/reports/daily?date=${date.value}`)).report
+    report.value = (await api.get(`/admin/reports?from=${from.value}&to=${to.value}`)).report
   } catch (err) {
     toast.error(formatApiError(err))
   } finally {
     loading.value = false
   }
+}
+
+function applyPreset(preset) {
+  to.value = todayISO()
+  if (preset === 'today') from.value = todayISO()
+  else if (preset === 'week') from.value = startOfWeekISO()
+  else if (preset === 'month') from.value = startOfMonthISO()
+  load()
 }
 
 onMounted(load)
@@ -47,10 +72,20 @@ onMounted(load)
       <p class="text-sm text-muted-foreground">Dihitung sejak pesanan dikonfirmasi, timezone Asia/Jakarta.</p>
     </div>
 
-    <div class="flex items-end gap-3">
+    <div class="flex flex-wrap gap-2">
+      <Button size="sm" variant="outline" @click="applyPreset('today')">Hari Ini</Button>
+      <Button size="sm" variant="outline" @click="applyPreset('week')">Minggu Ini</Button>
+      <Button size="sm" variant="outline" @click="applyPreset('month')">Bulan Ini</Button>
+    </div>
+
+    <div class="flex flex-wrap items-end gap-3">
       <div class="space-y-2">
-        <Label for="date">Tanggal</Label>
-        <Input id="date" v-model="date" type="date" class="w-44" @change="load" />
+        <Label for="from">Dari</Label>
+        <Input id="from" v-model="from" type="date" class="w-44" @change="load" />
+      </div>
+      <div class="space-y-2">
+        <Label for="to">Sampai</Label>
+        <Input id="to" v-model="to" type="date" class="w-44" @change="load" />
       </div>
       <LoaderCircleIcon v-if="loading" class="mb-2 size-4 animate-spin text-muted-foreground" />
     </div>
@@ -77,6 +112,29 @@ onMounted(load)
             <span class="font-medium">{{ formatRupiah(amount) }}</span>
           </div>
         </div>
+      </div>
+
+      <div class="rounded-lg border bg-card p-4">
+        <h2 class="mb-3 text-sm font-semibold text-muted-foreground">Produk Terlaris</h2>
+        <p v-if="report.topProducts.length === 0" class="text-sm text-muted-foreground">Belum ada penjualan.</p>
+        <ol v-else class="space-y-2">
+          <li
+            v-for="(p, idx) in report.topProducts"
+            :key="p.nama"
+            class="flex items-center justify-between border-b pb-2 text-sm last:border-0 last:pb-0"
+          >
+            <span class="flex items-center gap-2">
+              <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                {{ idx + 1 }}
+              </span>
+              {{ p.nama }}
+            </span>
+            <span class="flex items-center gap-3 text-muted-foreground">
+              <span>{{ p.qty }}x</span>
+              <span class="font-medium text-foreground">{{ formatRupiah(p.revenue) }}</span>
+            </span>
+          </li>
+        </ol>
       </div>
     </div>
   </div>

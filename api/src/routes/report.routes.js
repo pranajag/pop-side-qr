@@ -9,6 +9,6 @@ const router = Router();
 // orders, not seeing store-wide takings (MEMORY.md's actor descriptions).
 router.use(requireAuth, requireRole('admin'));
 
-router.get('/daily', reportController.daily);
+router.get('/', reportController.get);
 
 module.exports = router;
