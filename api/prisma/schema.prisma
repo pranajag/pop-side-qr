@@ -226,8 +226,28 @@ model User {
   statusLogs   OrderStatusLog[]
   payments     Payment[]
   staffCalls   StaffCall[]
+  shifts       Shift[]
 
   @@map("users")
+}
+
+// Clock-in/clock-out log for admin+kasir. Deliberately not linked to
+// Order — shift "results" are computed on read by windowing Order.createdAt
+// against [startedAt, endedAt ?? now()], the same REVENUE_STATUSES rule
+// report.service.js already uses. Overlapping shifts (two staff on duty at
+// once) legitimately double-count shared orders in both shifts' stats —
+// this reports "what happened while I was clocked in", not per-order staff
+// attribution, which this app has no concept of for QR/self-service orders.
+model Shift {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  user      User      @relation(fields: [userId], references: [id])
+  startedAt DateTime  @default(now()) @map("started_at")
+  endedAt   DateTime? @map("ended_at")
+
+  @@index([userId])
+  @@index([startedAt])
+  @@map("shifts")
 }
 
 model Payment {

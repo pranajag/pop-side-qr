@@ -10,6 +10,7 @@ import { playNotifySound } from '@/lib/notifySound'
 import { formatRupiah } from '@/lib/format'
 import {
   ClipboardListIcon,
+  TimerIcon,
   LayoutGridIcon,
   UtensilsIcon,
   QrCodeIcon,
@@ -27,7 +28,10 @@ const orders = useOrdersStore()
 const staffCalls = useStaffCallsStore()
 
 const nav = computed(() => {
-  const items = [{ to: { name: 'pesanan' }, label: 'Pesanan', icon: ClipboardListIcon }]
+  const items = [
+    { to: { name: 'pesanan' }, label: 'Pesanan', icon: ClipboardListIcon },
+    { to: { name: 'shift' }, label: 'Shift', icon: TimerIcon },
+  ]
   if (auth.isAdmin) {
     items.push(
       { to: { name: 'kategori' }, label: 'Kategori', icon: LayoutGridIcon },

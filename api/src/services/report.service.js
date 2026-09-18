@@ -70,4 +70,4 @@ async function getReport(fromStr, toStr) {
   };
 }
 
-module.exports = { getReport };
+module.exports = { getReport, REVENUE_STATUSES };

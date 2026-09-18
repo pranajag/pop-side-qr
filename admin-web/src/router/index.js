@@ -21,6 +21,7 @@ const routes = [
         component: () => import('@/views/ManualOrderView.vue'),
         meta: { roles: ['admin', 'kasir'] },
       },
+      { path: 'shift', name: 'shift', component: () => import('@/views/ShiftView.vue'), meta: { roles: ['admin', 'kasir'] } },
       { path: 'kategori', name: 'kategori', component: () => import('@/views/CategoriesView.vue'), meta: { roles: ['admin'] } },
       { path: 'produk', name: 'produk', component: () => import('@/views/ProductsView.vue'), meta: { roles: ['admin'] } },
       { path: 'meja', name: 'meja', component: () => import('@/views/TablesView.vue'), meta: { roles: ['admin'] } },
