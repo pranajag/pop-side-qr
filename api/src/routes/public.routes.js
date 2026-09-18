@@ -20,6 +20,7 @@ const settingsImage = require('../services/settingsImage.service');
 const settingsController = require('../controllers/settings.controller');
 const staffCallController = require('../controllers/staffCall.controller');
 const { createStaffCallSchema } = require('../validators/staffCall.validator');
+const { upload } = require('../middleware/upload');
 
 const router = Router();
 
@@ -38,7 +39,7 @@ router.get('/tables/:token', tableVerifyLimiter, tableController.verifyToken);
 router.post('/cart/total', publicReadLimiter, validate(cartTotalSchema), cartController.total);
 
 router.post('/orders', createOrderLimiter, validate(createOrderSchema), orderController.create);
-router.post('/orders/:kodeOrder/bayar', confirmPaymentLimiter, orderController.confirmPayment);
+router.post('/orders/:kodeOrder/bayar', confirmPaymentLimiter, upload.single('bukti'), orderController.confirmPayment);
 router.get('/orders/:kodeOrder', orderStatusLimiter, orderController.track);
 router.post('/call-staff', staffCallLimiter, validate(createStaffCallSchema), staffCallController.create);
 

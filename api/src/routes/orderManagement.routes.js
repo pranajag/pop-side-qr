@@ -17,5 +17,6 @@ router.get('/', orderManagementController.list);
 router.post('/manual', validate(createManualOrderSchema), orderManagementController.createManual);
 router.post('/:id/konfirmasi', validateIdParam, orderManagementController.confirmPayment);
 router.patch('/:id/status', validateIdParam, validate(updateStatusSchema), orderManagementController.updateStatus);
+router.get('/:id/bukti-bayar', validateIdParam, orderManagementController.buktiBayar);
 
 module.exports = router;

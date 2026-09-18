@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useOrdersStore } from '@/stores/orders'
 import { useStaffCallsStore } from '@/stores/staffCalls'
-import { formatApiError } from '@/lib/api'
+import { formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,7 +20,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { LoaderCircleIcon, CheckIcon, XIcon, BellIcon, PlusIcon } from '@lucide/vue'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { LoaderCircleIcon, CheckIcon, XIcon, BellIcon, PlusIcon, ImageIcon } from '@lucide/vue'
 
 const POLL_MS = 8000
 
@@ -32,6 +33,15 @@ const cancelTarget = ref(null)
 const cancelReason = ref('')
 const cancelling = ref(false)
 const resolvingCallId = ref(null)
+const buktiOrderId = ref(null)
+
+function buktiBayarUrl(orderId) {
+  // Browser sends the session cookie automatically for this <img> load —
+  // localhost:5173 and localhost:3000 are different origins but the same
+  // *site* (SameSite=Strict only blocks cross-site, not cross-port), and
+  // requireAuth on this route rejects the request without it regardless.
+  return `${API_URL}/admin/orders/${orderId}/bukti-bayar`
+}
 
 const FILTERS = [
   { value: undefined, label: 'Aktif' },
@@ -228,6 +238,16 @@ async function onCancelConfirm() {
 
         <div class="flex flex-wrap gap-2 pt-1">
           <Button
+            v-if="order.hasBuktiBayar"
+            size="sm"
+            variant="outline"
+            class="gap-1.5"
+            @click="buktiOrderId = order.id"
+          >
+            <ImageIcon class="size-3.5" />
+            Lihat Bukti
+          </Button>
+          <Button
             v-if="needsPaymentConfirm(order)"
             size="sm"
             class="gap-1.5"
@@ -280,5 +300,19 @@ async function onCancelConfirm() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    <Dialog :open="!!buktiOrderId" @update:open="(v) => !v && (buktiOrderId = null)">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Bukti Pembayaran</DialogTitle>
+        </DialogHeader>
+        <img
+          v-if="buktiOrderId"
+          :src="buktiBayarUrl(buktiOrderId)"
+          alt="Bukti pembayaran"
+          class="w-full rounded-lg border object-contain"
+        />
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

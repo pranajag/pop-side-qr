@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
+const paymentProof = require('./paymentProof.service');
 
 const STATUS_PRIORITY = {
   waiting_verif: 0,
@@ -23,6 +24,7 @@ const CANCELLABLE_FROM = new Set(['pending', 'waiting_verif', 'confirmed', 'cook
 const ORDER_INCLUDE = {
   table: { select: { nomorMeja: true } },
   items: { include: { product: { select: { nama: true } }, variants: true } },
+  payment: { select: { buktiFile: true, verifiedAt: true } },
 };
 
 function shapeOrder(order) {
@@ -37,6 +39,10 @@ function shapeOrder(order) {
     updatedAt: order.updatedAt,
     nomorMeja: order.table?.nomorMeja ?? null,
     customerName: order.customerName,
+    // Never the filename itself — that's only ever resolved server-side
+    // by serveBuktiBayar, keyed off this order's own id, never handed to
+    // the client to construct a URL from directly.
+    hasBuktiBayar: !!order.payment?.buktiFile,
     items: order.items.map((item) => ({
       nama: item.product.nama,
       qty: item.qty,
@@ -152,4 +158,15 @@ async function updateStatus(orderId, newStatus, userId, catatan) {
   });
 }
 
-module.exports = { list, confirmPayment, updateStatus };
+// Filename is looked up here, from this authenticated+role-gated call,
+// never accepted from the client — that's what keeps bukti bayar private
+// despite being served over HTTP (no public route ever exposes its name).
+async function serveBuktiBayar(orderId, res, next) {
+  const payment = await prisma.payment.findUnique({ where: { orderId }, select: { buktiFile: true } });
+  if (!payment?.buktiFile) {
+    return next(new AppError(404, 'Bukti pembayaran tidak ada'));
+  }
+  paymentProof.serveFile(payment.buktiFile, res, next);
+}
+
+module.exports = { list, confirmPayment, updateStatus, serveBuktiBayar };

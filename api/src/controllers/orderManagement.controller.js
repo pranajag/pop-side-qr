@@ -26,4 +26,8 @@ async function updateStatus(req, res) {
   res.json({ order });
 }
 
-module.exports = { list, createManual, confirmPayment, updateStatus };
+async function buktiBayar(req, res, next) {
+  await orderManagementService.serveBuktiBayar(req.params.id, res, next);
+}
+
+module.exports = { list, createManual, confirmPayment, updateStatus, buktiBayar };

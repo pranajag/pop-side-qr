@@ -22,6 +22,8 @@ const notFound = ref(false)
 const loading = ref(true)
 const confirming = ref(false)
 const qrisImage = ref(null)
+const buktiFile = ref(null)
+const buktiPreview = ref(null)
 
 const STATUS_LABEL = {
   pending: 'Menunggu Pembayaran',
@@ -112,12 +114,26 @@ onMounted(async () => {
 onUnmounted(() => {
   clearInterval(statusTimer)
   clearInterval(clockTimer)
+  if (buktiPreview.value) URL.revokeObjectURL(buktiPreview.value)
 })
 
+function onBuktiChange(e) {
+  const file = e.target.files?.[0]
+  if (buktiPreview.value) URL.revokeObjectURL(buktiPreview.value)
+  buktiFile.value = file || null
+  buktiPreview.value = file ? URL.createObjectURL(file) : null
+}
+
 async function onConfirmBayar() {
+  if (!buktiFile.value) {
+    toast.error('Upload bukti pembayaran dulu')
+    return
+  }
   confirming.value = true
   try {
-    await api.post(`/public/orders/${route.params.kodeOrder}/bayar`)
+    const fd = new FormData()
+    fd.append('bukti', buktiFile.value)
+    await api.post(`/public/orders/${route.params.kodeOrder}/bayar`, fd, { isFormData: true })
     toast.success('Terima kasih! Menunggu verifikasi kasir.')
     await load()
   } catch (err) {
@@ -185,7 +201,27 @@ async function copyKode() {
           class="mx-auto max-h-64 rounded-lg border"
         />
         <p v-else class="text-xs text-muted-foreground">QRIS belum tersedia — panggil staff untuk bantuan.</p>
-        <Button size="lg" class="h-12 w-full" :disabled="confirming" @click="onConfirmBayar">
+
+        <div class="space-y-2 text-left">
+          <label class="block text-xs font-medium text-muted-foreground">Upload Bukti Pembayaran</label>
+          <div class="flex items-center gap-3">
+            <img
+              v-if="buktiPreview"
+              :src="buktiPreview"
+              alt="Preview bukti pembayaran"
+              class="size-14 shrink-0 rounded-md border object-cover"
+            />
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              class="min-w-0 flex-1 text-xs text-muted-foreground file:mr-2 file:rounded-md file:border file:border-input file:bg-transparent file:px-2 file:py-1 file:text-xs file:font-medium file:text-foreground"
+              @change="onBuktiChange"
+            />
+          </div>
+          <p class="text-[11px] text-muted-foreground">Screenshot/foto notifikasi pembayaran dari e-wallet/m-banking kamu.</p>
+        </div>
+
+        <Button size="lg" class="h-12 w-full" :disabled="confirming || !buktiFile" @click="onConfirmBayar">
           <LoaderCircleIcon v-if="confirming" class="size-4 animate-spin" />
           Saya Sudah Bayar
         </Button>

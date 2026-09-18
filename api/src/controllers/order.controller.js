@@ -6,7 +6,7 @@ async function create(req, res) {
 }
 
 async function confirmPayment(req, res) {
-  const order = await orderService.confirmQrisPayment(req.params.kodeOrder);
+  const order = await orderService.confirmQrisPayment(req.params.kodeOrder, req.file?.buffer);
   res.json({ order });
 }
 

@@ -4,6 +4,7 @@ const { generateOrderCode } = require('../utils/orderCode');
 const { isUniqueConstraintError } = require('../utils/prismaErrors');
 const { resolveProductVariants } = require('../utils/productVariants');
 const tableService = require('./table.service');
+const paymentProof = require('./paymentProof.service');
 
 const MAX_CODE_ATTEMPTS = 5;
 const KODE_ORDER_PATTERN = /^ORD-\d{8}-[A-Z0-9]{4}$/;
@@ -157,7 +158,7 @@ async function createManualOrder({ customerName, metode, catatan, items, userId 
   throw new AppError(500, 'Gagal membuat kode order, coba lagi.');
 }
 
-async function confirmQrisPayment(kodeOrder) {
+async function confirmQrisPayment(kodeOrder, fileBuffer) {
   if (!KODE_ORDER_PATTERN.test(kodeOrder)) {
     throw new AppError(404, 'Order tidak ditemukan');
   }
@@ -172,26 +173,41 @@ async function confirmQrisPayment(kodeOrder) {
   if (order.status !== 'pending') {
     throw new AppError(409, 'Order ini sudah diproses sebelumnya');
   }
+  if (!fileBuffer) {
+    throw new AppError(400, 'Bukti pembayaran wajib diupload');
+  }
 
-  return prisma.$transaction(async (tx) => {
-    // Optimistic lock: only succeeds if status is still 'pending' at the
-    // moment of the write, so a double-tap of "sudah bayar" can't log two
-    // transitions for the same order.
-    const updateResult = await tx.order.updateMany({
-      where: { kodeOrder, status: 'pending' },
-      data: { status: 'waiting_verif' },
+  // Uploaded before the transaction (matches product.service.js's
+  // upload-then-write-then-cleanup-on-failure pattern) — saved with a
+  // magic-byte check + random filename, never the client's own filename.
+  const buktiFile = await paymentProof.save(fileBuffer);
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // Optimistic lock: only succeeds if status is still 'pending' at the
+      // moment of the write, so a double-tap of "sudah bayar" can't log two
+      // transitions for the same order.
+      const updateResult = await tx.order.updateMany({
+        where: { kodeOrder, status: 'pending' },
+        data: { status: 'waiting_verif' },
+      });
+      if (updateResult.count === 0) {
+        throw new AppError(409, 'Order ini sudah diproses sebelumnya');
+      }
+
+      await tx.payment.update({ where: { orderId: order.id }, data: { buktiFile } });
+
+      // changedBy is null — this transition is customer-triggered, not staff.
+      await tx.orderStatusLog.create({
+        data: { orderId: order.id, statusFrom: 'pending', statusTo: 'waiting_verif', changedBy: null },
+      });
+
+      return tx.order.findUnique({ where: { kodeOrder } });
     });
-    if (updateResult.count === 0) {
-      throw new AppError(409, 'Order ini sudah diproses sebelumnya');
-    }
-
-    // changedBy is null — this transition is customer-triggered, not staff.
-    await tx.orderStatusLog.create({
-      data: { orderId: order.id, statusFrom: 'pending', statusTo: 'waiting_verif', changedBy: null },
-    });
-
-    return tx.order.findUnique({ where: { kodeOrder } });
-  });
+  } catch (err) {
+    await paymentProof.remove(buktiFile);
+    throw err;
+  }
 }
 
 async function getByCode(kodeOrder) {
