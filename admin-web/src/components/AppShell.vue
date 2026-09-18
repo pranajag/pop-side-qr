@@ -1,14 +1,19 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useOrdersStore } from '@/stores/orders'
 import { Button } from '@/components/ui/button'
+import logoUrl from '@/assets/pop-side-logo.jpg'
+import { playNotifySound } from '@/lib/notifySound'
+import { formatRupiah } from '@/lib/format'
 import {
   ClipboardListIcon,
   LayoutGridIcon,
   UtensilsIcon,
   QrCodeIcon,
   BarChart3Icon,
+  UsersIcon,
   SettingsIcon,
   LogOutIcon,
 } from '@lucide/vue'
@@ -16,6 +21,7 @@ import { toast } from 'vue-sonner'
 
 const auth = useAuthStore()
 const router = useRouter()
+const orders = useOrdersStore()
 
 const nav = computed(() => {
   const items = [{ to: { name: 'pesanan' }, label: 'Pesanan', icon: ClipboardListIcon }]
@@ -25,6 +31,7 @@ const nav = computed(() => {
       { to: { name: 'produk' }, label: 'Produk', icon: UtensilsIcon },
       { to: { name: 'meja' }, label: 'Meja', icon: QrCodeIcon },
       { to: { name: 'laporan' }, label: 'Laporan', icon: BarChart3Icon },
+      { to: { name: 'akun' }, label: 'Akun Staff', icon: UsersIcon },
       { to: { name: 'pengaturan' }, label: 'Pengaturan', icon: SettingsIcon }
     )
   }
@@ -36,13 +43,44 @@ async function onLogout() {
   router.replace({ name: 'login' })
   toast('Berhasil keluar')
 }
+
+// Runs here (not in OrdersView) so a new order is noticed even while the
+// kasir is on Laporan/Produk/etc, not just while looking at the Pesanan tab.
+const NEW_ORDER_POLL_MS = 8000
+let newOrderTimer = null
+onMounted(() => {
+  newOrderTimer = setInterval(async () => {
+    let fresh
+    try {
+      fresh = await orders.checkForNewOrders()
+    } catch {
+      return
+    }
+    for (const order of fresh) {
+      playNotifySound()
+      // Longer than sonner's ~4s default — this is the one toast on the
+      // whole dashboard a kasir genuinely must not miss mid-rush, so it
+      // gets a wider window and a manual close button rather than relying
+      // on being glanced at within a few seconds.
+      toast.success(`Pesanan baru: ${order.kodeOrder}`, {
+        description: `Meja ${order.nomorMeja} · ${formatRupiah(order.totalHarga)}`,
+        duration: 10000,
+      })
+    }
+  }, NEW_ORDER_POLL_MS)
+})
+onUnmounted(() => clearInterval(newOrderTimer))
 </script>
 
 <template>
   <div class="flex min-h-svh">
     <aside class="flex w-56 shrink-0 flex-col border-r bg-card">
-      <div class="px-4 py-4">
-        <p class="text-sm font-semibold tracking-tight">Popside Admin</p>
+      <div class="flex items-center gap-2.5 px-4 py-4">
+        <img :src="logoUrl" alt="Popside" class="size-9 shrink-0 rounded-lg" />
+        <div class="min-w-0">
+          <p class="truncate text-sm font-semibold tracking-tight">Popside</p>
+          <p class="truncate text-xs text-muted-foreground">Admin Dashboard</p>
+        </div>
       </div>
       <nav class="flex-1 space-y-1 px-2">
         <router-link

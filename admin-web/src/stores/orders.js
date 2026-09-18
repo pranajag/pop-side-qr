@@ -2,8 +2,21 @@ import { defineStore } from 'pinia'
 import { api } from '@/lib/api'
 
 export const useOrdersStore = defineStore('orders', {
-  state: () => ({ items: [], loading: false, statusFilter: undefined }),
+  state: () => ({ items: [], loading: false, statusFilter: undefined, knownActiveIds: null }),
   actions: {
+    // Filter-independent: fetches the full active set regardless of
+    // whatever statusFilter the Pesanan grid currently has selected, so a
+    // new order is noticed even while viewing a narrow tab (or a different
+    // page entirely — AppShell polls this, not OrdersView). knownActiveIds
+    // stays null until the first successful check so we never report every
+    // pre-existing order as "new" right after login/reload.
+    async checkForNewOrders() {
+      const data = await api.get('/admin/orders')
+      const currentIds = new Set(data.orders.map((o) => o.id))
+      const freshOrders = this.knownActiveIds ? data.orders.filter((o) => !this.knownActiveIds.has(o.id)) : []
+      this.knownActiveIds = currentIds
+      return freshOrders
+    },
     async fetchAll() {
       this.loading = true
       try {
