@@ -6,6 +6,7 @@ const cartTotalSchema = z.object({
       z.object({
         productId: z.coerce.number().int().positive(),
         qty: z.coerce.number().int().positive().max(99),
+        variantOptionIds: z.array(z.coerce.number().int().positive()).max(20).optional(),
       })
     )
     .min(1)

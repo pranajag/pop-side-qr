@@ -167,9 +167,14 @@ async function copyKode() {
 
       <div class="space-y-2 rounded-lg border p-4">
         <h2 class="text-sm font-semibold text-muted-foreground">Detail Pesanan</h2>
-        <div v-for="(item, idx) in order.items" :key="idx" class="flex justify-between text-sm">
-          <span>{{ item.qty }}x {{ item.nama }}</span>
-          <span>{{ formatRupiah(item.harga * item.qty) }}</span>
+        <div v-for="(item, idx) in order.items" :key="idx" class="flex justify-between gap-3 text-sm">
+          <span class="min-w-0">
+            {{ item.qty }}x {{ item.nama }}
+            <span v-if="item.variants?.length" class="block text-xs text-muted-foreground">
+              {{ item.variants.map((v) => v.namaOption).join(', ') }}
+            </span>
+          </span>
+          <span class="shrink-0">{{ formatRupiah(item.harga * item.qty) }}</span>
         </div>
         <div class="flex justify-between border-t pt-2 text-sm font-semibold">
           <span>Total</span>

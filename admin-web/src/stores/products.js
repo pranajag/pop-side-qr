@@ -7,7 +7,16 @@ function toFormData(payload) {
     // undefined foto = "keep the existing photo" (see api product.service) —
     // must be omitted, not sent as the string "undefined".
     if (value === undefined || value === null) continue
-    fd.append(key, value instanceof File ? value : String(value))
+    if (value instanceof File) {
+      fd.append(key, value)
+    } else if (Array.isArray(value)) {
+      // Multipart fields are flat strings — variantGroups is the one
+      // nested-array field, sent JSON-stringified (api/product.validator
+      // parses it back out).
+      fd.append(key, JSON.stringify(value))
+    } else {
+      fd.append(key, String(value))
+    }
   }
   return fd
 }

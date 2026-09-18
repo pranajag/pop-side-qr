@@ -56,7 +56,27 @@ const form = reactive({
   trackStock: false,
   isAvailable: true,
   foto: undefined,
+  variantGroups: [],
 })
+
+function newVariantOption() {
+  return { nama: '', hargaTambahan: 0 }
+}
+function newVariantGroup() {
+  return { nama: '', required: false, multiple: false, options: [newVariantOption()] }
+}
+function addVariantGroup() {
+  form.variantGroups.push(newVariantGroup())
+}
+function removeVariantGroup(groupIdx) {
+  form.variantGroups.splice(groupIdx, 1)
+}
+function addVariantOption(groupIdx) {
+  form.variantGroups[groupIdx].options.push(newVariantOption())
+}
+function removeVariantOption(groupIdx, optionIdx) {
+  form.variantGroups[groupIdx].options.splice(optionIdx, 1)
+}
 
 onMounted(() => {
   store.fetchAll()
@@ -105,6 +125,7 @@ function resetForm() {
   form.trackStock = false
   form.isAvailable = true
   form.foto = undefined
+  form.variantGroups = []
   clearLocalPreview()
   fileInputKey.value++
 }
@@ -124,6 +145,14 @@ function openEdit(product) {
   form.trackStock = product.trackStock
   form.isAvailable = product.isAvailable
   form.foto = undefined
+  // Deep-cloned so editing in the dialog doesn't mutate the store's live
+  // data until Simpan actually round-trips through the API.
+  form.variantGroups = (product.variantGroups ?? []).map((g) => ({
+    nama: g.nama,
+    required: g.required,
+    multiple: g.multiple,
+    options: g.options.map((o) => ({ nama: o.nama, hargaTambahan: Number(o.hargaTambahan) })),
+  }))
   clearLocalPreview()
   fileInputKey.value++
   formOpen.value = true
@@ -309,6 +338,58 @@ async function onDeleteConfirm() {
               />
             </div>
             <p class="text-xs text-muted-foreground">JPEG, PNG, atau WebP. Maks 2MB. Opsional.</p>
+          </div>
+
+          <div class="space-y-3 rounded-md border p-3">
+            <div class="flex items-center justify-between">
+              <Label>Varian</Label>
+              <Button type="button" size="sm" variant="outline" class="gap-1.5" @click="addVariantGroup">
+                <PlusIcon class="size-3.5" />
+                Grup Varian
+              </Button>
+            </div>
+            <p v-if="form.variantGroups.length === 0" class="text-xs text-muted-foreground">
+              Opsional. Misal grup "Ukuran" (Regular/Large) atau "Topping" (Boba/Jelly).
+            </p>
+
+            <div v-for="(group, gi) in form.variantGroups" :key="gi" class="space-y-3 rounded-md border bg-muted/40 p-3">
+              <div class="flex items-start gap-2">
+                <Input v-model="group.nama" placeholder="Nama grup, mis. Ukuran" required maxlength="100" class="flex-1" />
+                <Button type="button" variant="ghost" size="icon" @click="removeVariantGroup(gi)">
+                  <Trash2Icon class="size-4" />
+                </Button>
+              </div>
+              <div class="flex flex-wrap gap-4 text-sm">
+                <label class="flex items-center gap-2">
+                  <Switch v-model="group.required" />
+                  Wajib pilih
+                </label>
+                <label class="flex items-center gap-2">
+                  <Switch v-model="group.multiple" />
+                  Bisa pilih lebih dari satu
+                </label>
+              </div>
+
+              <div class="space-y-2">
+                <div v-for="(option, oi) in group.options" :key="oi" class="flex items-center gap-2">
+                  <Input v-model="option.nama" placeholder="Nama opsi, mis. Large" required maxlength="100" class="flex-1" />
+                  <Input v-model.number="option.hargaTambahan" type="number" step="1" placeholder="+0" class="w-28" />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    :disabled="group.options.length <= 1"
+                    @click="removeVariantOption(gi, oi)"
+                  >
+                    <Trash2Icon class="size-3.5" />
+                  </Button>
+                </div>
+                <Button type="button" size="sm" variant="ghost" class="gap-1.5" @click="addVariantOption(gi)">
+                  <PlusIcon class="size-3.5" />
+                  Tambah opsi
+                </Button>
+              </div>
+            </div>
           </div>
         </form>
         <DialogFooter>

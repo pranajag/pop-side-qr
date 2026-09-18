@@ -37,7 +37,7 @@ onMounted(async () => {
   loadingSummary.value = true
   try {
     summary.value = await api.post('/public/cart/total', {
-      items: cart.items.map((i) => ({ productId: i.productId, qty: i.qty })),
+      items: cart.items.map((i) => ({ productId: i.productId, qty: i.qty, variantOptionIds: i.variantOptionIds })),
     })
   } catch (err) {
     toast.error(formatApiError(err))
@@ -55,7 +55,12 @@ async function onSubmit() {
       token: table.token,
       metode: metode.value,
       catatan: catatan.value || undefined,
-      items: cart.items.map((i) => ({ productId: i.productId, qty: i.qty, catatan: i.catatan || undefined })),
+      items: cart.items.map((i) => ({
+        productId: i.productId,
+        qty: i.qty,
+        variantOptionIds: i.variantOptionIds,
+        catatan: i.catatan || undefined,
+      })),
     })
     cart.clear()
     router.replace({ name: 'order', params: { kodeOrder: order.kodeOrder } })

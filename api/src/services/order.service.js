@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const { generateOrderCode } = require('../utils/orderCode');
 const { isUniqueConstraintError } = require('../utils/prismaErrors');
+const { resolveProductVariants } = require('../utils/productVariants');
 const tableService = require('./table.service');
 
 const MAX_CODE_ATTEMPTS = 5;
@@ -27,7 +28,10 @@ async function createOrder({ token, metode, catatan, items }) {
         // atomic updateMany below still independently re-checks stock at
         // decrement time regardless of what this batch saw.
         const productIds = [...new Set(items.map((i) => i.productId))];
-        const products = await tx.product.findMany({ where: { id: { in: productIds } } });
+        const products = await tx.product.findMany({
+          where: { id: { in: productIds } },
+          include: { variantGroups: { include: { options: true } } },
+        });
         const productById = new Map(products.map((p) => [p.id, p]));
 
         let totalHarga = 0;
@@ -37,6 +41,11 @@ async function createOrder({ token, metode, catatan, items }) {
           const product = productById.get(item.productId);
           if (!product || !product.isAvailable) {
             throw new AppError(400, `${product?.nama ?? 'Produk'} sudah tidak tersedia`);
+          }
+
+          const resolved = resolveProductVariants(product, item.variantOptionIds);
+          if (resolved.error) {
+            throw new AppError(400, resolved.error);
           }
 
           if (product.trackStock) {
@@ -53,17 +62,18 @@ async function createOrder({ token, metode, catatan, items }) {
             }
           }
 
-          const harga = Number(product.harga);
+          const harga = Number(product.harga) + resolved.extraPerUnit;
           totalHarga += harga * item.qty;
           orderItemsData.push({
             productId: product.id,
             qty: item.qty,
-            hargaSaatOrder: product.harga,
+            hargaSaatOrder: harga,
             // Snapshot, not re-derived later: whether stock was actually
             // taken for this line, independent of whatever trackStock is
             // set to by the time this order might get cancelled.
             stockDecremented: product.trackStock,
             catatan: item.catatan,
+            variants: resolved.snapshots.length ? { create: resolved.snapshots } : undefined,
           });
         }
 
@@ -140,7 +150,7 @@ async function getByCode(kodeOrder) {
   const order = await prisma.order.findUnique({
     where: { kodeOrder },
     include: {
-      items: { include: { product: { select: { nama: true } } } },
+      items: { include: { product: { select: { nama: true } }, variants: true } },
       table: { select: { nomorMeja: true } },
     },
   });
@@ -161,6 +171,7 @@ async function getByCode(kodeOrder) {
       qty: item.qty,
       harga: Number(item.hargaSaatOrder),
       catatan: item.catatan,
+      variants: item.variants.map((v) => ({ namaGroup: v.namaGroup, namaOption: v.namaOption })),
     })),
   };
 }

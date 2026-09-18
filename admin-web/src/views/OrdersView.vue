@@ -169,6 +169,7 @@ async function onCancelConfirm() {
         <ul class="space-y-0.5 text-sm text-muted-foreground">
           <li v-for="(item, idx) in order.items" :key="idx">
             {{ item.qty }}x {{ item.nama }}
+            <span v-if="item.variants?.length">({{ item.variants.map((v) => v.namaOption).join(', ') }})</span>
             <span v-if="item.catatan" class="italic">({{ item.catatan }})</span>
           </li>
         </ul>

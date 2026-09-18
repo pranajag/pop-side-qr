@@ -10,7 +10,27 @@ async function getPublicMenu() {
       products: {
         where: { isAvailable: true },
         orderBy: { nama: 'asc' },
-        select: { id: true, nama: true, harga: true, foto: true, trackStock: true, stok: true },
+        select: {
+          id: true,
+          nama: true,
+          harga: true,
+          foto: true,
+          trackStock: true,
+          stok: true,
+          variantGroups: {
+            orderBy: { urutan: 'asc' },
+            select: {
+              id: true,
+              nama: true,
+              required: true,
+              multiple: true,
+              options: {
+                orderBy: { urutan: 'asc' },
+                select: { id: true, nama: true, hargaTambahan: true },
+              },
+            },
+          },
+        },
       },
     },
   });

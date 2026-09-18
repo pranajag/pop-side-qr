@@ -22,7 +22,7 @@ const CANCELLABLE_FROM = new Set(['pending', 'waiting_verif', 'confirmed', 'cook
 
 const ORDER_INCLUDE = {
   table: { select: { nomorMeja: true } },
-  items: { include: { product: { select: { nama: true } } } },
+  items: { include: { product: { select: { nama: true } }, variants: true } },
 };
 
 function shapeOrder(order) {
@@ -41,6 +41,7 @@ function shapeOrder(order) {
       qty: item.qty,
       harga: Number(item.hargaSaatOrder),
       catatan: item.catatan,
+      variants: item.variants.map((v) => ({ namaGroup: v.namaGroup, namaOption: v.namaOption })),
     })),
   };
 }

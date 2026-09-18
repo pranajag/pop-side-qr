@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTableStore } from '@/stores/table'
 import { useMenuStore } from '@/stores/menu'
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import QtyStepper from '@/components/QtyStepper.vue'
+import VariantPickerDialog from '@/components/VariantPickerDialog.vue'
 import { ImageOffIcon, ChevronRightIcon, QrCodeIcon } from '@lucide/vue'
 import { API_URL } from '@/lib/api'
 import logoUrl from '@/assets/pop-side-logo.jpg'
@@ -17,6 +18,18 @@ const table = useTableStore()
 const menu = useMenuStore()
 const cart = useCartStore()
 const router = useRouter()
+
+const pickerOpen = ref(false)
+const pickerProduct = ref(null)
+
+function onTambahClick(product) {
+  if (product.variantGroups.length > 0) {
+    pickerProduct.value = product
+    pickerOpen.value = true
+  } else {
+    cart.setQty(product.id, [], 1)
+  }
+}
 
 onMounted(() => {
   if (table.isVerified && !menu.loaded) {
@@ -42,7 +55,12 @@ function maxQty(product) {
 const estimatedTotal = computed(() =>
   cart.items.reduce((sum, item) => {
     const product = menu.findProduct(item.productId)
-    return sum + (product ? Number(product.harga) * item.qty : 0)
+    if (!product) return sum
+    const extra = product.variantGroups
+      .flatMap((g) => g.options)
+      .filter((o) => item.variantOptionIds.includes(o.id))
+      .reduce((s, o) => s + Number(o.hargaTambahan), 0)
+    return sum + (Number(product.harga) + extra) * item.qty
   }, 0)
 )
 </script>
@@ -109,19 +127,19 @@ const estimatedTotal = computed(() =>
                 <Badge v-if="isSoldOut(product)" variant="secondary" class="mt-1">Habis</Badge>
                 <div v-else class="mt-2">
                   <Button
-                    v-if="cart.qtyFor(product.id) === 0"
+                    v-if="product.variantGroups.length > 0 || cart.qtyFor(product.id, []) === 0"
                     size="sm"
                     variant="outline"
                     class="h-9"
-                    @click="cart.setQty(product.id, 1)"
+                    @click="onTambahClick(product)"
                   >
-                    Tambah
+                    {{ product.variantGroups.length > 0 ? 'Pilih' : 'Tambah' }}
                   </Button>
                   <QtyStepper
                     v-else
-                    :qty="cart.qtyFor(product.id)"
+                    :qty="cart.qtyFor(product.id, [])"
                     :max="maxQty(product)"
-                    @update:qty="(q) => cart.setQty(product.id, q)"
+                    @update:qty="(q) => cart.setQty(product.id, [], q)"
                   />
                 </div>
               </div>
@@ -150,5 +168,7 @@ const estimatedTotal = computed(() =>
         </span>
       </button>
     </div>
+
+    <VariantPickerDialog :open="pickerOpen" :product="pickerProduct" @update:open="pickerOpen = $event" />
   </div>
 </template>

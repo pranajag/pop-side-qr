@@ -9,6 +9,7 @@ const createOrderSchema = z.object({
       z.object({
         productId: z.coerce.number().int().positive(),
         qty: z.coerce.number().int().positive().max(99),
+        variantOptionIds: z.array(z.coerce.number().int().positive()).max(20).optional(),
         catatan: z.string().trim().max(200).optional(),
       })
     )

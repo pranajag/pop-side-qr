@@ -62,19 +62,52 @@ model Category {
 }
 
 model Product {
-  id          Int         @id @default(autoincrement())
-  categoryId  Int         @map("category_id")
-  category    Category    @relation(fields: [categoryId], references: [id])
-  nama        String
-  harga       Decimal
-  stok        Int         @default(0)
-  trackStock  Boolean     @default(false) @map("track_stock")
-  foto        String?
-  isAvailable Boolean     @default(true) @map("is_available")
-  orderItems  OrderItem[]
+  id            Int            @id @default(autoincrement())
+  categoryId    Int            @map("category_id")
+  category      Category       @relation(fields: [categoryId], references: [id])
+  nama          String
+  harga         Decimal
+  stok          Int            @default(0)
+  trackStock    Boolean        @default(false) @map("track_stock")
+  foto          String?
+  isAvailable   Boolean        @default(true) @map("is_available")
+  orderItems    OrderItem[]
+  variantGroups VariantGroup[]
 
   @@index([categoryId])
   @@map("products")
+}
+
+// Product-scoped, not shared across products — a cafe's "Level Gula" for
+// one drink rarely needs to be the exact same option set as another, and
+// sharing groups would need a much bigger many-to-many admin UI for a
+// benefit this project doesn't need yet.
+model VariantGroup {
+  id        Int             @id @default(autoincrement())
+  productId Int             @map("product_id")
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  nama      String
+  // required: customer must pick at least one option (e.g. Ukuran).
+  // multiple: checkbox-style (Topping) vs single radio pick (Ukuran).
+  required  Boolean         @default(false)
+  multiple  Boolean         @default(false)
+  urutan    Int             @default(0)
+  options   VariantOption[]
+
+  @@index([productId])
+  @@map("variant_groups")
+}
+
+model VariantOption {
+  id            Int          @id @default(autoincrement())
+  groupId       Int          @map("group_id")
+  group         VariantGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  nama          String
+  hargaTambahan Decimal      @default(0) @map("harga_tambahan")
+  urutan        Int          @default(0)
+
+  @@index([groupId])
+  @@map("variant_options")
 }
 
 model Order {
@@ -99,24 +132,41 @@ model Order {
 }
 
 model OrderItem {
-  id               Int     @id @default(autoincrement())
-  orderId          Int     @map("order_id")
-  order            Order   @relation(fields: [orderId], references: [id])
-  productId        Int     @map("product_id")
-  product          Product @relation(fields: [productId], references: [id])
+  id               Int                @id @default(autoincrement())
+  orderId          Int                @map("order_id")
+  order            Order              @relation(fields: [orderId], references: [id])
+  productId        Int                @map("product_id")
+  product          Product            @relation(fields: [productId], references: [id])
   qty              Int
-  hargaSaatOrder   Decimal @map("harga_saat_order")
+  hargaSaatOrder   Decimal            @map("harga_saat_order")
   // Same reasoning as hargaSaatOrder: whether stock was actually decremented
   // for this line at order time must never be re-derived from the
   // product's *current* trackStock — an admin can flip that flag later,
   // which would otherwise make cancellation either restore stock that was
   // never taken, or skip restoring stock that was.
-  stockDecremented Boolean @default(false) @map("stock_decremented")
+  stockDecremented Boolean            @default(false) @map("stock_decremented")
   catatan          String?
+  variants         OrderItemVariant[]
 
   @@index([orderId])
   @@index([productId])
   @@map("order_items")
+}
+
+// Snapshot only (namaGroup/namaOption/hargaTambahan copied at order time),
+// no FK back to VariantOption — same reasoning as hargaSaatOrder: an admin
+// can rename/delete/repricing a variant option later, and a past order must
+// keep showing exactly what the customer picked and paid for, unaffected.
+model OrderItemVariant {
+  id            Int       @id @default(autoincrement())
+  orderItemId   Int       @map("order_item_id")
+  orderItem     OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  namaGroup     String    @map("nama_group")
+  namaOption    String    @map("nama_option")
+  hargaTambahan Decimal   @map("harga_tambahan")
+
+  @@index([orderItemId])
+  @@map("order_item_variants")
 }
 
 model OrderStatusLog {
