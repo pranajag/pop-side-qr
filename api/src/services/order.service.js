@@ -165,6 +165,7 @@ async function getByCode(kodeOrder) {
     totalHarga: Number(order.totalHarga),
     catatan: order.catatan,
     createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
     nomorMeja: order.table.nomorMeja,
     items: order.items.map((item) => ({
       nama: item.product.nama,

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { api, formatApiError, API_URL } from '@/lib/api'
@@ -46,23 +46,40 @@ const statusLabel = computed(() => STATUS_LABEL[order.value?.status] ?? order.va
 const statusColor = computed(() => STATUS_COLOR[order.value?.status] ?? 'bg-muted-foreground')
 const needsQrisPayment = computed(() => order.value?.status === 'pending' && order.value?.metode === 'qris')
 const isWaitingKasir = computed(() => order.value?.status === 'pending' && order.value?.metode !== 'qris')
+const isTerminal = computed(() => order.value?.status === 'completed' || order.value?.status === 'cancelled')
 
-async function load() {
-  loading.value = true
-  notFound.value = false
+// Elapsed time since the order's last status change — not a promised ETA
+// (this cafe has no per-order kitchen-load data to predict one honestly),
+// just an honest "how long has this been sitting" data point.
+const now = ref(Date.now())
+const elapsedMinutes = computed(() => {
+  if (!order.value?.updatedAt) return null
+  return Math.max(0, Math.floor((now.value - new Date(order.value.updatedAt).getTime()) / 60000))
+})
+
+async function load({ silent = false } = {}) {
+  if (!silent) loading.value = true
   try {
     const data = await api.get(`/public/orders/${route.params.kodeOrder}`)
     order.value = data.order
+    notFound.value = false
   } catch (err) {
+    // Silent (polling) failures — a rate limit hit, a network blip — just
+    // retry next tick and keep showing whatever order data is already on
+    // screen, rather than blanking out a page the customer is looking at.
+    if (silent) return
     if (err.status === 404) {
       notFound.value = true
     } else {
       toast.error(formatApiError(err))
     }
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
+
+let statusTimer = null
+let clockTimer = null
 
 onMounted(async () => {
   await load()
@@ -74,6 +91,27 @@ onMounted(async () => {
       // Non-fatal — the "sudah bayar" button still works without the image loaded.
     }
   }
+
+  // Without this, the page would show a stale status forever until the
+  // customer manually reloads — and an elapsed-time readout next to a
+  // stale status would actively mislead rather than inform.
+  // 20s keeps this comfortably under the 5/min rate limit on this route
+  // (guessable kodeOrder, so it's intentionally tight — AGENTS.md) even
+  // together with this same mount's own initial load() above.
+  statusTimer = setInterval(async () => {
+    if (isTerminal.value) {
+      clearInterval(statusTimer)
+      return
+    }
+    await load({ silent: true })
+  }, 20000)
+  clockTimer = setInterval(() => {
+    now.value = Date.now()
+  }, 30000)
+})
+onUnmounted(() => {
+  clearInterval(statusTimer)
+  clearInterval(clockTimer)
 })
 
 async function onConfirmBayar() {
@@ -111,6 +149,15 @@ async function copyKode() {
       <p class="text-sm text-muted-foreground">Kode order salah, atau sudah kedaluwarsa.</p>
     </div>
     <Button variant="outline" @click="router.push({ name: 'menu' })">Kembali ke Menu</Button>
+  </div>
+
+  <div v-else-if="!order" class="flex min-h-svh flex-col items-center justify-center gap-4 px-6 text-center">
+    <TriangleAlertIcon class="size-10 text-muted-foreground" />
+    <div class="space-y-1">
+      <h1 class="text-lg font-semibold">Gagal memuat status pesanan</h1>
+      <p class="text-sm text-muted-foreground">Coba lagi sebentar.</p>
+    </div>
+    <Button variant="outline" @click="load()">Coba Lagi</Button>
   </div>
 
   <div v-else class="min-h-svh px-4 py-6">
@@ -153,6 +200,7 @@ async function copyKode() {
       <div v-else-if="order.status === 'waiting_verif'" class="space-y-1 rounded-lg border p-4 text-center">
         <LoaderCircleIcon class="mx-auto size-6 animate-spin text-muted-foreground" />
         <p class="text-sm font-medium">Menunggu kasir verifikasi pembayaran</p>
+        <p v-if="elapsedMinutes" class="text-xs text-muted-foreground">Sudah {{ elapsedMinutes }} menit</p>
       </div>
 
       <div v-else-if="order.status === 'completed'" class="space-y-1 rounded-lg border p-4 text-center">
@@ -163,6 +211,9 @@ async function copyKode() {
       <div v-else class="rounded-lg border p-4 text-center">
         <UtensilsIcon class="mx-auto size-6 text-muted-foreground" />
         <p class="mt-1 text-sm font-medium">Pesanan sedang diproses dapur.</p>
+        <p v-if="elapsedMinutes" class="text-xs text-muted-foreground">
+          Sudah {{ elapsedMinutes }} menit sejak status terakhir diperbarui
+        </p>
       </div>
 
       <div class="space-y-2 rounded-lg border p-4">
