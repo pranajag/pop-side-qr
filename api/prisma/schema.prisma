@@ -239,11 +239,17 @@ model User {
 // this reports "what happened while I was clocked in", not per-order staff
 // attribution, which this app has no concept of for QR/self-service orders.
 model Shift {
-  id        Int       @id @default(autoincrement())
-  userId    Int       @map("user_id")
-  user      User      @relation(fields: [userId], references: [id])
-  startedAt DateTime  @default(now()) @map("started_at")
-  endedAt   DateTime? @map("ended_at")
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  user        User      @relation(fields: [userId], references: [id])
+  startedAt   DateTime  @default(now()) @map("started_at")
+  endedAt     DateTime? @map("ended_at")
+  // Physical cash the kasir counted in the drawer at shift end — entered
+  // once, at endShift time, never editable after. Compared against tunai
+  // revenue for the shift window to catch a cash shortfall ("minus").
+  // Null until the shift is ended; shifts closed before this field existed
+  // stay null forever (no reconciliation data to show for those).
+  cashCounted Decimal?  @map("cash_counted")
 
   @@index([userId])
   @@index([startedAt])

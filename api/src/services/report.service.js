@@ -34,14 +34,7 @@ async function getReport(fromStr, toStr) {
   };
 
   const orders = await prisma.order.findMany({ where, select: { metode: true, totalHarga: true } });
-
-  const byMetode = { qris: 0, tunai: 0, debit: 0 };
-  let total = 0;
-  for (const order of orders) {
-    const amount = Number(order.totalHarga);
-    byMetode[order.metode] += amount;
-    total += amount;
-  }
+  const { byMetode, total } = sumByMetode(orders);
 
   // Grouped by productId (stable), displayed with the product's *current*
   // name — same convention every other order-shaping function in this
@@ -70,4 +63,17 @@ async function getReport(fromStr, toStr) {
   };
 }
 
-module.exports = { getReport, REVENUE_STATUSES };
+// Shared with shift.service.js's cash-reconciliation calc — same "how much
+// revenue, split by payment method" question, just windowed differently.
+function sumByMetode(orders) {
+  const byMetode = { qris: 0, tunai: 0, debit: 0 };
+  let total = 0;
+  for (const order of orders) {
+    const amount = Number(order.totalHarga);
+    byMetode[order.metode] += amount;
+    total += amount;
+  }
+  return { byMetode, total };
+}
+
+module.exports = { getReport, REVENUE_STATUSES, sumByMetode };

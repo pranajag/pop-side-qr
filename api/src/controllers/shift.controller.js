@@ -6,7 +6,7 @@ async function start(req, res) {
 }
 
 async function end(req, res) {
-  const shift = await shiftService.endShift(req.session.user.id);
+  const shift = await shiftService.endShift(req.session.user.id, req.body.cashCounted);
   res.json({ shift });
 }
 
@@ -20,4 +20,9 @@ async function list(req, res) {
   res.json({ shifts });
 }
 
-module.exports = { start, end, active, list };
+async function detail(req, res) {
+  const shift = await shiftService.getShiftDetail(req.params.id);
+  res.json({ shift });
+}
+
+module.exports = { start, end, active, list, detail };
