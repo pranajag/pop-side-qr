@@ -8,4 +8,15 @@ const zBooleanish = z
   .union([z.boolean(), z.enum(['true', 'false'])])
   .transform((val) => (typeof val === 'boolean' ? val : val === 'true'));
 
-module.exports = { zBooleanish };
+const usernameSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(50)
+  .regex(/^[a-zA-Z0-9_.-]+$/);
+
+// 72 = bcrypt's silent input-truncation boundary, so validation never
+// accepts a password whose tail bcrypt would just discard.
+const passwordSchema = z.string().min(8).max(72);
+
+module.exports = { zBooleanish, usernameSchema, passwordSchema };
