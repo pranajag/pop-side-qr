@@ -9,6 +9,16 @@ import { api, formatApiError } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { ArrowLeftIcon, TriangleAlertIcon, LoaderCircleIcon, QrCodeIcon, BanknoteIcon, CreditCardIcon } from '@lucide/vue'
 
 const table = useTableStore()
@@ -47,6 +57,8 @@ onMounted(async () => {
 })
 
 const hasIssues = computed(() => (summary.value?.issues?.length ?? 0) > 0)
+const confirmOpen = ref(false)
+const selectedMethod = computed(() => METHODS.find((m) => m.value === metode.value))
 
 async function onSubmit() {
   submitting.value = true
@@ -153,10 +165,29 @@ async function onSubmit() {
     </main>
 
     <div class="fixed inset-x-0 bottom-0 border-t bg-background p-3">
-      <Button size="lg" class="h-12 w-full" :disabled="submitting || hasIssues || loadingSummary" @click="onSubmit">
+      <Button size="lg" class="h-12 w-full" :disabled="submitting || hasIssues || loadingSummary" @click="confirmOpen = true">
         <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
         Pesan Sekarang
       </Button>
     </div>
+
+    <AlertDialog :open="confirmOpen" @update:open="(v) => (confirmOpen = v)">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Kirim pesanan ini?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Total {{ formatRupiah(summary?.total ?? 0) }}, bayar {{ selectedMethod?.label }}. Pastikan pesanan sudah
+            sesuai — order yang sudah dikirim tidak bisa diubah sendiri dari sini.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cek Lagi</AlertDialogCancel>
+          <AlertDialogAction :disabled="submitting" @click="onSubmit">
+            <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
+            Ya, Pesan Sekarang
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

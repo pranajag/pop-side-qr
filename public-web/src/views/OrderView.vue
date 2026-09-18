@@ -6,6 +6,16 @@ import { api, formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   LoaderCircleIcon,
   CircleCheckIcon,
   ClockIcon,
@@ -124,11 +134,17 @@ function onBuktiChange(e) {
   buktiPreview.value = file ? URL.createObjectURL(file) : null
 }
 
-async function onConfirmBayar() {
+const confirmBayarOpen = ref(false)
+
+function onSudahBayarClick() {
   if (!buktiFile.value) {
     toast.error('Upload bukti pembayaran dulu')
     return
   }
+  confirmBayarOpen.value = true
+}
+
+async function onConfirmBayar() {
   confirming.value = true
   try {
     const fd = new FormData()
@@ -221,7 +237,7 @@ async function copyKode() {
           <p class="text-[11px] text-muted-foreground">Screenshot/foto notifikasi pembayaran dari e-wallet/m-banking kamu.</p>
         </div>
 
-        <Button size="lg" class="h-12 w-full" :disabled="confirming || !buktiFile" @click="onConfirmBayar">
+        <Button size="lg" class="h-12 w-full" :disabled="confirming || !buktiFile" @click="onSudahBayarClick">
           <LoaderCircleIcon v-if="confirming" class="size-4 animate-spin" />
           Saya Sudah Bayar
         </Button>
@@ -253,6 +269,25 @@ async function copyKode() {
           Sudah {{ elapsedMinutes }} menit sejak status terakhir diperbarui
         </p>
       </div>
+
+      <AlertDialog :open="confirmBayarOpen" @update:open="(v) => (confirmBayarOpen = v)">
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Kirim bukti pembayaran ini?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Pastikan foto/screenshot yang dipilih benar-benar bukti pembayaran {{ formatRupiah(order.totalHarga) }}
+              untuk order ini. Kasir akan memverifikasi dari bukti ini.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cek Lagi</AlertDialogCancel>
+            <AlertDialogAction :disabled="confirming" @click="onConfirmBayar">
+              <LoaderCircleIcon v-if="confirming" class="size-4 animate-spin" />
+              Ya, Sudah Bayar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div class="space-y-2 rounded-lg border p-4">
         <h2 class="text-sm font-semibold text-muted-foreground">Detail Pesanan</h2>

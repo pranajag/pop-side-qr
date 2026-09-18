@@ -5,6 +5,16 @@ import { useSettingsStore } from '@/stores/settings'
 import { formatApiError, API_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { ImageOffIcon, LoaderCircleIcon } from '@lucide/vue'
 
 const store = useSettingsStore()
@@ -13,6 +23,7 @@ const fileInputKey = ref(0)
 const selectedFile = ref(null)
 const localPreviewUrl = ref(null)
 const submitting = ref(false)
+const saveConfirmOpen = ref(false)
 
 onMounted(() => store.fetchSettings())
 onBeforeUnmount(clearLocalPreview)
@@ -41,6 +52,7 @@ function onFileChange(e) {
 
 async function onSave() {
   if (!selectedFile.value) return
+  saveConfirmOpen.value = false
   submitting.value = true
   try {
     await store.updateQris(selectedFile.value)
@@ -89,10 +101,26 @@ async function onSave() {
         <p class="text-xs text-muted-foreground">JPEG, PNG, atau WebP. Maks 2MB.</p>
       </div>
 
-      <Button :disabled="!selectedFile || submitting" @click="onSave">
+      <Button :disabled="!selectedFile || submitting" @click="saveConfirmOpen = true">
         <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
         Simpan
       </Button>
     </div>
+
+    <AlertDialog :open="saveConfirmOpen" @update:open="(v) => (saveConfirmOpen = v)">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Ganti gambar QRIS?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Gambar ini akan langsung tampil ke SEMUA customer yang checkout QRIS mulai sekarang. Pastikan ini QRIS
+            yang benar sebelum menyimpan.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Batal</AlertDialogCancel>
+          <AlertDialogAction :disabled="submitting" @click="onSave">Ya, Simpan</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

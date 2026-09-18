@@ -39,6 +39,7 @@ const deleteTarget = ref(null)
 const deleting = ref(false)
 const qrTarget = ref(null)
 const resetting = ref(false)
+const resetConfirmOpen = ref(false)
 
 const form = reactive({ nomorMeja: '', isActive: true })
 
@@ -111,6 +112,7 @@ async function onDeleteConfirm() {
 }
 
 async function onResetToken(table) {
+  resetConfirmOpen.value = false
   resetting.value = true
   try {
     await store.resetToken(table.id)
@@ -232,7 +234,7 @@ function printQr() {
             <CopyIcon class="size-4" />
             Salin Link
           </Button>
-          <Button variant="outline" class="gap-2" :disabled="resetting" @click="onResetToken(qrTarget)">
+          <Button variant="outline" class="gap-2" :disabled="resetting" @click="resetConfirmOpen = true">
             <RefreshCwIcon class="size-4" :class="{ 'animate-spin': resetting }" />
             Reset QR
           </Button>
@@ -256,6 +258,22 @@ function printQr() {
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
           <AlertDialogAction :disabled="deleting" @click="onDeleteConfirm">Hapus</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog :open="resetConfirmOpen" @update:open="(v) => (resetConfirmOpen = v)">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Reset QR meja {{ qrTarget?.nomorMeja }}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            QR yang sudah dicetak dan ditempel di meja langsung tidak berlaku lagi begitu di-reset. Meja itu perlu
+            QR baru dicetak dan ditempel ulang sebelum bisa dipakai customer.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Batal</AlertDialogCancel>
+          <AlertDialogAction :disabled="resetting" @click="onResetToken(qrTarget)">Ya, Reset QR</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

@@ -35,6 +35,12 @@ const cancelReason = ref('')
 const cancelling = ref(false)
 const resolvingCallId = ref(null)
 const buktiOrderId = ref(null)
+// Split from confirmOpen deliberately: confirmTarget must never go back to
+// null on close, or the dialog's description (which interpolates metode/
+// totalHarga, not just an id) renders "undefined"/"NaN" for the ~150ms
+// close-transition before it unmounts.
+const confirmOpen = ref(false)
+const confirmTarget = ref(null)
 
 function buktiBayarUrl(orderId) {
   // Browser sends the session cookie automatically for this <img> load —
@@ -88,16 +94,30 @@ async function onResolveCall(call) {
   }
 }
 
-async function onConfirm(order) {
-  busyId.value = order.id
+// Same non-reactive-plain-variable pattern as pendingCancel below —
+// AlertDialogAction closes the dialog (nulling confirmTarget) before the
+// @click handler's own turn, so the handler needs its own copy to read.
+let pendingConfirm = null
+
+function openConfirm(order) {
+  confirmTarget.value = order
+  confirmOpen.value = true
+  pendingConfirm = order
+}
+
+async function onConfirm() {
+  const target = pendingConfirm
+  if (!target) return
+  busyId.value = target.id
   try {
-    await store.confirmPayment(order.id)
-    toast.success(`${order.kodeOrder} dikonfirmasi`)
+    await store.confirmPayment(target.id)
+    toast.success(`${target.kodeOrder} dikonfirmasi`)
   } catch (err) {
     toast.error(formatApiError(err))
     store.fetchAll()
   } finally {
     busyId.value = null
+    pendingConfirm = null
   }
 }
 
@@ -235,7 +255,7 @@ async function onCancelConfirm() {
             size="sm"
             class="gap-1.5"
             :disabled="busyId === order.id"
-            @click="onConfirm(order)"
+            @click="openConfirm(order)"
           >
             <LoaderCircleIcon v-if="busyId === order.id" class="size-3.5 animate-spin" />
             <CheckIcon v-else class="size-3.5" />
@@ -264,6 +284,25 @@ async function onCancelConfirm() {
         </div>
       </div>
     </div>
+
+    <AlertDialog :open="confirmOpen" @update:open="(v) => (confirmOpen = v)">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Konfirmasi pembayaran {{ confirmTarget?.kodeOrder }}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {{
+              confirmTarget?.metode === 'qris'
+                ? 'Pastikan sudah cek bukti pembayarannya sebelum konfirmasi.'
+                : `Pastikan sudah terima ${confirmTarget?.metode} ${formatRupiah(confirmTarget?.totalHarga)} dari customer sebelum konfirmasi.`
+            }}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Batal</AlertDialogCancel>
+          <AlertDialogAction :disabled="busyId === confirmTarget?.id" @click="onConfirm">Ya, Konfirmasi</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <AlertDialog :open="!!cancelTarget" @update:open="(v) => !v && (cancelTarget = null)">
       <AlertDialogContent>
