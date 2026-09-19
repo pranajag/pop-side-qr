@@ -25,7 +25,17 @@ async function create(token, catatan) {
   return toShaped(call);
 }
 
+const VALID_STATUSES = new Set(['pending', 'resolved']);
+
+// statusFilter comes straight from req.query.status — must be checked
+// against a fixed whitelist before it reaches Prisma's `where`, the same
+// rule orderManagement.service.js's buildWhere already follows. Express's
+// query parser turns e.g. ?status[not]=pending into an object here, which
+// Prisma would otherwise accept as a legal (and attacker-chosen) operator.
 async function list(statusFilter) {
+  if (statusFilter !== undefined && statusFilter !== 'all' && !VALID_STATUSES.has(statusFilter)) {
+    throw new AppError(400, 'Status filter tidak valid');
+  }
   const where = statusFilter === 'all' ? {} : { status: statusFilter ?? 'pending' };
   const calls = await prisma.staffCall.findMany({
     where,

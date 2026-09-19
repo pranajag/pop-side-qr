@@ -7,6 +7,7 @@ const pinoHttp = require('pino-http');
 
 const logger = require('./utils/logger');
 const { doubleCsrfProtection } = require('./middleware/csrf');
+const { csrfTokenLimiter } = require('./middleware/rateLimit');
 const errorHandler = require('./middleware/errorHandler');
 const authController = require('./controllers/auth.controller');
 const authRoutes = require('./routes/auth.routes');
@@ -102,8 +103,12 @@ app.use(
 // reversed).
 app.use(cookieParser());
 
-// Token-issuing route mounted before the blanket CSRF check below.
-app.get('/api/auth/csrf-token', authController.csrfToken);
+// Token-issuing route mounted before the blanket CSRF check below. Rate
+// limited because every hit allocates a fresh session in the in-memory
+// store (saveUninitialized: true, no cookie needed) — unbounded here would
+// be a trivial memory-exhaustion DoS against the one process serving both
+// the public site and the admin dashboard.
+app.get('/api/auth/csrf-token', csrfTokenLimiter, authController.csrfToken);
 
 // Applied to everything below so every mutating admin/kasir route stays
 // protected by default (GET/HEAD/OPTIONS are exempt via csrf-csrf's own

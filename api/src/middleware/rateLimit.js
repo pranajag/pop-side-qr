@@ -118,6 +118,25 @@ const publicImageLimiter = rateLimit({
   },
 });
 
+// GET /auth/csrf-token is mounted ahead of both the CSRF check AND (unlike
+// every public.routes.js route) had no limiter of its own — every hit
+// allocates a fresh express-session row (saveUninitialized: true, no cookie
+// required) in the unbounded in-memory store. Unlimited + unauthenticated +
+// session-creating is exactly the combination app.js's own comment warns
+// public.routes.js must never be mounted after session() to avoid; this
+// route slipped through that same hole. Generous limit since real usage
+// (page load, pre-login, post-403 retry) never approaches it.
+const csrfTokenLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak permintaan. Coba lagi sebentar.' });
+  },
+});
+
 module.exports = {
   loginLimiter,
   createOrderLimiter,
@@ -127,4 +146,5 @@ module.exports = {
   tableVerifyLimiter,
   publicReadLimiter,
   publicImageLimiter,
+  csrfTokenLimiter,
 };
