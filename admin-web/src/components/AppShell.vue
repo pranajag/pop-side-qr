@@ -1,9 +1,10 @@
 <script setup>
-import { computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useOrdersStore } from '@/stores/orders'
 import { useStaffCallsStore } from '@/stores/staffCalls'
+import { useNotificationsStore } from '@/stores/notifications'
 import { Button } from '@/components/ui/button'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 import { playNotifySound } from '@/lib/notifySound'
@@ -20,17 +21,21 @@ import {
   UsersIcon,
   SettingsIcon,
   LogOutIcon,
+  MenuIcon,
+  XIcon,
 } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 const orders = useOrdersStore()
 const staffCalls = useStaffCallsStore()
+const notifications = useNotificationsStore()
 
 const nav = computed(() => {
   const items = [
-    { to: { name: 'pesanan' }, label: 'Pesanan', icon: ClipboardListIcon },
+    { to: { name: 'pesanan' }, label: 'Pesanan', icon: ClipboardListIcon, badge: orders.needsActionCount },
     { to: { name: 'shift' }, label: 'Shift', icon: TimerIcon },
     { to: { name: 'reservasi' }, label: 'Reservasi', icon: CalendarClockIcon },
   ]
@@ -39,8 +44,8 @@ const nav = computed(() => {
       { to: { name: 'kategori' }, label: 'Kategori', icon: LayoutGridIcon },
       { to: { name: 'produk' }, label: 'Produk', icon: UtensilsIcon },
       { to: { name: 'meja' }, label: 'Meja', icon: QrCodeIcon },
-      { to: { name: 'laporan' }, label: 'Laporan', icon: BarChart3Icon },
-      { to: { name: 'riwayat' }, label: 'Riwayat Aktivitas', icon: HistoryIcon },
+      { to: { name: 'laporan' }, label: 'Laporan', icon: BarChart3Icon, badge: notifications.laporanCount },
+      { to: { name: 'riwayat' }, label: 'Riwayat Aktivitas', icon: HistoryIcon, badge: notifications.riwayatCount },
       { to: { name: 'akun' }, label: 'Akun Staff', icon: UsersIcon },
       { to: { name: 'pengaturan' }, label: 'Pengaturan', icon: SettingsIcon }
     )
@@ -54,12 +59,34 @@ async function onLogout() {
   toast('Berhasil keluar')
 }
 
+// Off-canvas below lg (tablet/phone) — static/always-visible at lg+
+// (laptop/TV). Closes itself on navigation so tapping a nav link doesn't
+// leave the drawer covering the page it just opened.
+const mobileNavOpen = ref(false)
+watch(() => route.path, () => {
+  mobileNavOpen.value = false
+})
+
 // Runs here (not in OrdersView) so a new order is noticed even while the
 // kasir is on Laporan/Produk/etc, not just while looking at the Pesanan tab.
+// Best-effort, silent on failure — a missed badge-count refresh isn't worth
+// surfacing to the kasir/admin (unlike a missed new-order toast below).
+async function refreshNotificationBadges() {
+  if (!auth.isAdmin) return
+  try {
+    await Promise.all([notifications.checkLaporan(), notifications.checkRiwayat()])
+  } catch {
+    // Next poll tick tries again.
+  }
+}
+
 const NEW_ORDER_POLL_MS = 8000
 let newOrderTimer = null
 onMounted(() => {
+  refreshNotificationBadges()
   newOrderTimer = setInterval(async () => {
+    refreshNotificationBadges()
+
     let fresh
     try {
       fresh = await orders.checkForNewOrders()
@@ -97,16 +124,40 @@ onUnmounted(() => clearInterval(newOrderTimer))
 </script>
 
 <template>
-  <div class="flex min-h-svh">
-    <aside class="flex w-56 shrink-0 flex-col border-r bg-card">
+  <div class="flex min-h-svh flex-col lg:flex-row">
+    <!-- Mobile/tablet top bar (lg:hidden) — the sidebar below is off-canvas
+    at these widths, this is the only way to reach it. Sticky rather than
+    fixed so it just pushes <main> down in normal flow, no padding math. -->
+    <header class="sticky top-0 z-30 flex items-center gap-3 border-b bg-card px-4 py-3 lg:hidden">
+      <Button variant="ghost" size="icon" class="shrink-0" aria-label="Buka menu" @click="mobileNavOpen = true">
+        <MenuIcon class="size-5" />
+      </Button>
+      <img :src="logoUrl" alt="Popside" class="size-8 shrink-0 rounded-lg" />
+      <p class="truncate text-sm font-semibold tracking-tight">Popside Admin</p>
+    </header>
+
+    <div
+      v-if="mobileNavOpen"
+      class="fixed inset-0 z-40 bg-black/40 lg:hidden"
+      aria-hidden="true"
+      @click="mobileNavOpen = false"
+    />
+
+    <aside
+      class="fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col border-r bg-card transition-transform duration-200 lg:static lg:z-auto lg:w-56 lg:translate-x-0"
+      :class="{ 'translate-x-0': mobileNavOpen }"
+    >
       <div class="flex items-center gap-2.5 px-4 py-4">
         <img :src="logoUrl" alt="Popside" class="size-9 shrink-0 rounded-lg" />
-        <div class="min-w-0">
+        <div class="min-w-0 flex-1">
           <p class="truncate text-sm font-semibold tracking-tight">Popside</p>
           <p class="truncate text-xs text-muted-foreground">Admin Dashboard</p>
         </div>
+        <Button variant="ghost" size="icon" class="shrink-0 lg:hidden" aria-label="Tutup menu" @click="mobileNavOpen = false">
+          <XIcon class="size-4" />
+        </Button>
       </div>
-      <nav class="flex-1 space-y-1 px-2">
+      <nav class="flex-1 space-y-1 overflow-y-auto px-2">
         <router-link
           v-for="item in nav"
           :key="item.label"
@@ -117,10 +168,10 @@ onUnmounted(() => clearInterval(newOrderTimer))
           <component :is="item.icon" class="size-4" />
           {{ item.label }}
           <span
-            v-if="item.label === 'Pesanan' && orders.needsActionCount > 0"
+            v-if="item.badge > 0"
             class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold text-white"
           >
-            {{ orders.needsActionCount > 99 ? '99+' : orders.needsActionCount }}
+            {{ item.badge > 99 ? '99+' : item.badge }}
           </span>
         </router-link>
       </nav>
@@ -136,7 +187,7 @@ onUnmounted(() => clearInterval(newOrderTimer))
       </div>
     </aside>
 
-    <main class="min-w-0 flex-1 overflow-y-auto p-6">
+    <main class="min-w-0 flex-1 overflow-y-auto p-4 lg:p-6">
       <router-view />
     </main>
   </div>
