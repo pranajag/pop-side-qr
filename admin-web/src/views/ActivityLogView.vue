@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { api, formatApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/format'
+import { useNotificationsStore } from '@/stores/notifications'
 import { STATUS_LABEL, STATUS_BADGE_CLASS } from '@/lib/orderStatus'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,6 +34,10 @@ async function load() {
 }
 
 onMounted(load)
+// Opening this page IS "seeing" whatever's new — otherwise the sidebar
+// badge (notifications.js's riwayatCount) only ever grows, never resets,
+// no matter how many times admin actually checks this page.
+onMounted(() => useNotificationsStore().markRiwayatSeen())
 </script>
 
 <template>

@@ -21,6 +21,8 @@ const emit = defineEmits(['update:open', 'confirm'])
 // product opens — same convention as public-web's VariantPickerDialog.
 const selections = reactive({})
 const qty = ref(1)
+// Matches order.validator.js's orderItemsSchema qty cap.
+const MAX_QTY = 99
 
 watch(
   () => props.product,
@@ -155,7 +157,7 @@ function onConfirm() {
               variant="outline"
               size="icon"
               type="button"
-              @click="qty = qty + 1"
+              @click="qty = Math.min(MAX_QTY, qty + 1)"
               >+</Button
             >
           </div>

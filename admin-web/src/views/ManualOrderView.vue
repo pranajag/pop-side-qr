@@ -7,6 +7,7 @@ import { useProductsStore } from '@/stores/products'
 import { useCategoriesStore } from '@/stores/categories'
 import { formatApiError } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
+import { stockStatus } from '@/lib/stock'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -58,6 +59,7 @@ function lineKey(productId, variantOptionIds) {
 }
 
 function onAddProduct(product) {
+  if (stockStatus(product) === 'habis') return
   if (product.variantGroups.length > 0) {
     pickerProduct.value = product
     pickerOpen.value = true
@@ -94,10 +96,14 @@ function addLine({ product, variantOptionIds, variantLabel, qty, unitPrice }) {
 function removeLine(idx) {
   lines.value.splice(idx, 1)
 }
+// 99 matches order.validator.js's orderItemsSchema qty cap — clamping here
+// too means a fat-fingered/stuck "+" fails obviously (button stops doing
+// anything) instead of building a cart that only errors at final submit.
+const MAX_QTY = 99
 function incLine(idx, delta) {
   const next = lines.value[idx].qty + delta
   if (next <= 0) removeLine(idx)
-  else lines.value[idx].qty = next
+  else lines.value[idx].qty = Math.min(next, MAX_QTY)
 }
 
 const total = computed(() =>
@@ -193,14 +199,19 @@ async function onSubmit() {
           v-for="p in availableProducts"
           :key="p.id"
           type="button"
-          class="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm hover:bg-accent"
+          :disabled="stockStatus(p) === 'habis'"
+          class="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
           @click="onAddProduct(p)"
         >
           <span class="min-w-0">
             <span class="block truncate font-medium">{{ p.nama }}</span>
-            <span class="block text-xs text-muted-foreground">{{
-              categoryName(p.categoryId)
-            }}</span>
+            <span class="block text-xs text-muted-foreground">
+              {{ categoryName(p.categoryId) }}
+              <span v-if="stockStatus(p) === 'habis'" class="font-semibold text-destructive">· Habis</span>
+              <span v-else-if="stockStatus(p) === 'menipis'" class="font-semibold text-amber-600 dark:text-amber-400"
+                >· Sisa {{ p.stok }}</span
+              >
+            </span>
           </span>
           <span
             class="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"

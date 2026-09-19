@@ -201,9 +201,21 @@ function localInputToIso(value) {
   ).toISOString()
 }
 
-function activeTables() {
-  return tables.items.filter((t) => t.isActive)
-}
+// Active tables, plus — while editing — the reservation's own currently-
+// assigned table even if it's since been deactivated. Without that second
+// part, reka-ui's Select falls back to the placeholder for a model value
+// that matches no rendered option, so an inactive-but-still-assigned table
+// reads as "Belum ditentukan" (looks unassigned) instead of showing what
+// it actually is.
+const tableOptions = computed(() => {
+  const active = tables.items.filter((t) => t.isActive)
+  const currentId = Number(form.tableId)
+  if (form.tableId !== NO_TABLE && !active.some((t) => t.id === currentId)) {
+    const current = tables.items.find((t) => t.id === currentId)
+    if (current) return [...active, current]
+  }
+  return active
+})
 
 function openCreate() {
   editingId.value = null
@@ -484,11 +496,11 @@ async function onDeleteConfirm() {
               <SelectContent>
                 <SelectItem :value="NO_TABLE">Belum ditentukan</SelectItem>
                 <SelectItem
-                  v-for="t in activeTables()"
+                  v-for="t in tableOptions"
                   :key="t.id"
                   :value="String(t.id)"
                 >
-                  Meja {{ t.nomorMeja }} (maks {{ t.kapasitas }} orang)
+                  Meja {{ t.nomorMeja }} (maks {{ t.kapasitas }} orang){{ !t.isActive ? ' — nonaktif' : '' }}
                 </SelectItem>
               </SelectContent>
             </Select>

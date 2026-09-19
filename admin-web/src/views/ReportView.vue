@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { api, formatApiError } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
+import { useNotificationsStore } from '@/stores/notifications'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -104,6 +105,10 @@ function exportCsv() {
 }
 
 onMounted(load)
+// Opening this page IS "seeing" whatever's new — otherwise the sidebar
+// badge (notifications.js's laporanCount) only ever grows, never resets,
+// no matter how many times admin actually checks this page.
+onMounted(() => useNotificationsStore().markLaporanSeen())
 </script>
 
 <template>
