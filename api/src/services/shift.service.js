@@ -112,6 +112,7 @@ async function getShiftDetail(shiftId) {
     select: {
       kodeOrder: true,
       totalHarga: true,
+      refundAmount: true,
       updatedAt: true,
       statusLogs: { select: { statusTo: true, catatan: true } },
     },
@@ -121,6 +122,7 @@ async function getShiftDetail(shiftId) {
     .map((o) => ({
       kodeOrder: o.kodeOrder,
       totalHarga: Number(o.totalHarga),
+      refundAmount: o.refundAmount === null ? null : Number(o.refundAmount),
       cancelledAt: o.updatedAt,
       alasan: o.statusLogs.find((log) => log.statusTo === 'cancelled')?.catatan ?? null,
     }));

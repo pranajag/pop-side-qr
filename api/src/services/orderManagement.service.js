@@ -35,6 +35,7 @@ function shapeOrder(order) {
     metode: order.metode,
     totalHarga: Number(order.totalHarga),
     catatan: order.catatan,
+    refundAmount: order.refundAmount === null ? null : Number(order.refundAmount),
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
     nomorMeja: order.table?.nomorMeja ?? null,
@@ -109,7 +110,7 @@ async function confirmPayment(orderId, userId) {
   });
 }
 
-async function updateStatus(orderId, newStatus, userId, catatan) {
+async function updateStatus(orderId, newStatus, userId, catatan, refundAmount) {
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
   if (!order) {
     throw new AppError(404, 'Order tidak ditemukan');
@@ -127,7 +128,10 @@ async function updateStatus(orderId, newStatus, userId, catatan) {
   return prisma.$transaction(async (tx) => {
     const result = await tx.order.updateMany({
       where: { id: orderId, status: currentStatus },
-      data: { status: newStatus },
+      // refundAmount is only ever meaningful on a cancel, and undefined on
+      // every other transition — Prisma skips an undefined field entirely,
+      // so this never clobbers refundAmount on non-cancel updates.
+      data: { status: newStatus, refundAmount: newStatus === 'cancelled' ? refundAmount : undefined },
     });
     if (result.count === 0) {
       throw new AppError(409, 'Status order sudah berubah, muat ulang dulu.');

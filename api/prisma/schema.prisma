@@ -152,6 +152,11 @@ model Order {
   metode       PaymentMethod
   totalHarga   Decimal          @map("total_harga")
   catatan      String?
+  // Only ever set when cancelling an order that had already collected cash
+  // (tunai, past `pending`) — lets a kasir log what they actually handed
+  // back, instead of the cash-reconciliation view only ever guessing from
+  // the order total. Null for every other order, forever.
+  refundAmount Decimal?         @map("refund_amount")
   createdAt    DateTime         @default(now()) @map("created_at")
   updatedAt    DateTime         @updatedAt @map("updated_at")
   items        OrderItem[]

@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useOrdersStore } from '@/stores/orders'
@@ -142,11 +142,29 @@ async function onAdvance(order) {
 // variable set on open and read on confirm sidesteps that entirely,
 // since nothing but this file's own code ever touches it.
 let pendingCancel = null
+const cancelRefundInput = ref('')
+
+// Cash only actually changed hands once a tunai order passed `pending` —
+// before that, the customer hadn't paid yet, so there's nothing to give
+// back. QRIS/debit refunds don't run through this system's cash drawer at
+// all, so they're never asked for here either.
+const needsRefundInput = computed(() => cancelTarget.value?.metode === 'tunai' && cancelTarget.value?.status !== 'pending')
+
+// Same Number-vs-string gotcha as ShiftView's cash-counted input — Vue
+// auto-casts v-model on a native type="number" input to a Number once
+// typed, so a bare string assumption breaks on the first keystroke.
+const cancelRefundNumber = computed(() => {
+  const raw = cancelRefundInput.value
+  if (raw === '' || raw === null || raw === undefined) return null
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : null
+})
 
 function openCancel(order) {
   cancelTarget.value = order
   pendingCancel = order
   cancelReason.value = ''
+  cancelRefundInput.value = ''
 }
 
 async function onCancelConfirm() {
@@ -155,7 +173,8 @@ async function onCancelConfirm() {
 
   cancelling.value = true
   try {
-    await store.updateStatus(target.id, 'cancelled', cancelReason.value || undefined)
+    const refund = needsRefundInput.value ? cancelRefundNumber.value ?? undefined : undefined
+    await store.updateStatus(target.id, 'cancelled', cancelReason.value || undefined, refund)
     toast.success(`${target.kodeOrder} dibatalkan`)
   } catch (err) {
     toast.error(formatApiError(err))
@@ -315,6 +334,14 @@ async function onCancelConfirm() {
         <div class="space-y-2">
           <Label for="cancel-reason">Alasan (opsional)</Label>
           <Input id="cancel-reason" v-model="cancelReason" placeholder="Misal: stok habis, customer batal" maxlength="200" />
+        </div>
+        <div v-if="needsRefundInput" class="space-y-2">
+          <Label for="cancel-refund">Uang Dikembalikan ke Customer (opsional)</Label>
+          <Input id="cancel-refund" v-model="cancelRefundInput" type="number" min="0" step="500" placeholder="0" />
+          <p class="text-xs text-muted-foreground">
+            Order ini sudah dikonfirmasi (tunai dianggap sudah diterima) — catat kalau uangnya dikembalikan, supaya
+            rekonsiliasi kas shift ini lebih akurat.
+          </p>
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>

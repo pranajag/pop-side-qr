@@ -149,6 +149,18 @@ function reconLabel(diff) {
 }
 
 const activeDuration = computed(() => (active.value ? formatDuration(active.value.startedAt, null) : null))
+
+// A shift open this long almost certainly means someone forgot to click
+// "Akhiri Shift", not that they're genuinely still clocked in — flagging it
+// here (not just relying on the person themselves to notice) is what stops
+// a forgotten shift from silently double-counting orders alongside whoever
+// starts the next one. 8h is a generous cutoff for a single cafe shift.
+const STALE_SHIFT_MS = 8 * 60 * 60 * 1000
+const staleOtherShifts = computed(() =>
+  shifts.value.filter(
+    (s) => s.isActive && s.username !== auth.user?.username && now.value - new Date(s.startedAt).getTime() > STALE_SHIFT_MS
+  )
+)
 </script>
 
 <template>
@@ -157,6 +169,17 @@ const activeDuration = computed(() => (active.value ? formatDuration(active.valu
       <h1 class="text-lg font-semibold tracking-tight">Shift</h1>
       <p class="text-sm text-muted-foreground">Catat jam kerja dan lihat hasil tiap shift yang sudah berjalan.</p>
     </div>
+
+    <Alert v-if="staleOtherShifts.length > 0" variant="destructive">
+      <TriangleAlertIcon class="size-4" />
+      <AlertTitle>Ada shift yang mungkin lupa diakhiri</AlertTitle>
+      <AlertDescription>
+        <span v-for="(s, i) in staleOtherShifts" :key="s.id">
+          {{ s.username }} sejak {{ formatDateTime(s.startedAt) }}{{ i < staleOtherShifts.length - 1 ? ', ' : '' }}
+        </span>
+        — order baru masih ikut terhitung ke shift ini selama belum diakhiri.
+      </AlertDescription>
+    </Alert>
 
     <div class="rounded-lg border bg-card p-4">
       <div v-if="active" class="flex flex-wrap items-center justify-between gap-4">
@@ -329,6 +352,10 @@ const activeDuration = computed(() => (active.value ? formatDuration(active.valu
               </div>
               <p class="text-xs text-muted-foreground">Dibatalkan {{ formatDateTime(o.cancelledAt) }}</p>
               <p v-if="o.alasan" class="mt-1 text-xs italic text-muted-foreground">"{{ o.alasan }}"</p>
+              <p v-if="o.refundAmount !== null" class="mt-1 text-xs text-status-completed">
+                Sudah dikembalikan {{ formatRupiah(o.refundAmount) }}
+              </p>
+              <p v-else class="mt-1 text-xs text-amber-600">Belum dicatat apakah uangnya dikembalikan</p>
             </div>
           </div>
         </div>
