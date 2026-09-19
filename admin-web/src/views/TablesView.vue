@@ -318,7 +318,8 @@ function printQr() {
           >
           <AlertDialogDescription>
             Tindakan ini tidak bisa dibatalkan. Meja yang sudah punya riwayat
-            order tidak bisa dihapus — nonaktifkan saja.
+            order, reservasi, atau panggilan staff tidak bisa dihapus —
+            nonaktifkan saja.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

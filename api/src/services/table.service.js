@@ -83,6 +83,21 @@ async function update(id, data) {
   if (data.nomorMeja !== undefined) {
     await assertNomorMejaFree(data.nomorMeja, id);
   }
+  // Shrinking kapasitas below a guest count this table is already booked
+  // for (reservation.service.js's assertTableFits checked it fit at
+  // booking time) would otherwise silently leave that reservation pointed
+  // at a table too small for it, discovered only on the day.
+  if (data.kapasitas !== undefined && data.kapasitas < existing.kapasitas) {
+    const tooBig = await prisma.reservation.findFirst({
+      where: { tableId: id, status: { in: ['pending', 'confirmed'] }, jumlahTamu: { gt: data.kapasitas } },
+    });
+    if (tooBig) {
+      throw new AppError(
+        409,
+        `Meja ini masih punya reservasi untuk ${tooBig.jumlahTamu} orang (${tooBig.namaCustomer}) — tidak bisa diubah ke kapasitas ${data.kapasitas}.`
+      );
+    }
+  }
 
   try {
     const table = await prisma.table.update({ where: { id }, data });
@@ -104,7 +119,23 @@ async function remove(id) {
     await prisma.table.delete({ where: { id } });
   } catch (err) {
     if (isForeignKeyError(err)) {
-      throw new AppError(409, 'Meja tidak bisa dihapus karena sudah memiliki riwayat order. Nonaktifkan lewat isActive saja.');
+      // orders/reservations/staff_calls all RESTRICT delete on this table,
+      // and a bare P2002 error can't say which one actually fired — a table
+      // with e.g. only one old cancelled reservation (zero orders) would
+      // otherwise get told "riwayat order" and staff would go looking for
+      // orders that don't exist. Check all three so the message matches
+      // the real blocker.
+      const [hasOrder, hasReservation, hasStaffCall] = await Promise.all([
+        prisma.order.findFirst({ where: { tableId: id }, select: { id: true } }),
+        prisma.reservation.findFirst({ where: { tableId: id }, select: { id: true } }),
+        prisma.staffCall.findFirst({ where: { tableId: id }, select: { id: true } }),
+      ]);
+      const reasons = [];
+      if (hasOrder) reasons.push('riwayat order');
+      if (hasReservation) reasons.push('riwayat reservasi');
+      if (hasStaffCall) reasons.push('riwayat panggilan staff');
+      const reasonText = reasons.length > 0 ? reasons.join(', ') : 'data terkait';
+      throw new AppError(409, `Meja tidak bisa dihapus karena sudah memiliki ${reasonText}. Nonaktifkan lewat isActive saja.`);
     }
     throw err;
   }

@@ -35,6 +35,37 @@ async function assertTableFits(tableId, jumlahTamu) {
   }
 }
 
+// There's no separate "duration" field on a reservation — just one
+// timestamp — so "double-booked" is approximated as another still-live
+// (pending/confirmed) reservation on the same table within one rough
+// seating window of this one. Wide enough to catch the real case this
+// guards against (two different staff booking the same table for two
+// separate evening events) without flagging a legitimate lunch-then-dinner
+// turnover on the same table, same day.
+const BOOKING_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+async function assertNoDoubleBooking(tableId, tanggalReservasi, excludeId) {
+  if (tableId === null || tableId === undefined) return;
+  const target = new Date(tanggalReservasi);
+  const conflict = await prisma.reservation.findFirst({
+    where: {
+      tableId,
+      status: { in: ['pending', 'confirmed'] },
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+      tanggalReservasi: {
+        gte: new Date(target.getTime() - BOOKING_WINDOW_MS),
+        lte: new Date(target.getTime() + BOOKING_WINDOW_MS),
+      },
+    },
+  });
+  if (conflict) {
+    throw new AppError(
+      409,
+      `Meja ini sudah ada reservasi lain (${conflict.namaCustomer}) di sekitar jam yang sama. Pilih meja lain atau ubah jamnya.`
+    );
+  }
+}
+
 const VALID_STATUSES = new Set(['pending', 'confirmed', 'cancelled', 'completed']);
 
 // statusFilter comes straight from req.query.status — whitelisted before it
@@ -64,6 +95,7 @@ async function get(id) {
 
 async function create(data) {
   await assertTableFits(data.tableId ?? null, data.jumlahTamu);
+  await assertNoDoubleBooking(data.tableId ?? null, data.tanggalReservasi);
   const reservation = await prisma.reservation.create({
     data: { ...data, tableId: data.tableId ?? null },
     include: INCLUDE_TABLE,
@@ -78,7 +110,9 @@ async function update(id, data) {
   }
   const nextTableId = data.tableId !== undefined ? data.tableId : existing.tableId;
   const nextJumlahTamu = data.jumlahTamu !== undefined ? data.jumlahTamu : existing.jumlahTamu;
+  const nextTanggal = data.tanggalReservasi !== undefined ? data.tanggalReservasi : existing.tanggalReservasi;
   await assertTableFits(nextTableId, nextJumlahTamu);
+  await assertNoDoubleBooking(nextTableId, nextTanggal, id);
 
   const reservation = await prisma.reservation.update({ where: { id }, data, include: INCLUDE_TABLE });
   return toShaped(reservation);
