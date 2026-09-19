@@ -1,4 +1,5 @@
 const shiftService = require('../services/shift.service');
+const shiftReport = require('../services/shiftReport.service');
 
 // Per-kasir cash-reconciliation accuracy is confidential between staff —
 // admin sees it, a kasir doesn't even see it for their own past shifts once
@@ -15,7 +16,7 @@ async function start(req, res) {
 }
 
 async function end(req, res) {
-  const shift = await shiftService.endShift(req.session.user.id, req.body.cashCounted);
+  const shift = await shiftService.endShift(req.session.user.id, req.body.cashCounted, req.body.onlineSalesAmount);
   res.json({ shift });
 }
 
@@ -35,4 +36,18 @@ async function detail(req, res) {
   res.json({ shift });
 }
 
-module.exports = { start, end, active, list, detail };
+async function exportExcel(req, res) {
+  const buffer = await shiftReport.generateExcel(req.params.id);
+  res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.set('Content-Disposition', `attachment; filename="laporan-shift-${req.params.id}.xlsx"`);
+  res.send(buffer);
+}
+
+async function exportPdf(req, res) {
+  const buffer = await shiftReport.generatePdf(req.params.id);
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', `attachment; filename="laporan-shift-${req.params.id}.pdf"`);
+  res.send(buffer);
+}
+
+module.exports = { start, end, active, list, detail, exportExcel, exportPdf };

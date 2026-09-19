@@ -17,14 +17,16 @@ async function startShift(userId) {
 
 // cashCounted: physical cash the kasir counted in the drawer, required so
 // every closed shift has a real reconciliation, not a silent "unknown".
-async function endShift(userId, cashCounted) {
+// onlineSalesAmount: marketplace sales (GrabFood/GoFood/etc) for the shift,
+// entered manually since those orders never pass through this system.
+async function endShift(userId, cashCounted, onlineSalesAmount) {
   const active = await getActiveShift(userId);
   if (!active) {
     throw new AppError(409, 'Tidak ada shift yang sedang berjalan.');
   }
   const shift = await prisma.shift.update({
     where: { id: active.id },
-    data: { endedAt: new Date(), cashCounted },
+    data: { endedAt: new Date(), cashCounted, onlineSalesAmount },
     include: { user: { select: { username: true } } },
   });
   return shapeShift(shift);
@@ -58,6 +60,7 @@ async function shapeShift(shift) {
   const expectedCash = byMetode.tunai;
   const cashCounted = shift.cashCounted == null ? null : Number(shift.cashCounted);
   const cashDifference = cashCounted === null ? null : cashCounted - expectedCash;
+  const onlineSalesAmount = shift.onlineSalesAmount == null ? null : Number(shift.onlineSalesAmount);
 
   return {
     id: shift.id,
@@ -72,6 +75,10 @@ async function shapeShift(shift) {
     cashCounted,
     cashDifference,
     isMinus: cashDifference !== null && cashDifference < 0,
+    // Informational only — never part of expectedCash/cashDifference, since
+    // this revenue was never expected to be physical cash in the drawer.
+    onlineSalesAmount,
+    totalRevenueWithOnline: revenue + (onlineSalesAmount ?? 0),
   };
 }
 

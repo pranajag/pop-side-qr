@@ -24,5 +24,7 @@ router.post('/end', validate(endShiftSchema), shiftController.end);
 // the list above for non-admins) actually lives, so gating just the list
 // would leak it right back through here.
 router.get('/:id', requireRole('admin'), validateIdParam, shiftController.detail);
+router.get('/:id/report.xlsx', requireRole('admin'), validateIdParam, shiftController.exportExcel);
+router.get('/:id/report.pdf', requireRole('admin'), validateIdParam, shiftController.exportPdf);
 
 module.exports = router;

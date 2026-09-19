@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { toast } from 'vue-sonner'
-import { api, formatApiError } from '@/lib/api'
+import { api, formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah, formatDateTime } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { LoaderCircleIcon, PlayIcon, SquareIcon, TriangleAlertIcon, InfoIcon } from '@lucide/vue'
+import { LoaderCircleIcon, PlayIcon, SquareIcon, TriangleAlertIcon, InfoIcon, FileSpreadsheetIcon, FileTextIcon } from '@lucide/vue'
 
 const auth = useAuthStore()
 const active = ref(null)
@@ -67,8 +67,11 @@ async function onStart() {
 const endDialogOpen = ref(false)
 const cashCountedInput = ref('')
 
+const onlineSalesInput = ref('')
+
 function openEndDialog() {
   cashCountedInput.value = ''
+  onlineSalesInput.value = ''
   endDialogOpen.value = true
 }
 
@@ -83,14 +86,28 @@ const cashCountedNumber = computed(() => {
   return Number.isFinite(n) && n >= 0 ? n : null
 })
 
+const onlineSalesNumber = computed(() => {
+  const raw = onlineSalesInput.value
+  if (raw === '' || raw === null || raw === undefined) return null
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : null
+})
+
 async function onEndConfirm() {
   if (cashCountedNumber.value === null) {
     toast.error('Masukkan jumlah uang tunai yang valid')
     return
   }
+  if (onlineSalesNumber.value === null) {
+    toast.error('Masukkan jumlah penjualan online (isi 0 kalau tidak ada)')
+    return
+  }
   busy.value = true
   try {
-    const { shift } = await api.post('/admin/shifts/end', { cashCounted: cashCountedNumber.value })
+    const { shift } = await api.post('/admin/shifts/end', {
+      cashCounted: cashCountedNumber.value,
+      onlineSalesAmount: onlineSalesNumber.value,
+    })
     endDialogOpen.value = false
     if (shift.isMinus) {
       toast.error(`Shift diakhiri — kas MINUS ${formatRupiah(Math.abs(shift.cashDifference))}`)
@@ -112,6 +129,14 @@ async function onEndConfirm() {
 const detailShiftId = ref(null)
 const detailData = ref(null)
 const detailLoading = ref(false)
+
+// Plain GET behind the session cookie, same as qrImageUrl/buktiBayarUrl
+// elsewhere — no CSRF token needed (GET is exempt server-side too) and a
+// direct navigation lets the browser handle the download/Content-
+// Disposition itself instead of round-tripping a blob through JS.
+function reportUrl(shiftId, ext) {
+  return `${API_URL}/admin/shifts/${shiftId}/report.${ext}`
+}
 
 async function openDetail(shift) {
   detailShiftId.value = shift.id
@@ -279,6 +304,14 @@ const staleOtherShifts = computed(() =>
               autofocus
             />
           </div>
+          <div class="space-y-2">
+            <Label for="online-sales">Penjualan Online (GrabFood/GoFood/dll)</Label>
+            <Input id="online-sales" v-model="onlineSalesInput" type="number" min="0" step="500" placeholder="0" />
+            <p class="text-xs text-muted-foreground">
+              Order dari aplikasi ojol tidak masuk sistem ini — isi manual dari total penjualannya. Isi 0 kalau tidak
+              ada.
+            </p>
+          </div>
           <Alert v-if="cashCountedNumber !== null && cashCountedNumber < (active?.expectedCash ?? 0)" variant="destructive">
             <TriangleAlertIcon class="size-4" />
             <AlertTitle>Kas akan tercatat MINUS</AlertTitle>
@@ -289,7 +322,11 @@ const staleOtherShifts = computed(() =>
         </div>
         <DialogFooter>
           <Button variant="outline" :disabled="busy" @click="endDialogOpen = false">Batal</Button>
-          <Button variant="destructive" :disabled="busy || cashCountedNumber === null" @click="onEndConfirm">
+          <Button
+            variant="destructive"
+            :disabled="busy || cashCountedNumber === null || onlineSalesNumber === null"
+            @click="onEndConfirm"
+          >
             <LoaderCircleIcon v-if="busy" class="size-4 animate-spin" />
             Konfirmasi Akhiri Shift
           </Button>
@@ -306,7 +343,21 @@ const staleOtherShifts = computed(() =>
           <LoaderCircleIcon class="size-6 animate-spin text-muted-foreground" />
         </div>
         <div v-else-if="detailData" class="space-y-4">
-          <div class="grid grid-cols-3 gap-3 text-sm">
+          <div class="flex gap-2">
+            <a :href="reportUrl(detailData.id, 'xlsx')" class="flex-1">
+              <Button variant="outline" size="sm" class="w-full gap-2">
+                <FileSpreadsheetIcon class="size-3.5" />
+                Unduh Excel
+              </Button>
+            </a>
+            <a :href="reportUrl(detailData.id, 'pdf')" class="flex-1">
+              <Button variant="outline" size="sm" class="w-full gap-2">
+                <FileTextIcon class="size-3.5" />
+                Unduh PDF
+              </Button>
+            </a>
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <div class="rounded-md border p-2.5">
               <p class="text-xs text-muted-foreground">QRIS</p>
               <p class="font-semibold">{{ formatRupiah(detailData.byMetode.qris) }}</p>
@@ -319,6 +370,14 @@ const staleOtherShifts = computed(() =>
               <p class="text-xs text-muted-foreground">Debit</p>
               <p class="font-semibold">{{ formatRupiah(detailData.byMetode.debit) }}</p>
             </div>
+            <div class="rounded-md border p-2.5">
+              <p class="text-xs text-muted-foreground">Online (Ojol)</p>
+              <p class="font-semibold">{{ detailData.onlineSalesAmount === null ? '—' : formatRupiah(detailData.onlineSalesAmount) }}</p>
+            </div>
+          </div>
+          <div v-if="detailData.onlineSalesAmount !== null" class="flex justify-between rounded-md border p-2.5 text-sm">
+            <span class="text-muted-foreground">Total Pendapatan (termasuk online)</span>
+            <span class="font-semibold">{{ formatRupiah(detailData.totalRevenueWithOnline) }}</span>
           </div>
 
           <div v-if="detailData.cashCounted !== null" class="space-y-1 rounded-md border p-3 text-sm">
