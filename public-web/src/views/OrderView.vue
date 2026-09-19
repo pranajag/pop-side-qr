@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { api, formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
+import { useLocaleStore } from '@/stores/locale'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -26,6 +27,7 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const locale = useLocaleStore()
 
 const order = ref(null)
 const notFound = ref(false)
@@ -35,14 +37,14 @@ const qrisImage = ref(null)
 const buktiFile = ref(null)
 const buktiPreview = ref(null)
 
-const STATUS_LABEL = {
-  pending: 'Menunggu Pembayaran',
-  waiting_verif: 'Menunggu Verifikasi Kasir',
-  confirmed: 'Dikonfirmasi',
-  cooking: 'Sedang Dibuat',
-  ready: 'Siap Diambil',
-  completed: 'Selesai',
-  cancelled: 'Dibatalkan',
+const STATUS_LABEL_KEY = {
+  pending: 'statusPending',
+  waiting_verif: 'statusWaitingVerif',
+  confirmed: 'statusConfirmed',
+  cooking: 'statusCooking',
+  ready: 'statusReady',
+  completed: 'statusCompleted',
+  cancelled: 'statusCancelled',
 }
 const STATUS_COLOR = {
   pending: 'bg-status-pending',
@@ -54,7 +56,10 @@ const STATUS_COLOR = {
   cancelled: 'bg-status-cancelled',
 }
 
-const statusLabel = computed(() => STATUS_LABEL[order.value?.status] ?? order.value?.status)
+const statusLabel = computed(() => {
+  const key = STATUS_LABEL_KEY[order.value?.status]
+  return key ? locale.t(key) : order.value?.status
+})
 const statusColor = computed(() => STATUS_COLOR[order.value?.status] ?? 'bg-muted-foreground')
 const needsQrisPayment = computed(() => order.value?.status === 'pending' && order.value?.metode === 'qris')
 const isWaitingKasir = computed(() => order.value?.status === 'pending' && order.value?.metode !== 'qris')
@@ -138,7 +143,7 @@ const confirmBayarOpen = ref(false)
 
 function onSudahBayarClick() {
   if (!buktiFile.value) {
-    toast.error('Upload bukti pembayaran dulu')
+    toast.error(locale.t('uploadBuktiDulu'))
     return
   }
   confirmBayarOpen.value = true
@@ -150,7 +155,7 @@ async function onConfirmBayar() {
     const fd = new FormData()
     fd.append('bukti', buktiFile.value)
     await api.post(`/public/orders/${route.params.kodeOrder}/bayar`, fd, { isFormData: true })
-    toast.success('Terima kasih! Menunggu verifikasi kasir.')
+    toast.success(locale.t('terimaKasihMenungguVerifikasi'))
     await load()
   } catch (err) {
     toast.error(formatApiError(err))
@@ -162,9 +167,9 @@ async function onConfirmBayar() {
 async function copyKode() {
   try {
     await navigator.clipboard.writeText(order.value.kodeOrder)
-    toast.success('Kode order disalin')
+    toast.success(locale.t('kodeOrderDisalin'))
   } catch {
-    toast.error('Gagal menyalin kode')
+    toast.error(locale.t('gagalMenyalinKode'))
   }
 }
 </script>
@@ -177,19 +182,19 @@ async function copyKode() {
   <div v-else-if="notFound" class="flex min-h-svh flex-col items-center justify-center gap-4 px-6 text-center">
     <TriangleAlertIcon class="size-10 text-destructive" />
     <div class="space-y-1">
-      <h1 class="text-lg font-semibold">Order tidak ditemukan</h1>
-      <p class="text-sm text-muted-foreground">Kode order salah, atau sudah kedaluwarsa.</p>
+      <h1 class="text-lg font-semibold">{{ locale.t('orderTidakDitemukan') }}</h1>
+      <p class="text-sm text-muted-foreground">{{ locale.t('orderTidakDitemukanDesc') }}</p>
     </div>
-    <Button variant="outline" @click="router.push({ name: 'menu' })">Kembali ke Menu</Button>
+    <Button variant="outline" @click="router.push({ name: 'menu' })">{{ locale.t('kembaliKeMenu') }}</Button>
   </div>
 
   <div v-else-if="!order" class="flex min-h-svh flex-col items-center justify-center gap-4 px-6 text-center">
     <TriangleAlertIcon class="size-10 text-muted-foreground" />
     <div class="space-y-1">
-      <h1 class="text-lg font-semibold">Gagal memuat status pesanan</h1>
-      <p class="text-sm text-muted-foreground">Coba lagi sebentar.</p>
+      <h1 class="text-lg font-semibold">{{ locale.t('gagalMemuatStatus') }}</h1>
+      <p class="text-sm text-muted-foreground">{{ locale.t('cobaLagiSebentar') }}</p>
     </div>
-    <Button variant="outline" @click="load()">Coba Lagi</Button>
+    <Button variant="outline" @click="load()">{{ locale.t('cobaLagi') }}</Button>
   </div>
 
   <div v-else class="min-h-svh px-4 py-6">
@@ -204,27 +209,27 @@ async function copyKode() {
           <CopyIcon class="size-4 text-muted-foreground" />
         </button>
         <p class="text-xs text-muted-foreground">
-          {{ order.nomorMeja ? `Meja ${order.nomorMeja}` : 'Bawa Pulang' }}
+          {{ order.nomorMeja ? `${locale.t('meja')} ${order.nomorMeja}` : locale.t('bawaPulang') }}
         </p>
       </div>
 
       <div v-if="needsQrisPayment" class="space-y-3 rounded-lg border p-4 text-center">
-        <p class="text-sm font-medium">Scan QRIS untuk bayar {{ formatRupiah(order.totalHarga) }}</p>
+        <p class="text-sm font-medium">{{ locale.t('scanQrisUntukBayar', { total: formatRupiah(order.totalHarga) }) }}</p>
         <img
           v-if="qrisImage"
           :src="`${API_URL}/public/settings/qris-photo/${qrisImage}`"
           alt="QRIS"
           class="mx-auto max-h-64 rounded-lg border"
         />
-        <p v-else class="text-xs text-muted-foreground">QRIS belum tersedia — panggil staff untuk bantuan.</p>
+        <p v-else class="text-xs text-muted-foreground">{{ locale.t('qrisBelumTersedia') }}</p>
 
         <div class="space-y-2 text-left">
-          <label class="block text-xs font-medium text-muted-foreground">Upload Bukti Pembayaran</label>
+          <label class="block text-xs font-medium text-muted-foreground">{{ locale.t('uploadBuktiPembayaran') }}</label>
           <div class="flex items-center gap-3">
             <img
               v-if="buktiPreview"
               :src="buktiPreview"
-              alt="Preview bukti pembayaran"
+              :alt="locale.t('previewBukti')"
               class="size-14 shrink-0 rounded-md border object-cover"
             />
             <input
@@ -234,66 +239,65 @@ async function copyKode() {
               @change="onBuktiChange"
             />
           </div>
-          <p class="text-[11px] text-muted-foreground">Screenshot/foto notifikasi pembayaran dari e-wallet/m-banking kamu.</p>
+          <p class="text-[11px] text-muted-foreground">{{ locale.t('uploadBuktiDesc') }}</p>
         </div>
 
         <Button size="lg" class="h-12 w-full" :disabled="confirming || !buktiFile" @click="onSudahBayarClick">
           <LoaderCircleIcon v-if="confirming" class="size-4 animate-spin" />
-          Saya Sudah Bayar
+          {{ locale.t('sayaSudahBayar') }}
         </Button>
       </div>
 
       <div v-else-if="isWaitingKasir" class="space-y-1 rounded-lg border p-4 text-center">
         <ClockIcon class="mx-auto size-6 text-muted-foreground" />
-        <p class="text-sm font-medium">Sebutkan kode order ini ke kasir</p>
+        <p class="text-sm font-medium">{{ locale.t('sebutkanKodeKeKasir') }}</p>
         <p class="text-xs text-muted-foreground">
-          Bayar {{ order.metode === 'tunai' ? 'tunai' : 'debit' }} {{ formatRupiah(order.totalHarga) }} langsung ke kasir.
+          {{ locale.t('bayarMetodeLangsung', { metode: order.metode === 'tunai' ? locale.t('tunai') : locale.t('debit'), total: formatRupiah(order.totalHarga) }) }}
         </p>
       </div>
 
       <div v-else-if="order.status === 'waiting_verif'" class="space-y-1 rounded-lg border p-4 text-center">
         <LoaderCircleIcon class="mx-auto size-6 animate-spin text-muted-foreground" />
-        <p class="text-sm font-medium">Menunggu kasir verifikasi pembayaran</p>
-        <p v-if="elapsedMinutes" class="text-xs text-muted-foreground">Sudah {{ elapsedMinutes }} menit</p>
+        <p class="text-sm font-medium">{{ locale.t('menungguVerifikasiKasir') }}</p>
+        <p v-if="elapsedMinutes" class="text-xs text-muted-foreground">{{ locale.t('sudahNMenit', { n: elapsedMinutes }) }}</p>
       </div>
 
       <div v-else-if="order.status === 'completed'" class="space-y-1 rounded-lg border p-4 text-center">
         <CircleCheckIcon class="mx-auto size-6 text-status-completed" />
-        <p class="text-sm font-medium">Pesanan selesai. Terima kasih!</p>
+        <p class="text-sm font-medium">{{ locale.t('pesananSelesai') }}</p>
       </div>
 
       <div v-else class="rounded-lg border p-4 text-center">
         <UtensilsIcon class="mx-auto size-6 text-muted-foreground" />
-        <p class="mt-1 text-sm font-medium">Pesanan sedang diproses dapur.</p>
+        <p class="mt-1 text-sm font-medium">{{ locale.t('pesananSedangDiproses') }}</p>
         <p v-if="elapsedMinutes" class="text-xs text-muted-foreground">
-          Sudah {{ elapsedMinutes }} menit sejak status terakhir diperbarui
+          {{ locale.t('sudahNMenitSejakUpdate', { n: elapsedMinutes }) }}
         </p>
         <p v-if="order.estimasiMenit" class="mt-1 text-xs text-muted-foreground">
-          Biasanya siap dalam sekitar {{ order.estimasiMenit }} menit sejak dikonfirmasi
+          {{ locale.t('estimasiSiap', { n: order.estimasiMenit }) }}
         </p>
       </div>
 
       <AlertDialog :open="confirmBayarOpen" @update:open="(v) => (confirmBayarOpen = v)">
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Kirim bukti pembayaran ini?</AlertDialogTitle>
+            <AlertDialogTitle>{{ locale.t('kirimBuktiIni') }}</AlertDialogTitle>
             <AlertDialogDescription>
-              Pastikan foto/screenshot yang dipilih benar-benar bukti pembayaran {{ formatRupiah(order.totalHarga) }}
-              untuk order ini. Kasir akan memverifikasi dari bukti ini.
+              {{ locale.t('kirimBuktiIniDesc', { total: formatRupiah(order.totalHarga) }) }}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cek Lagi</AlertDialogCancel>
+            <AlertDialogCancel>{{ locale.t('cekLagi') }}</AlertDialogCancel>
             <AlertDialogAction :disabled="confirming" @click="onConfirmBayar">
               <LoaderCircleIcon v-if="confirming" class="size-4 animate-spin" />
-              Ya, Sudah Bayar
+              {{ locale.t('yaSudahBayar') }}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       <div class="space-y-2 rounded-lg border p-4">
-        <h2 class="text-sm font-semibold text-muted-foreground">Detail Pesanan</h2>
+        <h2 class="text-sm font-semibold text-muted-foreground">{{ locale.t('detailPesanan') }}</h2>
         <div v-for="(item, idx) in order.items" :key="idx" class="flex justify-between gap-3 text-sm">
           <span class="min-w-0">
             {{ item.qty }}x {{ item.nama }}
@@ -304,13 +308,13 @@ async function copyKode() {
           <span class="shrink-0">{{ formatRupiah(item.harga * item.qty) }}</span>
         </div>
         <div class="flex justify-between border-t pt-2 text-sm font-semibold">
-          <span>Total</span>
+          <span>{{ locale.t('total') }}</span>
           <span>{{ formatRupiah(order.totalHarga) }}</span>
         </div>
-        <p v-if="order.catatan" class="border-t pt-2 text-xs text-muted-foreground">Catatan: {{ order.catatan }}</p>
+        <p v-if="order.catatan" class="border-t pt-2 text-xs text-muted-foreground">{{ locale.t('catatanLabel', { catatan: order.catatan }) }}</p>
       </div>
 
-      <Button variant="outline" class="w-full" @click="router.push({ name: 'menu' })">Kembali ke Menu</Button>
+      <Button variant="outline" class="w-full" @click="router.push({ name: 'menu' })">{{ locale.t('kembaliKeMenu') }}</Button>
     </div>
   </div>
 </template>

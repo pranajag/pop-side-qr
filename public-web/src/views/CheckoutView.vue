@@ -6,6 +6,7 @@ import { useTableStore } from '@/stores/table'
 import { useCartStore } from '@/stores/cart'
 import { useMenuStore } from '@/stores/menu'
 import { useRecentOrdersStore } from '@/stores/recentOrders'
+import { useLocaleStore } from '@/stores/locale'
 import { api, formatApiError } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -26,13 +27,14 @@ const table = useTableStore()
 const cart = useCartStore()
 const menu = useMenuStore()
 const recentOrders = useRecentOrdersStore()
+const locale = useLocaleStore()
 const router = useRouter()
 
-const METHODS = [
-  { value: 'qris', label: 'QRIS', description: 'Scan QRIS, bayar lewat e-wallet/m-banking apa pun', icon: QrCodeIcon },
-  { value: 'tunai', label: 'Tunai', description: 'Bayar cash ke kasir pakai kode order', icon: BanknoteIcon },
-  { value: 'debit', label: 'Debit', description: 'Bayar kartu debit ke kasir pakai kode order', icon: CreditCardIcon },
-]
+const METHODS = computed(() => [
+  { value: 'qris', label: locale.t('metodeQris'), description: locale.t('metodeQrisDesc'), icon: QrCodeIcon },
+  { value: 'tunai', label: locale.t('metodeTunai'), description: locale.t('metodeTunaiDesc'), icon: BanknoteIcon },
+  { value: 'debit', label: locale.t('metodeDebit'), description: locale.t('metodeDebitDesc'), icon: CreditCardIcon },
+])
 
 const metode = ref('qris')
 const catatan = ref('')
@@ -60,7 +62,7 @@ onMounted(async () => {
 
 const hasIssues = computed(() => (summary.value?.issues?.length ?? 0) > 0)
 const confirmOpen = ref(false)
-const selectedMethod = computed(() => METHODS.find((m) => m.value === metode.value))
+const selectedMethod = computed(() => METHODS.value.find((m) => m.value === metode.value))
 
 async function onSubmit() {
   submitting.value = true
@@ -89,7 +91,7 @@ async function onSubmit() {
 
 <template>
   <div v-if="!table.isVerified" class="flex min-h-svh items-center justify-center px-6 text-center text-sm text-muted-foreground">
-    Scan QR di meja kamu dulu ya.
+    {{ locale.t('scanQrDulu') }}
   </div>
 
   <div v-else class="min-h-svh pb-28">
@@ -97,25 +99,25 @@ async function onSubmit() {
       <button
         type="button"
         class="flex size-11 shrink-0 items-center justify-center rounded-full active:bg-accent"
-        aria-label="Kembali ke keranjang"
+        :aria-label="locale.t('kembaliKeKeranjangLabel')"
         @click="router.push({ name: 'cart' })"
       >
         <ArrowLeftIcon class="size-5" />
       </button>
-      <h1 class="text-base font-semibold">Checkout</h1>
+      <h1 class="text-base font-semibold">{{ locale.t('checkoutTitle') }}</h1>
     </header>
 
     <main class="space-y-6 px-4 py-4">
       <Alert v-if="hasIssues" variant="destructive">
         <TriangleAlertIcon class="size-4" />
-        <AlertTitle>Keranjang perlu diperbarui</AlertTitle>
+        <AlertTitle>{{ locale.t('keranjangPerluDiperbarui') }}</AlertTitle>
         <AlertDescription>
-          Ada item di keranjang yang bermasalah (stok/ketersediaan). Kembali ke keranjang untuk memperbaikinya.
+          {{ locale.t('keranjangPerluDiperbaruiDesc') }}
         </AlertDescription>
       </Alert>
 
       <section>
-        <h2 class="mb-3 text-sm font-semibold text-muted-foreground">Metode Pembayaran</h2>
+        <h2 class="mb-3 text-sm font-semibold text-muted-foreground">{{ locale.t('metodePembayaran') }}</h2>
         <div class="space-y-2">
           <button
             v-for="m in METHODS"
@@ -139,25 +141,25 @@ async function onSubmit() {
       </section>
 
       <section>
-        <h2 class="mb-2 text-sm font-semibold text-muted-foreground">Catatan untuk Pesanan (opsional)</h2>
+        <h2 class="mb-2 text-sm font-semibold text-muted-foreground">{{ locale.t('catatanPesanan') }}</h2>
         <textarea
           v-model="catatan"
           rows="2"
           maxlength="200"
-          placeholder="Misal: tolong dibungkus terpisah"
+          :placeholder="locale.t('catatanPesananPlaceholder')"
           class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         />
       </section>
 
       <section>
-        <h2 class="mb-2 text-sm font-semibold text-muted-foreground">Ringkasan</h2>
+        <h2 class="mb-2 text-sm font-semibold text-muted-foreground">{{ locale.t('ringkasan') }}</h2>
         <div class="space-y-1 rounded-lg border p-3 text-sm">
           <div v-for="item in summary?.items ?? []" :key="item.productId" class="flex justify-between text-muted-foreground">
             <span>{{ item.qty }}x {{ item.nama }}</span>
             <span>{{ formatRupiah(item.subtotal) }}</span>
           </div>
           <div class="mt-2 flex justify-between border-t pt-2 font-semibold">
-            <span>Total</span>
+            <span>{{ locale.t('total') }}</span>
             <span class="flex items-center gap-2">
               <LoaderCircleIcon v-if="loadingSummary" class="size-3.5 animate-spin text-muted-foreground" />
               {{ formatRupiah(summary?.total ?? 0) }}
@@ -170,24 +172,23 @@ async function onSubmit() {
     <div class="fixed inset-x-0 bottom-0 border-t bg-background p-3">
       <Button size="lg" class="h-12 w-full" :disabled="submitting || hasIssues || loadingSummary" @click="confirmOpen = true">
         <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
-        Pesan Sekarang
+        {{ locale.t('pesanSekarang') }}
       </Button>
     </div>
 
     <AlertDialog :open="confirmOpen" @update:open="(v) => (confirmOpen = v)">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Kirim pesanan ini?</AlertDialogTitle>
+          <AlertDialogTitle>{{ locale.t('kirimPesananIni') }}</AlertDialogTitle>
           <AlertDialogDescription>
-            Total {{ formatRupiah(summary?.total ?? 0) }}, bayar {{ selectedMethod?.label }}. Pastikan pesanan sudah
-            sesuai — order yang sudah dikirim tidak bisa diubah sendiri dari sini.
+            {{ locale.t('kirimPesananIniDesc', { total: formatRupiah(summary?.total ?? 0), metode: selectedMethod?.label }) }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cek Lagi</AlertDialogCancel>
+          <AlertDialogCancel>{{ locale.t('cekLagi') }}</AlertDialogCancel>
           <AlertDialogAction :disabled="submitting" @click="onSubmit">
             <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
-            Ya, Pesan Sekarang
+            {{ locale.t('yaPesanSekarang') }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

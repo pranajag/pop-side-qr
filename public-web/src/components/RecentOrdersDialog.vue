@@ -1,6 +1,7 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import { useRecentOrdersStore } from '@/stores/recentOrders'
+import { useLocaleStore } from '@/stores/locale'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ChevronRightIcon, ReceiptIcon } from '@lucide/vue'
 
@@ -8,6 +9,7 @@ const props = defineProps({ open: { type: Boolean, required: true } })
 const emit = defineEmits(['update:open'])
 
 const recentOrders = useRecentOrdersStore()
+const locale = useLocaleStore()
 const router = useRouter()
 
 function openOrder(kodeOrder) {
@@ -20,10 +22,10 @@ function openOrder(kodeOrder) {
   <Dialog :open="props.open" @update:open="(v) => emit('update:open', v)">
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>Pesanan Saya</DialogTitle>
+        <DialogTitle>{{ locale.t('pesananSayaLabel') }}</DialogTitle>
       </DialogHeader>
       <p v-if="recentOrders.items.length === 0" class="py-4 text-center text-sm text-muted-foreground">
-        Belum ada pesanan di perangkat ini.
+        {{ locale.t('belumAdaPesananDiPerangkat') }}
       </p>
       <div v-else class="space-y-1.5">
         <button

@@ -5,6 +5,7 @@ import { toast } from 'vue-sonner'
 import { useTableStore } from '@/stores/table'
 import { useCartStore } from '@/stores/cart'
 import { useMenuStore } from '@/stores/menu'
+import { useLocaleStore } from '@/stores/locale'
 import { api, formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,7 @@ import { ArrowLeftIcon, ImageOffIcon, TriangleAlertIcon, LoaderCircleIcon } from
 const table = useTableStore()
 const cart = useCartStore()
 const menu = useMenuStore()
+const locale = useLocaleStore()
 const router = useRouter()
 
 const summary = ref(null) // last server response: { items, total, issues }
@@ -84,7 +86,7 @@ function onCheckout() {
 
 <template>
   <div v-if="!table.isVerified" class="flex min-h-svh items-center justify-center px-6 text-center text-sm text-muted-foreground">
-    Scan QR di meja kamu dulu ya.
+    {{ locale.t('scanQrDulu') }}
   </div>
 
   <div v-else class="min-h-svh pb-32">
@@ -92,16 +94,16 @@ function onCheckout() {
       <button
         type="button"
         class="flex size-11 shrink-0 items-center justify-center rounded-full active:bg-accent"
-        aria-label="Kembali ke menu"
+        :aria-label="locale.t('kembaliKeMenuLabel')"
         @click="router.push({ name: 'menu' })"
       >
         <ArrowLeftIcon class="size-5" />
       </button>
-      <h1 class="text-base font-semibold">Keranjang</h1>
+      <h1 class="text-base font-semibold">{{ locale.t('keranjang') }}</h1>
     </header>
 
     <main class="px-4 py-4">
-      <p v-if="cart.isEmpty" class="py-10 text-center text-sm text-muted-foreground">Keranjang kamu masih kosong.</p>
+      <p v-if="cart.isEmpty" class="py-10 text-center text-sm text-muted-foreground">{{ locale.t('keranjangKosong') }}</p>
 
       <ul v-else class="space-y-4">
         <li v-for="item in cart.items" :key="lineKey(item)" class="flex gap-3 border-b pb-4 last:border-0">
@@ -117,7 +119,7 @@ function onCheckout() {
 
           <div class="min-w-0 flex-1 space-y-2">
             <div>
-              <p class="truncate text-sm font-medium">{{ menu.findProduct(item.productId)?.nama ?? 'Produk' }}</p>
+              <p class="truncate text-sm font-medium">{{ menu.findProduct(item.productId)?.nama ?? locale.t('produk') }}</p>
               <p v-if="variantLabels(item).length" class="text-xs text-muted-foreground">
                 {{ variantLabels(item).join(', ') }}
               </p>
@@ -125,7 +127,7 @@ function onCheckout() {
             </div>
             <Input
               :model-value="item.catatan"
-              placeholder="Catatan (opsional), misal: less ice"
+              :placeholder="locale.t('catatanPlaceholder')"
               class="h-9"
               @update:model-value="(v) => cart.setNote(item.productId, item.variantOptionIds, v)"
             />
@@ -140,14 +142,14 @@ function onCheckout() {
 
       <Alert v-for="(issue, idx) in summary?.issues ?? []" :key="idx" variant="destructive" class="mt-4">
         <TriangleAlertIcon class="size-4" />
-        <AlertTitle>Perlu diperbarui</AlertTitle>
+        <AlertTitle>{{ locale.t('perluDiperbarui') }}</AlertTitle>
         <AlertDescription>{{ issue.message }}</AlertDescription>
       </Alert>
     </main>
 
     <div v-if="!cart.isEmpty" class="fixed inset-x-0 bottom-0 space-y-3 border-t bg-background p-3">
       <div class="flex items-center justify-between px-1 text-sm">
-        <span class="text-muted-foreground">Total</span>
+        <span class="text-muted-foreground">{{ locale.t('total') }}</span>
         <span class="flex items-center gap-2 font-semibold">
           <LoaderCircleIcon v-if="loading" class="size-3.5 animate-spin text-muted-foreground" />
           {{ formatRupiah(summary?.total ?? 0) }}
@@ -159,7 +161,7 @@ function onCheckout() {
         :disabled="(summary?.issues?.length ?? 0) > 0"
         @click="onCheckout"
       >
-        Lanjut ke Pembayaran
+        {{ locale.t('lanjutKePembayaran') }}
       </Button>
     </div>
   </div>

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { useCartStore } from '@/stores/cart'
+import { useLocaleStore } from '@/stores/locale'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -14,6 +15,7 @@ const props = defineProps({
 const emit = defineEmits(['update:open'])
 
 const cart = useCartStore()
+const locale = useLocaleStore()
 
 // groupId -> array of selected option ids. Reset fresh every time a new
 // product opens, not pre-loaded from any existing matching cart line —
@@ -85,7 +87,7 @@ function onConfirm() {
         <section v-for="group in product.variantGroups" :key="group.id" class="space-y-2">
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-semibold">{{ group.nama }}</h3>
-            <span v-if="group.required" class="text-xs text-destructive">Wajib pilih</span>
+            <span v-if="group.required" class="text-xs text-destructive">{{ locale.t('wajibPilih') }}</span>
           </div>
 
           <div v-if="group.multiple" class="space-y-2">
@@ -123,14 +125,14 @@ function onConfirm() {
         </section>
 
         <section class="flex items-center justify-between border-t pt-4">
-          <span class="text-sm font-medium">Jumlah</span>
+          <span class="text-sm font-medium">{{ locale.t('jumlah') }}</span>
           <QtyStepper :qty="qty" @update:qty="(q) => (qty = Math.max(1, q))" />
         </section>
       </div>
 
       <DialogFooter>
         <Button class="h-11 w-full bg-brand-cta text-heading hover:bg-brand-cta/90" :disabled="!canConfirm" @click="onConfirm">
-          Tambah &middot; {{ formatRupiah(unitPrice * qty) }}
+          {{ locale.t('tambahHarga', { price: formatRupiah(unitPrice * qty) }) }}
         </Button>
       </DialogFooter>
     </DialogContent>

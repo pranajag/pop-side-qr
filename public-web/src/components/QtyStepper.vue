@@ -1,11 +1,13 @@
 <script setup>
 import { MinusIcon, PlusIcon } from '@lucide/vue'
+import { useLocaleStore } from '@/stores/locale'
 
 defineProps({
   qty: { type: Number, required: true },
   max: { type: Number, default: null },
 })
 const emit = defineEmits(['update:qty'])
+const locale = useLocaleStore()
 </script>
 
 <template>
@@ -13,7 +15,7 @@ const emit = defineEmits(['update:qty'])
     <button
       type="button"
       class="flex size-11 shrink-0 items-center justify-center rounded-full border border-input active:bg-accent"
-      aria-label="Kurangi jumlah"
+      :aria-label="locale.t('kurangiJumlah')"
       @click="emit('update:qty', qty - 1)"
     >
       <MinusIcon class="size-4" />
@@ -22,7 +24,7 @@ const emit = defineEmits(['update:qty'])
     <button
       type="button"
       class="flex size-11 shrink-0 items-center justify-center rounded-full border border-input active:bg-accent disabled:pointer-events-none disabled:opacity-40"
-      aria-label="Tambah jumlah"
+      :aria-label="locale.t('tambahJumlah')"
       :disabled="max !== null && qty >= max"
       @click="emit('update:qty', qty + 1)"
     >

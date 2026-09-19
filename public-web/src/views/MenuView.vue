@@ -5,6 +5,7 @@ import { useTableStore } from '@/stores/table'
 import { useMenuStore } from '@/stores/menu'
 import { useCartStore } from '@/stores/cart'
 import { useRecentOrdersStore } from '@/stores/recentOrders'
+import { useLocaleStore } from '@/stores/locale'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +22,7 @@ const table = useTableStore()
 const menu = useMenuStore()
 const cart = useCartStore()
 const recentOrders = useRecentOrdersStore()
+const locale = useLocaleStore()
 const router = useRouter()
 
 const pickerOpen = ref(false)
@@ -90,8 +92,8 @@ const estimatedTotal = computed(() =>
     <img :src="logoUrl" alt="Popside" class="size-16 rounded-2xl shadow-lg shadow-black/10" />
     <QrCodeIcon class="size-10 text-muted-foreground" />
     <div class="space-y-1">
-      <h1 class="text-lg font-semibold">Scan QR di meja kamu</h1>
-      <p class="text-sm text-muted-foreground">Menu cuma bisa dibuka lewat QR yang ditempel di meja.</p>
+      <h1 class="text-lg font-semibold">{{ locale.t('scanQrTitle') }}</h1>
+      <p class="text-sm text-muted-foreground">{{ locale.t('scanQrDesc') }}</p>
     </div>
   </div>
 
@@ -99,13 +101,20 @@ const estimatedTotal = computed(() =>
     <header class="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur">
       <img :src="logoUrl" alt="Popside" class="size-10 shrink-0 rounded-lg" />
       <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="flex h-9 shrink-0 items-center justify-center rounded-full border px-2.5 text-xs font-semibold active:bg-accent"
+          @click="locale.toggle()"
+        >
+          {{ locale.locale === 'id' ? 'EN' : 'ID' }}
+        </button>
         <span class="rounded-full bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-body">
-          Meja {{ table.nomorMeja }}
+          {{ locale.t('meja') }} {{ table.nomorMeja }}
         </span>
         <button
           v-if="recentOrders.items.length > 0"
           type="button"
-          aria-label="Pesanan Saya"
+          :aria-label="locale.t('pesananSayaLabel')"
           class="flex size-9 shrink-0 items-center justify-center rounded-full border active:bg-accent"
           @click="recentOrdersOpen = true"
         >
@@ -113,7 +122,7 @@ const estimatedTotal = computed(() =>
         </button>
         <button
           type="button"
-          aria-label="Panggil Staff"
+          :aria-label="locale.t('panggilStaffLabel')"
           class="flex size-9 shrink-0 items-center justify-center rounded-full border active:bg-accent"
           @click="callStaffOpen = true"
         >
@@ -136,7 +145,7 @@ const estimatedTotal = computed(() =>
         "
         @click="activeCategoryId = null"
       >
-        Semua
+        {{ locale.t('semua') }}
       </button>
       <button
         v-for="category in menu.categories"
@@ -160,7 +169,7 @@ const estimatedTotal = computed(() =>
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="Cari menu..."
+          :placeholder="locale.t('cariMenu')"
           class="h-10 w-full rounded-full border border-input bg-transparent pl-9 pr-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         />
       </div>
@@ -179,11 +188,11 @@ const estimatedTotal = computed(() =>
       </div>
 
       <p v-else-if="menu.categories.length === 0" class="py-10 text-center text-sm text-muted-foreground">
-        Menu belum tersedia.
+        {{ locale.t('menuBelumTersedia') }}
       </p>
 
       <p v-else-if="visibleCategories.length === 0" class="py-10 text-center text-sm text-muted-foreground">
-        Tidak ada menu yang cocok dengan "{{ searchQuery }}".
+        {{ locale.t('tidakAdaMenuCocok', { q: searchQuery }) }}
       </p>
 
       <div v-else class="space-y-6">
@@ -192,7 +201,7 @@ const estimatedTotal = computed(() =>
             <span class="h-4 w-1.5 shrink-0 rounded-full bg-brand-cta"></span>
             {{ category.nama }}
           </h2>
-          <p v-if="category.products.length === 0" class="text-sm text-muted-foreground">Belum ada produk.</p>
+          <p v-if="category.products.length === 0" class="text-sm text-muted-foreground">{{ locale.t('belumAdaProduk') }}</p>
           <ul class="space-y-4">
             <li v-for="product in category.products" :key="product.id" class="flex gap-3">
               <img
@@ -209,7 +218,7 @@ const estimatedTotal = computed(() =>
               <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-medium">{{ product.nama }}</p>
                 <p class="text-sm text-muted-foreground">{{ formatRupiah(product.harga) }}</p>
-                <Badge v-if="isSoldOut(product)" variant="secondary" class="mt-1">Habis</Badge>
+                <Badge v-if="isSoldOut(product)" variant="secondary" class="mt-1">{{ locale.t('habis') }}</Badge>
                 <div v-else class="mt-2">
                   <Button
                     v-if="product.variantGroups.length > 0 || cart.qtyFor(product.id, []) === 0"
@@ -218,7 +227,7 @@ const estimatedTotal = computed(() =>
                     class="h-9"
                     @click="onTambahClick(product)"
                   >
-                    {{ product.variantGroups.length > 0 ? 'Pilih' : 'Tambah' }}
+                    {{ product.variantGroups.length > 0 ? locale.t('pilih') : locale.t('tambah') }}
                   </Button>
                   <QtyStepper
                     v-else
@@ -244,11 +253,11 @@ const estimatedTotal = computed(() =>
           {{ cart.totalQty }}
         </span>
         <span class="min-w-0 flex-1 text-left">
-          <span class="block text-[11px] font-medium text-brand-secondary">Total Pesanan</span>
+          <span class="block text-[11px] font-medium text-brand-secondary">{{ locale.t('totalPesanan') }}</span>
           <span class="block truncate text-base font-semibold text-heading">{{ formatRupiah(estimatedTotal) }}</span>
         </span>
         <span class="flex shrink-0 items-center gap-0.5 text-sm font-semibold text-heading">
-          Checkout
+          {{ locale.t('checkout') }}
           <ChevronRightIcon class="size-4" />
         </span>
       </button>
