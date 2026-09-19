@@ -6,7 +6,7 @@ import { formatRupiah } from '@/lib/format'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { LoaderCircleIcon, WalletIcon } from '@lucide/vue'
+import { LoaderCircleIcon, WalletIcon, DownloadIcon } from '@lucide/vue'
 
 // Asia/Jakarta (WIB) is a fixed UTC+7 offset, no DST — computed directly
 // rather than via the browser's local-timezone Date getters, which would
@@ -62,6 +62,41 @@ function applyPreset(preset) {
   load()
 }
 
+// Wrap in quotes only when needed (a bare comma/quote/newline would
+// otherwise split into the wrong number of columns when opened in Excel).
+function csvField(value) {
+  const s = String(value)
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+function csvRow(fields) {
+  return fields.map(csvField).join(',')
+}
+
+function exportCsv() {
+  if (!report.value) return
+  const r = report.value
+  const lines = [
+    csvRow(['Laporan Pendapatan', r.from, r.to]),
+    csvRow(['Total Pendapatan', r.total]),
+    csvRow(['Jumlah Pesanan', r.orderCount]),
+    '',
+    csvRow(['Metode Bayar', 'Jumlah']),
+    ...Object.entries(r.byMetode).map(([metode, amount]) => csvRow([METODE_LABEL[metode], amount])),
+    '',
+    csvRow(['Produk Terlaris', 'Qty', 'Pendapatan']),
+    ...r.topProducts.map((p) => csvRow([p.nama, p.qty, p.revenue])),
+  ]
+  // Leading BOM so Excel (which guesses ANSI otherwise) reads the UTF-8
+  // rupiah/product-name text correctly instead of mangling it.
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `laporan-popside_${r.from}_${r.to}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 onMounted(load)
 </script>
 
@@ -92,9 +127,15 @@ onMounted(load)
 
     <div v-if="report" class="space-y-4">
       <div class="rounded-lg border bg-card p-6">
-        <div class="flex items-center gap-2 text-sm text-muted-foreground">
-          <WalletIcon class="size-4" />
-          Total Pendapatan
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 text-sm text-muted-foreground">
+            <WalletIcon class="size-4" />
+            Total Pendapatan
+          </div>
+          <Button size="sm" variant="outline" class="gap-1.5" @click="exportCsv">
+            <DownloadIcon class="size-3.5" />
+            Export CSV
+          </Button>
         </div>
         <p class="mt-1 text-3xl font-bold tracking-tight">{{ formatRupiah(report.total) }}</p>
         <p class="mt-1 text-sm text-muted-foreground">{{ report.orderCount }} pesanan</p>
