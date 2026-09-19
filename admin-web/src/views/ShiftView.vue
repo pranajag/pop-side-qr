@@ -414,7 +414,7 @@ const staleOtherShifts = computed(() =>
               <p v-if="o.refundAmount !== null" class="mt-1 text-xs text-status-completed">
                 Sudah dikembalikan {{ formatRupiah(o.refundAmount) }}
               </p>
-              <p v-else class="mt-1 text-xs text-amber-600">Belum dicatat apakah uangnya dikembalikan</p>
+              <p v-else class="mt-1 text-xs text-amber-600 dark:text-amber-400">Belum dicatat apakah uangnya dikembalikan</p>
             </div>
           </div>
         </div>

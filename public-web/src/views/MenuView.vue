@@ -6,6 +6,7 @@ import { useMenuStore } from '@/stores/menu'
 import { useCartStore } from '@/stores/cart'
 import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { useLocaleStore } from '@/stores/locale'
+import { useThemeStore } from '@/stores/theme'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,7 +16,17 @@ import VariantPickerDialog from '@/components/VariantPickerDialog.vue'
 import CallStaffDialog from '@/components/CallStaffDialog.vue'
 import RecentOrdersDialog from '@/components/RecentOrdersDialog.vue'
 import BillDialog from '@/components/BillDialog.vue'
-import { ImageOffIcon, ChevronRightIcon, QrCodeIcon, BellIcon, SearchIcon, ReceiptIcon, ReceiptTextIcon } from '@lucide/vue'
+import {
+  ImageOffIcon,
+  ChevronRightIcon,
+  QrCodeIcon,
+  BellIcon,
+  SearchIcon,
+  ReceiptIcon,
+  ReceiptTextIcon,
+  SunIcon,
+  MoonIcon,
+} from '@lucide/vue'
 import { API_URL } from '@/lib/api'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 
@@ -24,6 +35,7 @@ const menu = useMenuStore()
 const cart = useCartStore()
 const recentOrders = useRecentOrdersStore()
 const locale = useLocaleStore()
+const theme = useThemeStore()
 const router = useRouter()
 
 const pickerOpen = ref(false)
@@ -110,6 +122,15 @@ const estimatedTotal = computed(() =>
         >
           {{ locale.locale === 'id' ? 'EN' : 'ID' }}
         </button>
+        <button
+          type="button"
+          :aria-label="locale.t(theme.isDark ? 'temaTerang' : 'temaGelap')"
+          class="flex size-9 shrink-0 items-center justify-center rounded-full border active:bg-accent"
+          @click="theme.toggle()"
+        >
+          <SunIcon v-if="theme.isDark" class="size-4" />
+          <MoonIcon v-else class="size-4" />
+        </button>
         <span class="rounded-full bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-body">
           {{ locale.t('meja') }} {{ table.nomorMeja }}
         </span>
@@ -151,7 +172,7 @@ const estimatedTotal = computed(() =>
         :class="
           activeCategoryId === null
             ? 'bg-brand-cta text-heading'
-            : 'border border-border text-muted-foreground hover:text-body'
+            : 'border border-border text-muted-foreground hover:text-foreground'
         "
         @click="activeCategoryId = null"
       >
@@ -165,7 +186,7 @@ const estimatedTotal = computed(() =>
         :class="
           activeCategoryId === category.id
             ? 'bg-brand-cta text-heading'
-            : 'border border-border text-muted-foreground hover:text-body'
+            : 'border border-border text-muted-foreground hover:text-foreground'
         "
         @click="activeCategoryId = category.id"
       >
@@ -207,7 +228,7 @@ const estimatedTotal = computed(() =>
 
       <div v-else class="space-y-5">
         <section v-for="category in visibleCategories" :key="category.id" class="rounded-xl border bg-card p-4 shadow-sm">
-          <h2 class="mb-3 flex items-center gap-2 text-base font-bold text-body">
+          <h2 class="mb-3 flex items-center gap-2 text-base font-bold text-foreground">
             <span class="h-4 w-1.5 shrink-0 rounded-full bg-brand-cta"></span>
             {{ category.nama }}
           </h2>

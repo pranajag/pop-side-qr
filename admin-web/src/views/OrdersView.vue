@@ -261,10 +261,10 @@ async function onCancelConfirm() {
       </Button>
     </div>
 
-    <div v-if="calls.items.length > 0" class="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+    <div v-if="calls.items.length > 0" class="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
       <div v-for="call in calls.items" :key="call.id" class="flex items-center justify-between gap-3">
         <span class="flex items-center gap-2 text-sm">
-          <BellIcon class="size-4 shrink-0 text-amber-600" />
+          <BellIcon class="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <span>
             <span class="font-semibold">Meja {{ call.nomorMeja }}</span>
             <span v-if="call.catatan" class="text-muted-foreground"> · {{ call.catatan }}</span>
@@ -277,13 +277,13 @@ async function onCancelConfirm() {
       </div>
     </div>
 
-    <div v-if="lowStockProducts.length > 0" class="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
-      <PackageXIcon class="size-4 shrink-0 text-amber-600" />
+    <div v-if="lowStockProducts.length > 0" class="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950">
+      <PackageXIcon class="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
       <span class="font-medium">Stok menipis:</span>
       <span
         v-for="(p, i) in lowStockProducts"
         :key="p.id"
-        :class="p.stok <= 0 ? 'font-semibold text-destructive' : 'text-amber-700'"
+        :class="p.stok <= 0 ? 'font-semibold text-destructive' : 'text-amber-700 dark:text-amber-300'"
       >
         {{ p.nama }} ({{ p.stok }}){{ i < lowStockProducts.length - 1 ? ',' : '' }}
       </span>

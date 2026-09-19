@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useOrdersStore } from '@/stores/orders'
 import { useStaffCallsStore } from '@/stores/staffCalls'
 import { useNotificationsStore } from '@/stores/notifications'
+import { useThemeStore } from '@/stores/theme'
 import { Button } from '@/components/ui/button'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 import { playNotifySound } from '@/lib/notifySound'
@@ -23,6 +24,8 @@ import {
   LogOutIcon,
   MenuIcon,
   XIcon,
+  SunIcon,
+  MoonIcon,
 } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 
@@ -32,6 +35,7 @@ const route = useRoute()
 const orders = useOrdersStore()
 const staffCalls = useStaffCallsStore()
 const notifications = useNotificationsStore()
+const theme = useThemeStore()
 
 const nav = computed(() => {
   const items = [
@@ -134,6 +138,16 @@ onUnmounted(() => clearInterval(newOrderTimer))
       </Button>
       <img :src="logoUrl" alt="Popside" class="size-8 shrink-0 rounded-lg" />
       <p class="truncate text-sm font-semibold tracking-tight">Popside Admin</p>
+      <Button
+        variant="ghost"
+        size="icon"
+        class="ml-auto shrink-0"
+        :aria-label="theme.isDark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'"
+        @click="theme.toggle()"
+      >
+        <SunIcon v-if="theme.isDark" class="size-4" />
+        <MoonIcon v-else class="size-4" />
+      </Button>
     </header>
 
     <div
@@ -176,10 +190,21 @@ onUnmounted(() => clearInterval(newOrderTimer))
         </router-link>
       </nav>
       <div class="border-t px-3 py-3">
-        <p class="truncate px-1 text-xs text-muted-foreground">
-          Masuk sebagai <span class="font-medium text-foreground">{{ auth.user?.username }}</span>
-          <span class="text-muted-foreground/70">({{ auth.user?.role }})</span>
-        </p>
+        <div class="flex items-center justify-between gap-2 px-1">
+          <p class="min-w-0 truncate text-xs text-muted-foreground">
+            Masuk sebagai <span class="font-medium text-foreground">{{ auth.user?.username }}</span>
+            <span class="text-muted-foreground/70">({{ auth.user?.role }})</span>
+          </p>
+          <button
+            type="button"
+            :aria-label="theme.isDark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'"
+            class="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            @click="theme.toggle()"
+          >
+            <SunIcon v-if="theme.isDark" class="size-4" />
+            <MoonIcon v-else class="size-4" />
+          </button>
+        </div>
         <Button variant="ghost" size="sm" class="mt-1 w-full justify-start gap-2" @click="onLogout">
           <LogOutIcon class="size-4" />
           Keluar

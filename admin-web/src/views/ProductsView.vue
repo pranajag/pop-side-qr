@@ -267,11 +267,16 @@ async function onDeleteConfirm() {
             <TableCell class="text-muted-foreground">{{ categoryName(p.categoryId) }}</TableCell>
             <TableCell>{{ formatRupiah(p.harga) }}</TableCell>
             <TableCell>
-              <span :class="{ 'font-semibold text-destructive': stockStatus(p) === 'habis', 'font-semibold text-amber-600': stockStatus(p) === 'menipis' }">
+              <span :class="{ 'font-semibold text-destructive': stockStatus(p) === 'habis', 'font-semibold text-amber-600 dark:text-amber-400': stockStatus(p) === 'menipis' }">
                 {{ p.trackStock ? p.stok : '—' }}
               </span>
               <Badge v-if="stockStatus(p) === 'habis'" variant="destructive" class="ml-1.5">Habis</Badge>
-              <Badge v-else-if="stockStatus(p) === 'menipis'" class="ml-1.5 bg-amber-100 text-amber-700 hover:bg-amber-100">Menipis</Badge>
+              <Badge
+                v-else-if="stockStatus(p) === 'menipis'"
+                class="ml-1.5 bg-amber-100 text-amber-700 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-950"
+              >
+                Menipis
+              </Badge>
             </TableCell>
             <TableCell>
               <Badge :variant="p.isAvailable ? 'default' : 'secondary'">

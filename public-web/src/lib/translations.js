@@ -10,6 +10,8 @@ export const translations = {
     bawaPulang: 'Bawa Pulang',
     uploadBuktiDulu: 'Upload bukti pembayaran dulu',
     previewBukti: 'Preview bukti pembayaran',
+    temaGelap: 'Ganti ke mode gelap',
+    temaTerang: 'Ganti ke mode terang',
 
     // TableEntryView
     qrTidakValid: 'QR tidak valid',
@@ -138,6 +140,8 @@ export const translations = {
     bawaPulang: 'Takeaway',
     uploadBuktiDulu: 'Please upload proof of payment first',
     previewBukti: 'Payment proof preview',
+    temaGelap: 'Switch to dark mode',
+    temaTerang: 'Switch to light mode',
 
     qrTidakValid: 'Invalid QR code',
     qrTidakValidDesc: "This QR code isn't recognized or the table is inactive. Try scanning your table's QR again, or call staff for help.",
