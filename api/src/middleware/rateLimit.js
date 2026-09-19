@@ -14,7 +14,7 @@ const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
   keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${(req.body?.username || '').toLowerCase()}`,
   handler: (req, res) => {
-    res.status(429).json({ error: 'Too many login attempts. Try again later.' });
+    res.status(429).json({ error: 'Terlalu banyak percobaan gagal. Coba lagi nanti.' });
   },
 });
 

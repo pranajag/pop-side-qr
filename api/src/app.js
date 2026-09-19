@@ -70,6 +70,13 @@ app.use(
       callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
+    // Browsers only expose a small safelisted set of response headers to
+    // cross-origin JS by default — RateLimit-* (set by express-rate-limit's
+    // standardHeaders) isn't in it, so without this the login page's
+    // lockout countdown/remaining-attempts UI would silently never receive
+    // real values despite the server sending them correctly on every
+    // response.
+    exposedHeaders: ['RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset'],
   })
 );
 app.use(express.json({ limit: '10kb' }));

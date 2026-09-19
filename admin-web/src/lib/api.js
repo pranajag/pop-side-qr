@@ -31,6 +31,13 @@ async function request(path, { method = 'GET', body, isFormData = false } = {}) 
     const error = new Error(data?.error || `Request gagal (${res.status})`)
     error.status = res.status
     error.details = data?.details
+    // Set by express-rate-limit (standardHeaders: true) on every response
+    // from a rate-limited route, not just once it trips — harmless to read
+    // generically here since most endpoints simply won't have them.
+    const remaining = res.headers.get('ratelimit-remaining')
+    const resetSeconds = res.headers.get('ratelimit-reset')
+    if (remaining !== null) error.rateLimitRemaining = Number(remaining)
+    if (resetSeconds !== null) error.rateLimitResetSeconds = Number(resetSeconds)
     throw error
   }
   return data
