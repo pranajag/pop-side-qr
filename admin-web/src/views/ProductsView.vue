@@ -5,6 +5,7 @@ import { useProductsStore } from '@/stores/products'
 import { useCategoriesStore } from '@/stores/categories'
 import { formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
+import { stockStatus } from '@/lib/stock'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -253,7 +254,13 @@ async function onDeleteConfirm() {
             <TableCell class="font-medium">{{ p.nama }}</TableCell>
             <TableCell class="text-muted-foreground">{{ categoryName(p.categoryId) }}</TableCell>
             <TableCell>{{ formatRupiah(p.harga) }}</TableCell>
-            <TableCell>{{ p.trackStock ? p.stok : '—' }}</TableCell>
+            <TableCell>
+              <span :class="{ 'font-semibold text-destructive': stockStatus(p) === 'habis', 'font-semibold text-amber-600': stockStatus(p) === 'menipis' }">
+                {{ p.trackStock ? p.stok : '—' }}
+              </span>
+              <Badge v-if="stockStatus(p) === 'habis'" variant="destructive" class="ml-1.5">Habis</Badge>
+              <Badge v-else-if="stockStatus(p) === 'menipis'" class="ml-1.5 bg-amber-100 text-amber-700 hover:bg-amber-100">Menipis</Badge>
+            </TableCell>
             <TableCell>
               <Badge :variant="p.isAvailable ? 'default' : 'secondary'">
                 {{ p.isAvailable ? 'Tersedia' : 'Nonaktif' }}

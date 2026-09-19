@@ -9,13 +9,24 @@ const { createProductSchema, updateProductSchema } = require('../validators/prod
 
 const router = Router();
 
-// Every product management route is admin-only. Public menu browsing
-// (Sprint 3) reads products through a separate, unauthenticated route.
-router.use(requireAuth, requireRole('admin'));
+// Managing products (create/edit/delete) is admin-only. Listing them isn't
+// — a kasir can't reach the Produk management page itself (frontend route
+// guard), but OrdersView's low-stock banner reads this same list, and a
+// kasir taking orders needs to know what's running low just as much as
+// admin does. Public menu browsing (Sprint 3) reads products through a
+// separate, unauthenticated route — this one stays behind login either way.
+router.use(requireAuth);
 
 router.get('/', productController.list);
-router.post('/', upload.single('foto'), validate(createProductSchema), productController.create);
-router.put('/:id', validateIdParam, upload.single('foto'), validate(updateProductSchema), productController.update);
-router.delete('/:id', validateIdParam, productController.remove);
+router.post('/', requireRole('admin'), upload.single('foto'), validate(createProductSchema), productController.create);
+router.put(
+  '/:id',
+  requireRole('admin'),
+  validateIdParam,
+  upload.single('foto'),
+  validate(updateProductSchema),
+  productController.update
+);
+router.delete('/:id', requireRole('admin'), validateIdParam, productController.remove);
 
 module.exports = router;

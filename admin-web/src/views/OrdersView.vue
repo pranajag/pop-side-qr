@@ -4,9 +4,11 @@ import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useOrdersStore } from '@/stores/orders'
 import { useStaffCallsStore } from '@/stores/staffCalls'
+import { useProductsStore } from '@/stores/products'
 import { formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { STATUS_LABEL, STATUS_BADGE_CLASS } from '@/lib/orderStatus'
+import { stockStatus } from '@/lib/stock'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -22,13 +24,15 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { LoaderCircleIcon, CheckIcon, XIcon, BellIcon, PlusIcon, ImageIcon } from '@lucide/vue'
+import { LoaderCircleIcon, CheckIcon, XIcon, BellIcon, PlusIcon, ImageIcon, PackageXIcon } from '@lucide/vue'
 
 const POLL_MS = 8000
 
 const router = useRouter()
 const store = useOrdersStore()
 const calls = useStaffCallsStore()
+const products = useProductsStore()
+const lowStockProducts = computed(() => products.items.filter((p) => stockStatus(p) !== null))
 const busyId = ref(null)
 const cancelTarget = ref(null)
 const cancelReason = ref('')
@@ -71,9 +75,11 @@ let pollTimer = null
 onMounted(() => {
   store.fetchAll()
   calls.fetchPending()
+  products.fetchAll()
   pollTimer = setInterval(() => {
     store.fetchAll()
     calls.fetchPending()
+    products.fetchAll()
   }, POLL_MS)
 })
 onUnmounted(() => clearInterval(pollTimer))
@@ -213,6 +219,18 @@ async function onCancelConfirm() {
           Selesai
         </Button>
       </div>
+    </div>
+
+    <div v-if="lowStockProducts.length > 0" class="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+      <PackageXIcon class="size-4 shrink-0 text-amber-600" />
+      <span class="font-medium">Stok menipis:</span>
+      <span
+        v-for="(p, i) in lowStockProducts"
+        :key="p.id"
+        :class="p.stok <= 0 ? 'font-semibold text-destructive' : 'text-amber-700'"
+      >
+        {{ p.nama }} ({{ p.stok }}){{ i < lowStockProducts.length - 1 ? ',' : '' }}
+      </span>
     </div>
 
     <div class="flex flex-wrap gap-2">
