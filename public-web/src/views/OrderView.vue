@@ -268,6 +268,9 @@ async function copyKode() {
         <p v-if="elapsedMinutes" class="text-xs text-muted-foreground">
           Sudah {{ elapsedMinutes }} menit sejak status terakhir diperbarui
         </p>
+        <p v-if="order.estimasiMenit" class="mt-1 text-xs text-muted-foreground">
+          Biasanya siap dalam sekitar {{ order.estimasiMenit }} menit sejak dikonfirmasi
+        </p>
       </div>
 
       <AlertDialog :open="confirmBayarOpen" @update:open="(v) => (confirmBayarOpen = v)">

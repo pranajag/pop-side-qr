@@ -38,7 +38,7 @@ const submitting = ref(false)
 const deleteTarget = ref(null)
 const deleting = ref(false)
 
-const form = reactive({ nama: '', urutan: 0, isActive: true })
+const form = reactive({ nama: '', urutan: 0, isActive: true, estimasiMenit: '' })
 
 onMounted(() => store.fetchAll())
 
@@ -47,6 +47,7 @@ function openCreate() {
   form.nama = ''
   form.urutan = store.items.length
   form.isActive = true
+  form.estimasiMenit = ''
   formOpen.value = true
 }
 
@@ -55,6 +56,7 @@ function openEdit(category) {
   form.nama = category.nama
   form.urutan = category.urutan
   form.isActive = category.isActive
+  form.estimasiMenit = category.estimasiMenit ?? ''
   formOpen.value = true
 }
 
@@ -124,17 +126,19 @@ async function onDeleteConfirm() {
           <TableRow>
             <TableHead>Nama</TableHead>
             <TableHead class="w-24">Urutan</TableHead>
+            <TableHead class="w-32">Estimasi</TableHead>
             <TableHead class="w-28">Status</TableHead>
             <TableHead class="w-28 text-right">Aksi</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableEmpty v-if="!store.loading && store.items.length === 0" :colspan="4">
+          <TableEmpty v-if="!store.loading && store.items.length === 0" :colspan="5">
             Belum ada kategori.
           </TableEmpty>
           <TableRow v-for="cat in store.items" :key="cat.id">
             <TableCell class="font-medium">{{ cat.nama }}</TableCell>
             <TableCell>{{ cat.urutan }}</TableCell>
+            <TableCell class="text-muted-foreground">{{ cat.estimasiMenit ? `~${cat.estimasiMenit} menit` : '—' }}</TableCell>
             <TableCell>
               <Badge :variant="cat.isActive ? 'default' : 'secondary'">
                 {{ cat.isActive ? 'Aktif' : 'Nonaktif' }}
@@ -166,6 +170,13 @@ async function onDeleteConfirm() {
           <div class="space-y-2">
             <Label for="urutan">Urutan tampil</Label>
             <Input id="urutan" v-model.number="form.urutan" type="number" min="0" required />
+          </div>
+          <div class="space-y-2">
+            <Label for="estimasiMenit">Estimasi Waktu Siap (menit, opsional)</Label>
+            <Input id="estimasiMenit" v-model="form.estimasiMenit" type="number" min="1" step="1" placeholder="Mis. 10" />
+            <p class="text-xs text-muted-foreground">
+              Ditampilkan ke customer di halaman status pesanan. Kosongkan kalau tidak mau menampilkan estimasi.
+            </p>
           </div>
           <div class="flex items-center justify-between rounded-md border px-3 py-2">
             <Label for="isActive">Aktif</Label>

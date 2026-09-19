@@ -218,13 +218,22 @@ async function getByCode(kodeOrder) {
   const order = await prisma.order.findUnique({
     where: { kodeOrder },
     include: {
-      items: { include: { product: { select: { nama: true } }, variants: true } },
+      items: {
+        include: { product: { select: { nama: true, category: { select: { estimasiMenit: true } } } }, variants: true },
+      },
       table: { select: { nomorMeja: true } },
     },
   });
   if (!order) {
     throw new AppError(404, 'Order tidak ditemukan');
   }
+
+  // Slowest category among the items wins — the order isn't "ready" until
+  // everything on it is, and this app has no real per-item kitchen timing
+  // to do better than that. null when no category on the order has an
+  // estimate set, so the customer sees nothing instead of a made-up number.
+  const estimates = order.items.map((item) => item.product.category.estimasiMenit).filter((m) => m !== null);
+  const estimasiMenit = estimates.length > 0 ? Math.max(...estimates) : null;
 
   return {
     kodeOrder: order.kodeOrder,
@@ -236,6 +245,7 @@ async function getByCode(kodeOrder) {
     updatedAt: order.updatedAt,
     nomorMeja: order.table?.nomorMeja ?? null,
     customerName: order.customerName,
+    estimasiMenit,
     items: order.items.map((item) => ({
       nama: item.product.nama,
       qty: item.qty,

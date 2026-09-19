@@ -76,11 +76,16 @@ model StoreSetting {
 }
 
 model Category {
-  id       Int       @id @default(autoincrement())
-  nama     String
-  urutan   Int       @default(0)
-  isActive Boolean   @default(true) @map("is_active")
-  products Product[]
+  id            Int       @id @default(autoincrement())
+  nama          String
+  urutan        Int       @default(0)
+  isActive      Boolean   @default(true) @map("is_active")
+  // Rough, admin-set expectation ("Minuman ~5 menit") shown to the customer
+  // on their order-status page — not derived from any real kitchen-timing
+  // data (this system has none), so null just means "no estimate shown"
+  // rather than defaulting to some made-up number.
+  estimasiMenit Int?      @map("estimasi_menit")
+  products      Product[]
 
   @@map("categories")
 }
