@@ -6,7 +6,11 @@ const STORAGE_KEY = 'popside.table'
 
 // sessionStorage, not localStorage — "currently sitting at this table" is
 // a per-visit fact, not something that should quietly outlive the tab.
-const initial = loadJSON(sessionStorage, STORAGE_KEY, { token: null, id: null, nomorMeja: null })
+const initial = loadJSON(sessionStorage, STORAGE_KEY, {
+  token: null,
+  id: null,
+  nomorMeja: null,
+})
 
 export const useTableStore = defineStore('table', {
   state: () => ({ ...initial, verifying: false }),
@@ -17,7 +21,9 @@ export const useTableStore = defineStore('table', {
     async verify(token) {
       this.verifying = true
       try {
-        const data = await api.get(`/public/tables/${encodeURIComponent(token)}`)
+        const data = await api.get(
+          `/public/tables/${encodeURIComponent(token)}`
+        )
         this.token = token
         this.id = data.table.id
         this.nomorMeja = data.table.nomorMeja
@@ -34,7 +40,11 @@ export const useTableStore = defineStore('table', {
       }
     },
     persist() {
-      saveJSON(sessionStorage, STORAGE_KEY, { token: this.token, id: this.id, nomorMeja: this.nomorMeja })
+      saveJSON(sessionStorage, STORAGE_KEY, {
+        token: this.token,
+        id: this.id,
+        nomorMeja: this.nomorMeja,
+      })
     },
   },
 })

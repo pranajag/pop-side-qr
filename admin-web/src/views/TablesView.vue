@@ -17,7 +17,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,7 +34,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { PlusIcon, PencilIcon, Trash2Icon, LoaderCircleIcon, QrCodeIcon, CopyIcon, RefreshCwIcon, PrinterIcon } from '@lucide/vue'
+import {
+  PlusIcon,
+  PencilIcon,
+  Trash2Icon,
+  LoaderCircleIcon,
+  QrCodeIcon,
+  CopyIcon,
+  RefreshCwIcon,
+  PrinterIcon,
+} from '@lucide/vue'
 
 const store = useTablesStore()
 
@@ -146,7 +161,9 @@ function printQr() {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-lg font-semibold tracking-tight">Meja</h1>
-        <p class="text-sm text-muted-foreground">Kelola meja dan QR code untuk dicetak.</p>
+        <p class="text-sm text-muted-foreground">
+          Kelola meja dan QR code untuk dicetak.
+        </p>
       </div>
       <Button class="gap-2" @click="openCreate">
         <PlusIcon class="size-4" />
@@ -166,12 +183,17 @@ function printQr() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableEmpty v-if="!store.loading && store.items.length === 0" :colspan="5">
+          <TableEmpty
+            v-if="!store.loading && store.items.length === 0"
+            :colspan="5"
+          >
             Belum ada meja.
           </TableEmpty>
           <TableRow v-for="t in store.items" :key="t.id">
             <TableCell class="font-medium">{{ t.nomorMeja }}</TableCell>
-            <TableCell class="text-muted-foreground">{{ t.kapasitas }} orang</TableCell>
+            <TableCell class="text-muted-foreground"
+              >{{ t.kapasitas }} orang</TableCell
+            >
             <TableCell>
               <Badge :variant="t.isActive ? 'default' : 'secondary'">
                 {{ t.isActive ? 'Aktif' : 'Nonaktif' }}
@@ -203,18 +225,35 @@ function printQr() {
     <Dialog v-model:open="formOpen">
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{{ editingId ? 'Ubah Meja' : 'Tambah Meja' }}</DialogTitle>
+          <DialogTitle>{{
+            editingId ? 'Ubah Meja' : 'Tambah Meja'
+          }}</DialogTitle>
         </DialogHeader>
         <form id="table-form" class="space-y-4" @submit.prevent="onSubmit">
           <div class="space-y-2">
             <Label for="nomorMeja">Nomor Meja</Label>
-            <Input id="nomorMeja" v-model="form.nomorMeja" required maxlength="20" />
+            <Input
+              id="nomorMeja"
+              v-model="form.nomorMeja"
+              required
+              maxlength="20"
+            />
           </div>
           <div class="space-y-2">
             <Label for="kapasitas">Kapasitas (jumlah orang)</Label>
-            <Input id="kapasitas" v-model="form.kapasitas" type="number" min="1" max="999" step="1" required />
+            <Input
+              id="kapasitas"
+              v-model="form.kapasitas"
+              type="number"
+              min="1"
+              max="999"
+              step="1"
+              required
+            />
           </div>
-          <div class="flex items-center justify-between rounded-md border px-3 py-2">
+          <div
+            class="flex items-center justify-between rounded-md border px-3 py-2"
+          >
             <Label for="isActive">Aktif</Label>
             <Switch id="isActive" v-model="form.isActive" />
           </div>
@@ -234,16 +273,30 @@ function printQr() {
           <DialogTitle>QR Meja {{ qrTarget?.nomorMeja }}</DialogTitle>
         </DialogHeader>
         <div v-if="qrTarget" class="flex flex-col items-center gap-4 py-2">
-          <img :src="qrImageUrl(qrTarget)" :alt="`QR meja ${qrTarget.nomorMeja}`" class="size-64" />
-          <p class="break-all text-center text-xs text-muted-foreground">{{ qrTarget.url }}</p>
+          <img
+            :src="qrImageUrl(qrTarget)"
+            :alt="`QR meja ${qrTarget.nomorMeja}`"
+            class="size-64"
+          />
+          <p class="break-all text-center text-xs text-muted-foreground">
+            {{ qrTarget.url }}
+          </p>
         </div>
         <DialogFooter class="print:hidden">
           <Button variant="outline" class="gap-2" @click="copyLink(qrTarget)">
             <CopyIcon class="size-4" />
             Salin Link
           </Button>
-          <Button variant="outline" class="gap-2" :disabled="resetting" @click="resetConfirmOpen = true">
-            <RefreshCwIcon class="size-4" :class="{ 'animate-spin': resetting }" />
+          <Button
+            variant="outline"
+            class="gap-2"
+            :disabled="resetting"
+            @click="resetConfirmOpen = true"
+          >
+            <RefreshCwIcon
+              class="size-4"
+              :class="{ 'animate-spin': resetting }"
+            />
             Reset QR
           </Button>
           <Button class="gap-2" @click="printQr">
@@ -254,34 +307,51 @@ function printQr() {
       </DialogContent>
     </Dialog>
 
-    <AlertDialog :open="!!deleteTarget" @update:open="(v) => !v && (deleteTarget = null)">
+    <AlertDialog
+      :open="!!deleteTarget"
+      @update:open="(v) => !v && (deleteTarget = null)"
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Hapus meja "{{ deleteTarget?.nomorMeja }}"?</AlertDialogTitle>
+          <AlertDialogTitle
+            >Hapus meja "{{ deleteTarget?.nomorMeja }}"?</AlertDialogTitle
+          >
           <AlertDialogDescription>
-            Tindakan ini tidak bisa dibatalkan. Meja yang sudah punya riwayat order tidak bisa dihapus — nonaktifkan
-            saja.
+            Tindakan ini tidak bisa dibatalkan. Meja yang sudah punya riwayat
+            order tidak bisa dihapus — nonaktifkan saja.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
-          <AlertDialogAction :disabled="deleting" @click="onDeleteConfirm">Hapus</AlertDialogAction>
+          <AlertDialogAction :disabled="deleting" @click="onDeleteConfirm"
+            >Hapus</AlertDialogAction
+          >
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
 
-    <AlertDialog :open="resetConfirmOpen" @update:open="(v) => (resetConfirmOpen = v)">
+    <AlertDialog
+      :open="resetConfirmOpen"
+      @update:open="(v) => (resetConfirmOpen = v)"
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Reset QR meja {{ qrTarget?.nomorMeja }}?</AlertDialogTitle>
+          <AlertDialogTitle
+            >Reset QR meja {{ qrTarget?.nomorMeja }}?</AlertDialogTitle
+          >
           <AlertDialogDescription>
-            QR yang sudah dicetak dan ditempel di meja langsung tidak berlaku lagi begitu di-reset. Meja itu perlu
-            QR baru dicetak dan ditempel ulang sebelum bisa dipakai customer.
+            QR yang sudah dicetak dan ditempel di meja langsung tidak berlaku
+            lagi begitu di-reset. Meja itu perlu QR baru dicetak dan ditempel
+            ulang sebelum bisa dipakai customer.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
-          <AlertDialogAction :disabled="resetting" @click="onResetToken(qrTarget)">Ya, Reset QR</AlertDialogAction>
+          <AlertDialogAction
+            :disabled="resetting"
+            @click="onResetToken(qrTarget)"
+            >Ya, Reset QR</AlertDialogAction
+          >
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

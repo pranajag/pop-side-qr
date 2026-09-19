@@ -2,7 +2,12 @@
 import { useRouter } from 'vue-router'
 import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { useLocaleStore } from '@/stores/locale'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { ChevronRightIcon, ReceiptIcon } from '@lucide/vue'
 
 const props = defineProps({ open: { type: Boolean, required: true } })
@@ -24,7 +29,10 @@ function openOrder(kodeOrder) {
       <DialogHeader>
         <DialogTitle>{{ locale.t('pesananSayaLabel') }}</DialogTitle>
       </DialogHeader>
-      <p v-if="recentOrders.items.length === 0" class="py-4 text-center text-sm text-muted-foreground">
+      <p
+        v-if="recentOrders.items.length === 0"
+        class="py-4 text-center text-sm text-muted-foreground"
+      >
         {{ locale.t('belumAdaPesananDiPerangkat') }}
       </p>
       <div v-else class="space-y-1.5">

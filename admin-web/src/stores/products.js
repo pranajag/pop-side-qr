@@ -34,11 +34,15 @@ export const useProductsStore = defineStore('products', {
       }
     },
     async create(payload) {
-      const data = await api.post('/admin/products', toFormData(payload), { isFormData: true })
+      const data = await api.post('/admin/products', toFormData(payload), {
+        isFormData: true,
+      })
       this.items.push(data.product)
     },
     async update(id, payload) {
-      const data = await api.put(`/admin/products/${id}`, toFormData(payload), { isFormData: true })
+      const data = await api.put(`/admin/products/${id}`, toFormData(payload), {
+        isFormData: true,
+      })
       const idx = this.items.findIndex((p) => p.id === id)
       if (idx !== -1) this.items[idx] = data.product
     },

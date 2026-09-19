@@ -1,5 +1,5 @@
 <script setup>
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils'
 
 const props = defineProps({
   class: {
@@ -7,7 +7,7 @@ const props = defineProps({
     required: false,
     skipCheck: true,
   },
-});
+})
 </script>
 
 <template>
@@ -16,7 +16,7 @@ const props = defineProps({
     :class="
       cn(
         'text-base leading-snug font-medium group-data-[size=sm]/card:text-sm cn-font-heading',
-        props.class,
+        props.class
       )
     "
   >

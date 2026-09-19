@@ -1,7 +1,7 @@
 <script setup>
-import { reactiveOmit } from "@vueuse/core";
-import { AlertDialogTitle } from "reka-ui";
-import { cn } from "@/lib/utils";
+import { reactiveOmit } from '@vueuse/core'
+import { AlertDialogTitle } from 'reka-ui'
+import { cn } from '@/lib/utils'
 
 const props = defineProps({
   asChild: { type: Boolean, required: false },
@@ -11,9 +11,9 @@ const props = defineProps({
     required: false,
     skipCheck: true,
   },
-});
+})
 
-const delegatedProps = reactiveOmit(props, "class");
+const delegatedProps = reactiveOmit(props, 'class')
 </script>
 
 <template>
@@ -23,7 +23,7 @@ const delegatedProps = reactiveOmit(props, "class");
     :class="
       cn(
         'text-base font-medium sm:group-data-[size=default]/alert-dialog-content:group-has-data-[slot=alert-dialog-media]/alert-dialog-content:col-start-2 cn-font-heading',
-        props.class,
+        props.class
       )
     "
   >

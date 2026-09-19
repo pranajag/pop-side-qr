@@ -9,7 +9,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -19,7 +25,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,7 +42,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { PlusIcon, PencilIcon, Trash2Icon, LoaderCircleIcon, CalendarClockIcon } from '@lucide/vue'
+import {
+  PlusIcon,
+  PencilIcon,
+  Trash2Icon,
+  LoaderCircleIcon,
+  CalendarClockIcon,
+} from '@lucide/vue'
 
 const store = useReservationsStore()
 const tables = useTablesStore()
@@ -70,7 +88,9 @@ const STATUS_VARIANT = {
 // second round-trip, same shape as orders.js's matchesFilter.
 const visibleItems = computed(() => {
   if (store.statusFilter === undefined) {
-    return store.items.filter((r) => r.status === 'pending' || r.status === 'confirmed')
+    return store.items.filter(
+      (r) => r.status === 'pending' || r.status === 'confirmed'
+    )
   }
   return store.items
 })
@@ -158,7 +178,9 @@ const jakartaParts = new Intl.DateTimeFormat('en-CA', {
 
 function isoToLocalInput(iso) {
   if (!iso) return ''
-  const parts = Object.fromEntries(jakartaParts.formatToParts(new Date(iso)).map((p) => [p.type, p.value]))
+  const parts = Object.fromEntries(
+    jakartaParts.formatToParts(new Date(iso)).map((p) => [p.type, p.value])
+  )
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
 }
 
@@ -174,7 +196,9 @@ function localInputToIso(value) {
   const [datePart, timePart] = value.split('T')
   const [year, month, day] = datePart.split('-').map(Number)
   const [hour, minute] = timePart.split(':').map(Number)
-  return new Date(Date.UTC(year, month - 1, day, hour, minute) - JAKARTA_OFFSET_MS).toISOString()
+  return new Date(
+    Date.UTC(year, month - 1, day, hour, minute) - JAKARTA_OFFSET_MS
+  ).toISOString()
 }
 
 function activeTables() {
@@ -278,7 +302,9 @@ async function onDeleteConfirm() {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-lg font-semibold tracking-tight">Reservasi</h1>
-        <p class="text-sm text-muted-foreground">Kelola reservasi meja untuk acara/event customer.</p>
+        <p class="text-sm text-muted-foreground">
+          Kelola reservasi meja untuk acara/event customer.
+        </p>
       </div>
       <Button class="gap-2" @click="openCreate">
         <PlusIcon class="size-4" />
@@ -312,23 +338,36 @@ async function onDeleteConfirm() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableEmpty v-if="!store.loading && visibleItems.length === 0" :colspan="7">
+          <TableEmpty
+            v-if="!store.loading && visibleItems.length === 0"
+            :colspan="7"
+          >
             Belum ada reservasi.
           </TableEmpty>
           <TableRow v-for="r in visibleItems" :key="r.id">
             <TableCell class="font-medium">
               {{ r.namaCustomer }}
-              <span v-if="r.telepon" class="block text-xs font-normal text-muted-foreground">{{ r.telepon }}</span>
+              <span
+                v-if="r.telepon"
+                class="block text-xs font-normal text-muted-foreground"
+                >{{ r.telepon }}</span
+              >
             </TableCell>
-            <TableCell class="text-muted-foreground">{{ r.namaAcara || '—' }}</TableCell>
-            <TableCell class="text-muted-foreground">{{ formatDateTime(r.tanggalReservasi) }}</TableCell>
+            <TableCell class="text-muted-foreground">{{
+              r.namaAcara || '—'
+            }}</TableCell>
+            <TableCell class="text-muted-foreground">{{
+              formatDateTime(r.tanggalReservasi)
+            }}</TableCell>
             <TableCell>{{ r.jumlahTamu }} orang</TableCell>
             <TableCell class="text-muted-foreground">
               <span v-if="r.nomorMeja">Meja {{ r.nomorMeja }}</span>
               <span v-else>—</span>
             </TableCell>
             <TableCell>
-              <Badge :variant="STATUS_VARIANT[r.status]">{{ STATUS_LABEL[r.status] }}</Badge>
+              <Badge :variant="STATUS_VARIANT[r.status]">{{
+                STATUS_LABEL[r.status]
+              }}</Badge>
             </TableCell>
             <TableCell class="text-right">
               <Button
@@ -381,27 +420,59 @@ async function onDeleteConfirm() {
             {{ editingId ? 'Ubah Reservasi' : 'Tambah Reservasi' }}
           </DialogTitle>
         </DialogHeader>
-        <form id="reservation-form" class="space-y-4" @submit.prevent="onSubmit">
+        <form
+          id="reservation-form"
+          class="space-y-4"
+          @submit.prevent="onSubmit"
+        >
           <div class="space-y-2">
             <Label for="namaCustomer">Nama Customer</Label>
-            <Input id="namaCustomer" v-model="form.namaCustomer" required maxlength="100" />
+            <Input
+              id="namaCustomer"
+              v-model="form.namaCustomer"
+              required
+              maxlength="100"
+            />
           </div>
           <div class="space-y-2">
             <Label for="namaAcara">Nama Acara (opsional)</Label>
-            <Input id="namaAcara" v-model="form.namaAcara" maxlength="100" placeholder="Mis. Ulang Tahun Sarah" />
+            <Input
+              id="namaAcara"
+              v-model="form.namaAcara"
+              maxlength="100"
+              placeholder="Mis. Ulang Tahun Sarah"
+            />
           </div>
           <div class="space-y-2">
             <Label for="telepon">Nomor Telepon (opsional)</Label>
-            <Input id="telepon" v-model="form.telepon" maxlength="20" placeholder="08xxxxxxxxxx" />
+            <Input
+              id="telepon"
+              v-model="form.telepon"
+              maxlength="20"
+              placeholder="08xxxxxxxxxx"
+            />
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-2">
               <Label for="jumlahTamu">Jumlah Tamu</Label>
-              <Input id="jumlahTamu" v-model="form.jumlahTamu" type="number" min="1" max="999" step="1" required />
+              <Input
+                id="jumlahTamu"
+                v-model="form.jumlahTamu"
+                type="number"
+                min="1"
+                max="999"
+                step="1"
+                required
+              />
             </div>
             <div class="space-y-2">
               <Label for="tanggalReservasi">Tanggal &amp; Jam</Label>
-              <Input id="tanggalReservasi" v-model="form.tanggalReservasi" type="datetime-local" required />
+              <Input
+                id="tanggalReservasi"
+                v-model="form.tanggalReservasi"
+                type="datetime-local"
+                required
+              />
             </div>
           </div>
           <div class="space-y-2">
@@ -412,7 +483,11 @@ async function onDeleteConfirm() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem :value="NO_TABLE">Belum ditentukan</SelectItem>
-                <SelectItem v-for="t in activeTables()" :key="t.id" :value="String(t.id)">
+                <SelectItem
+                  v-for="t in activeTables()"
+                  :key="t.id"
+                  :value="String(t.id)"
+                >
                   Meja {{ t.nomorMeja }} (maks {{ t.kapasitas }} orang)
                 </SelectItem>
               </SelectContent>
@@ -420,7 +495,12 @@ async function onDeleteConfirm() {
           </div>
           <div class="space-y-2">
             <Label for="catatan">Catatan (opsional)</Label>
-            <Input id="catatan" v-model="form.catatan" maxlength="300" placeholder="Mis. butuh dekorasi tambahan" />
+            <Input
+              id="catatan"
+              v-model="form.catatan"
+              maxlength="300"
+              placeholder="Mis. butuh dekorasi tambahan"
+            />
           </div>
         </form>
         <DialogFooter>
@@ -432,15 +512,26 @@ async function onDeleteConfirm() {
       </DialogContent>
     </Dialog>
 
-    <AlertDialog :open="!!deleteTarget" @update:open="(v) => !v && (deleteTarget = null)">
+    <AlertDialog
+      :open="!!deleteTarget"
+      @update:open="(v) => !v && (deleteTarget = null)"
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Hapus reservasi "{{ deleteTarget?.namaCustomer }}"?</AlertDialogTitle>
-          <AlertDialogDescription>Tindakan ini tidak bisa dibatalkan.</AlertDialogDescription>
+          <AlertDialogTitle
+            >Hapus reservasi "{{
+              deleteTarget?.namaCustomer
+            }}"?</AlertDialogTitle
+          >
+          <AlertDialogDescription
+            >Tindakan ini tidak bisa dibatalkan.</AlertDialogDescription
+          >
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
-          <AlertDialogAction :disabled="deleting" @click="onDeleteConfirm">Hapus</AlertDialogAction>
+          <AlertDialogAction :disabled="deleting" @click="onDeleteConfirm"
+            >Hapus</AlertDialogAction
+          >
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

@@ -24,8 +24,14 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex min-h-svh flex-col items-center justify-center gap-6 px-6 text-center">
-    <img :src="logoUrl" alt="Popside" class="size-16 rounded-2xl shadow-lg shadow-black/10" />
+  <div
+    class="flex min-h-svh flex-col items-center justify-center gap-6 px-6 text-center"
+  >
+    <img
+      :src="logoUrl"
+      alt="Popside"
+      class="size-16 rounded-2xl shadow-lg shadow-black/10"
+    />
     <template v-if="failed">
       <TriangleAlertIcon class="size-10 text-destructive" />
       <div class="space-y-1">
@@ -37,7 +43,9 @@ onMounted(async () => {
     </template>
     <template v-else>
       <LoaderCircleIcon class="size-8 animate-spin text-muted-foreground" />
-      <p class="text-sm text-muted-foreground">{{ locale.t('memeriksaMeja') }}</p>
+      <p class="text-sm text-muted-foreground">
+        {{ locale.t('memeriksaMeja') }}
+      </p>
     </template>
   </div>
 </template>

@@ -46,7 +46,9 @@ const METODE_LABEL = { qris: 'QRIS', tunai: 'Tunai', debit: 'Debit' }
 async function load() {
   loading.value = true
   try {
-    report.value = (await api.get(`/admin/reports?from=${from.value}&to=${to.value}`)).report
+    report.value = (
+      await api.get(`/admin/reports?from=${from.value}&to=${to.value}`)
+    ).report
   } catch (err) {
     toast.error(formatApiError(err))
   } finally {
@@ -81,14 +83,18 @@ function exportCsv() {
     csvRow(['Jumlah Pesanan', r.orderCount]),
     '',
     csvRow(['Metode Bayar', 'Jumlah']),
-    ...Object.entries(r.byMetode).map(([metode, amount]) => csvRow([METODE_LABEL[metode], amount])),
+    ...Object.entries(r.byMetode).map(([metode, amount]) =>
+      csvRow([METODE_LABEL[metode], amount])
+    ),
     '',
     csvRow(['Produk Terlaris', 'Qty', 'Pendapatan']),
     ...r.topProducts.map((p) => csvRow([p.nama, p.qty, p.revenue])),
   ]
   // Leading BOM so Excel (which guesses ANSI otherwise) reads the UTF-8
   // rupiah/product-name text correctly instead of mangling it.
-  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
+  const blob = new Blob(['﻿' + lines.join('\r\n')], {
+    type: 'text/csv;charset=utf-8;',
+  })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -104,25 +110,42 @@ onMounted(load)
   <div class="max-w-2xl space-y-6">
     <div>
       <h1 class="text-lg font-semibold tracking-tight">Laporan Pendapatan</h1>
-      <p class="text-sm text-muted-foreground">Dihitung sejak pesanan dikonfirmasi, timezone Asia/Jakarta.</p>
+      <p class="text-sm text-muted-foreground">
+        Dihitung sejak pesanan dikonfirmasi, timezone Asia/Jakarta.
+      </p>
     </div>
 
     <div class="flex flex-wrap gap-2">
-      <Button size="sm" variant="outline" @click="applyPreset('today')">Hari Ini</Button>
-      <Button size="sm" variant="outline" @click="applyPreset('week')">Minggu Ini</Button>
-      <Button size="sm" variant="outline" @click="applyPreset('month')">Bulan Ini</Button>
+      <Button size="sm" variant="outline" @click="applyPreset('today')"
+        >Hari Ini</Button
+      >
+      <Button size="sm" variant="outline" @click="applyPreset('week')"
+        >Minggu Ini</Button
+      >
+      <Button size="sm" variant="outline" @click="applyPreset('month')"
+        >Bulan Ini</Button
+      >
     </div>
 
     <div class="flex flex-wrap items-end gap-3">
       <div class="space-y-2">
         <Label for="from">Dari</Label>
-        <Input id="from" v-model="from" type="date" class="w-44" @change="load" />
+        <Input
+          id="from"
+          v-model="from"
+          type="date"
+          class="w-44"
+          @change="load"
+        />
       </div>
       <div class="space-y-2">
         <Label for="to">Sampai</Label>
         <Input id="to" v-model="to" type="date" class="w-44" @change="load" />
       </div>
-      <LoaderCircleIcon v-if="loading" class="mb-2 size-4 animate-spin text-muted-foreground" />
+      <LoaderCircleIcon
+        v-if="loading"
+        class="mb-2 size-4 animate-spin text-muted-foreground"
+      />
     </div>
 
     <div v-if="report" class="space-y-4">
@@ -132,17 +155,28 @@ onMounted(load)
             <WalletIcon class="size-4" />
             Total Pendapatan
           </div>
-          <Button size="sm" variant="outline" class="gap-1.5" @click="exportCsv">
+          <Button
+            size="sm"
+            variant="outline"
+            class="gap-1.5"
+            @click="exportCsv"
+          >
             <DownloadIcon class="size-3.5" />
             Export CSV
           </Button>
         </div>
-        <p class="mt-1 text-3xl font-bold tracking-tight">{{ formatRupiah(report.total) }}</p>
-        <p class="mt-1 text-sm text-muted-foreground">{{ report.orderCount }} pesanan</p>
+        <p class="mt-1 text-3xl font-bold tracking-tight">
+          {{ formatRupiah(report.total) }}
+        </p>
+        <p class="mt-1 text-sm text-muted-foreground">
+          {{ report.orderCount }} pesanan
+        </p>
       </div>
 
       <div class="rounded-lg border bg-card p-4">
-        <h2 class="mb-3 text-sm font-semibold text-muted-foreground">Breakdown Metode Bayar</h2>
+        <h2 class="mb-3 text-sm font-semibold text-muted-foreground">
+          Breakdown Metode Bayar
+        </h2>
         <div class="space-y-2">
           <div
             v-for="(amount, metode) in report.byMetode"
@@ -156,8 +190,15 @@ onMounted(load)
       </div>
 
       <div class="rounded-lg border bg-card p-4">
-        <h2 class="mb-3 text-sm font-semibold text-muted-foreground">Produk Terlaris</h2>
-        <p v-if="report.topProducts.length === 0" class="text-sm text-muted-foreground">Belum ada penjualan.</p>
+        <h2 class="mb-3 text-sm font-semibold text-muted-foreground">
+          Produk Terlaris
+        </h2>
+        <p
+          v-if="report.topProducts.length === 0"
+          class="text-sm text-muted-foreground"
+        >
+          Belum ada penjualan.
+        </p>
         <ol v-else class="space-y-2">
           <li
             v-for="(p, idx) in report.topProducts"
@@ -165,14 +206,18 @@ onMounted(load)
             class="flex items-center justify-between border-b pb-2 text-sm last:border-0 last:pb-0"
           >
             <span class="flex items-center gap-2">
-              <span class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              <span
+                class="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium"
+              >
                 {{ idx + 1 }}
               </span>
               {{ p.nama }}
             </span>
             <span class="flex items-center gap-3 text-muted-foreground">
               <span>{{ p.qty }}x</span>
-              <span class="font-medium text-foreground">{{ formatRupiah(p.revenue) }}</span>
+              <span class="font-medium text-foreground">{{
+                formatRupiah(p.revenue)
+              }}</span>
             </span>
           </li>
         </ol>

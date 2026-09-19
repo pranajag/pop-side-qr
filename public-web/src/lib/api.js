@@ -1,16 +1,24 @@
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+export const API_URL =
+  import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
 // Public API — stateless, no session cookie, no CSRF token needed (see
 // api/src/app.js: /api/public/* is mounted ahead of the CSRF middleware).
-async function request(path, { method = 'GET', body, isFormData = false } = {}) {
+async function request(
+  path,
+  { method = 'GET', body, isFormData = false } = {}
+) {
   // FormData sets its own multipart Content-Type (with the boundary) —
   // setting it manually here would drop the boundary and break the upload.
-  const headers = body !== undefined && !isFormData ? { 'Content-Type': 'application/json' } : {}
+  const headers =
+    body !== undefined && !isFormData
+      ? { 'Content-Type': 'application/json' }
+      : {}
 
   const res = await fetch(`${API_URL}${path}`, {
     method,
     headers,
-    body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
+    body:
+      body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
   })
 
   const data = await res.json().catch(() => null)
@@ -30,7 +38,9 @@ export const api = {
 
 export function formatApiError(err) {
   if (err?.details?.length) {
-    return err.details.map((d) => (d.field ? `${d.field}: ${d.message}` : d.message)).join(', ')
+    return err.details
+      .map((d) => (d.field ? `${d.field}: ${d.message}` : d.message))
+      .join(', ')
   }
   return err?.message || 'Terjadi kesalahan'
 }

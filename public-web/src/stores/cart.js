@@ -23,7 +23,11 @@ export const useCartStore = defineStore('cart', {
       (state) =>
       (productId, variantOptionIds = []) => {
         const key = lineKey(productId, variantOptionIds)
-        return state.items.find((i) => lineKey(i.productId, i.variantOptionIds) === key)?.qty ?? 0
+        return (
+          state.items.find(
+            (i) => lineKey(i.productId, i.variantOptionIds) === key
+          )?.qty ?? 0
+        )
       },
     totalQty: (state) => state.items.reduce((sum, i) => sum + i.qty, 0),
     isEmpty: (state) => state.items.length === 0,
@@ -34,20 +38,31 @@ export const useCartStore = defineStore('cart', {
     setQty(productId, variantOptionIds, qty) {
       const key = lineKey(productId, variantOptionIds)
       if (qty <= 0) {
-        this.items = this.items.filter((i) => lineKey(i.productId, i.variantOptionIds) !== key)
+        this.items = this.items.filter(
+          (i) => lineKey(i.productId, i.variantOptionIds) !== key
+        )
       } else {
-        const existing = this.items.find((i) => lineKey(i.productId, i.variantOptionIds) === key)
+        const existing = this.items.find(
+          (i) => lineKey(i.productId, i.variantOptionIds) === key
+        )
         if (existing) {
           existing.qty = qty
         } else {
-          this.items.push({ productId, variantOptionIds: [...(variantOptionIds ?? [])], qty, catatan: '' })
+          this.items.push({
+            productId,
+            variantOptionIds: [...(variantOptionIds ?? [])],
+            qty,
+            catatan: '',
+          })
         }
       }
       this.persist()
     },
     setNote(productId, variantOptionIds, catatan) {
       const key = lineKey(productId, variantOptionIds)
-      const existing = this.items.find((i) => lineKey(i.productId, i.variantOptionIds) === key)
+      const existing = this.items.find(
+        (i) => lineKey(i.productId, i.variantOptionIds) === key
+      )
       if (existing) {
         existing.catatan = catatan
         this.persist()

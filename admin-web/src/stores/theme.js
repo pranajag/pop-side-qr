@@ -8,7 +8,9 @@ const STORAGE_KEY = 'popside.theme'
 // there's exactly one place that reads localStorage/prefers-color-scheme on
 // first load, and no risk of the two disagreeing.
 export const useThemeStore = defineStore('theme', {
-  state: () => ({ isDark: document.documentElement.classList.contains('dark') }),
+  state: () => ({
+    isDark: document.documentElement.classList.contains('dark'),
+  }),
   actions: {
     toggle() {
       this.isDark = !this.isDark

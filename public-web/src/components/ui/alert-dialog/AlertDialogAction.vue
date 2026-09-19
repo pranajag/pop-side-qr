@@ -1,8 +1,8 @@
 <script setup>
-import { reactiveOmit } from "@vueuse/core";
-import { AlertDialogAction } from "reka-ui";
-import { cn } from "@/lib/utils";
-import { buttonVariants } from '@/components/ui/button';
+import { reactiveOmit } from '@vueuse/core'
+import { AlertDialogAction } from 'reka-ui'
+import { cn } from '@/lib/utils'
+import { buttonVariants } from '@/components/ui/button'
 
 const props = defineProps({
   asChild: { type: Boolean, required: false },
@@ -12,11 +12,11 @@ const props = defineProps({
     required: false,
     skipCheck: true,
   },
-  variant: { type: null, required: false, default: "default" },
-  size: { type: null, required: false, default: "default" },
-});
+  variant: { type: null, required: false, default: 'default' },
+  size: { type: null, required: false, default: 'default' },
+})
 
-const delegatedProps = reactiveOmit(props, "class", "variant", "size");
+const delegatedProps = reactiveOmit(props, 'class', 'variant', 'size')
 </script>
 
 <template>

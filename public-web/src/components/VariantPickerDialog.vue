@@ -5,7 +5,13 @@ import { useLocaleStore } from '@/stores/locale'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import QtyStepper from '@/components/QtyStepper.vue'
 
 const props = defineProps({
@@ -44,7 +50,9 @@ function isSelected(group, optionId) {
 function toggleOption(group, optionId) {
   if (group.multiple) {
     const current = selections[group.id] ?? []
-    selections[group.id] = current.includes(optionId) ? current.filter((id) => id !== optionId) : [...current, optionId]
+    selections[group.id] = current.includes(optionId)
+      ? current.filter((id) => id !== optionId)
+      : [...current, optionId]
   } else {
     selections[group.id] = [optionId]
   }
@@ -52,7 +60,9 @@ function toggleOption(group, optionId) {
 
 const missingRequired = computed(() => {
   if (!props.product) return []
-  return props.product.variantGroups.filter((g) => g.required && (selections[g.id]?.length ?? 0) === 0)
+  return props.product.variantGroups.filter(
+    (g) => g.required && (selections[g.id]?.length ?? 0) === 0
+  )
 })
 const canConfirm = computed(() => missingRequired.value.length === 0)
 
@@ -70,8 +80,13 @@ const unitPrice = computed(() => {
 function onConfirm() {
   if (!canConfirm.value) return
   const existingQty = cart.qtyFor(props.product.id, selectedOptionIds.value)
-  cart.setQty(props.product.id, selectedOptionIds.value, existingQty + qty.value)
-  if (catatan.value) cart.setNote(props.product.id, selectedOptionIds.value, catatan.value)
+  cart.setQty(
+    props.product.id,
+    selectedOptionIds.value,
+    existingQty + qty.value
+  )
+  if (catatan.value)
+    cart.setNote(props.product.id, selectedOptionIds.value, catatan.value)
   emit('update:open', false)
 }
 </script>
@@ -84,10 +99,16 @@ function onConfirm() {
       </DialogHeader>
 
       <div class="space-y-5">
-        <section v-for="group in product.variantGroups" :key="group.id" class="space-y-2">
+        <section
+          v-for="group in product.variantGroups"
+          :key="group.id"
+          class="space-y-2"
+        >
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-semibold">{{ group.nama }}</h3>
-            <span v-if="group.required" class="text-xs text-destructive">{{ locale.t('wajibPilih') }}</span>
+            <span v-if="group.required" class="text-xs text-destructive">{{
+              locale.t('wajibPilih')
+            }}</span>
           </div>
 
           <div v-if="group.multiple" class="space-y-2">
@@ -96,10 +117,17 @@ function onConfirm() {
               :key="option.id"
               class="flex items-center gap-3 rounded-lg border px-3 py-2.5"
             >
-              <Checkbox :model-value="isSelected(group, option.id)" @update:model-value="toggleOption(group, option.id)" />
+              <Checkbox
+                :model-value="isSelected(group, option.id)"
+                @update:model-value="toggleOption(group, option.id)"
+              />
               <span class="flex-1 text-sm">{{ option.nama }}</span>
-              <span v-if="Number(option.hargaTambahan) !== 0" class="text-xs text-muted-foreground">
-                {{ Number(option.hargaTambahan) > 0 ? '+' : '' }}{{ formatRupiah(option.hargaTambahan) }}
+              <span
+                v-if="Number(option.hargaTambahan) !== 0"
+                class="text-xs text-muted-foreground"
+              >
+                {{ Number(option.hargaTambahan) > 0 ? '+' : ''
+                }}{{ formatRupiah(option.hargaTambahan) }}
               </span>
             </label>
           </div>
@@ -117,8 +145,12 @@ function onConfirm() {
                 @change="toggleOption(group, option.id)"
               />
               <span class="flex-1 text-sm">{{ option.nama }}</span>
-              <span v-if="Number(option.hargaTambahan) !== 0" class="text-xs text-muted-foreground">
-                {{ Number(option.hargaTambahan) > 0 ? '+' : '' }}{{ formatRupiah(option.hargaTambahan) }}
+              <span
+                v-if="Number(option.hargaTambahan) !== 0"
+                class="text-xs text-muted-foreground"
+              >
+                {{ Number(option.hargaTambahan) > 0 ? '+' : ''
+                }}{{ formatRupiah(option.hargaTambahan) }}
               </span>
             </label>
           </div>
@@ -131,8 +163,14 @@ function onConfirm() {
       </div>
 
       <DialogFooter>
-        <Button class="h-11 w-full bg-brand-cta text-heading hover:bg-brand-cta/90" :disabled="!canConfirm" @click="onConfirm">
-          {{ locale.t('tambahHarga', { price: formatRupiah(unitPrice * qty) }) }}
+        <Button
+          class="h-11 w-full bg-brand-cta text-heading hover:bg-brand-cta/90"
+          :disabled="!canConfirm"
+          @click="onConfirm"
+        >
+          {{
+            locale.t('tambahHarga', { price: formatRupiah(unitPrice * qty) })
+          }}
         </Button>
       </DialogFooter>
     </DialogContent>

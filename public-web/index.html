@@ -10,13 +10,15 @@
     (stores/theme.js) just reads this same class back on init instead of
     deciding it itself. -->
     <script>
-      (function () {
+      ;(function () {
         try {
-          var saved = localStorage.getItem('popside.theme');
-          var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-          if (dark) document.documentElement.classList.add('dark');
+          var saved = localStorage.getItem('popside.theme')
+          var dark = saved
+            ? saved === 'dark'
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+          if (dark) document.documentElement.classList.add('dark')
         } catch (e) {}
-      })();
+      })()
     </script>
   </head>
   <body>

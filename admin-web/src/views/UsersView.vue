@@ -9,7 +9,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -19,7 +25,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,12 +53,19 @@ const submitting = ref(false)
 const deleteTarget = ref(null)
 const deleting = ref(false)
 
-const form = reactive({ username: '', password: '', role: 'kasir', isActive: true })
+const form = reactive({
+  username: '',
+  password: '',
+  role: 'kasir',
+  isActive: true,
+})
 
 // A solo admin editing their own row can't change role/isActive here — the
 // API rejects it outright to avoid a self-lockout, so the fields are
 // disabled instead of letting the submit round-trip just to show an error.
-const editingSelf = computed(() => editingId.value !== null && editingId.value === auth.user?.id)
+const editingSelf = computed(
+  () => editingId.value !== null && editingId.value === auth.user?.id
+)
 
 onMounted(() => store.fetchAll())
 
@@ -72,7 +91,11 @@ async function onSubmit() {
   submitting.value = true
   try {
     if (editingId.value) {
-      const payload = { username: form.username, role: form.role, isActive: form.isActive }
+      const payload = {
+        username: form.username,
+        role: form.role,
+        isActive: form.isActive,
+      }
       if (form.password) payload.password = form.password
       await store.update(editingId.value, payload)
       toast.success('Akun diperbarui')
@@ -120,7 +143,9 @@ async function onDeleteConfirm() {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-lg font-semibold tracking-tight">Akun Staff</h1>
-        <p class="text-sm text-muted-foreground">Kelola akun admin dan kasir.</p>
+        <p class="text-sm text-muted-foreground">
+          Kelola akun admin dan kasir.
+        </p>
       </div>
       <Button class="gap-2" @click="openCreate">
         <PlusIcon class="size-4" />
@@ -139,16 +164,25 @@ async function onDeleteConfirm() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableEmpty v-if="!store.loading && store.items.length === 0" :colspan="4">
+          <TableEmpty
+            v-if="!store.loading && store.items.length === 0"
+            :colspan="4"
+          >
             Belum ada akun.
           </TableEmpty>
           <TableRow v-for="user in store.items" :key="user.id">
             <TableCell class="font-medium">
               {{ user.username }}
-              <span v-if="user.id === auth.user?.id" class="text-xs text-muted-foreground">(kamu)</span>
+              <span
+                v-if="user.id === auth.user?.id"
+                class="text-xs text-muted-foreground"
+                >(kamu)</span
+              >
             </TableCell>
             <TableCell>
-              <Badge variant="outline">{{ user.role === 'admin' ? 'Admin' : 'Kasir' }}</Badge>
+              <Badge variant="outline">{{
+                user.role === 'admin' ? 'Admin' : 'Kasir'
+              }}</Badge>
             </TableCell>
             <TableCell>
               <Badge :variant="user.isActive ? 'default' : 'secondary'">
@@ -176,12 +210,19 @@ async function onDeleteConfirm() {
     <Dialog v-model:open="formOpen">
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{{ editingId ? 'Ubah Akun' : 'Tambah Akun' }}</DialogTitle>
+          <DialogTitle>{{
+            editingId ? 'Ubah Akun' : 'Tambah Akun'
+          }}</DialogTitle>
         </DialogHeader>
         <form id="user-form" class="space-y-4" @submit.prevent="onSubmit">
           <div class="space-y-2">
             <Label for="username">Username</Label>
-            <Input id="username" v-model="form.username" required maxlength="50" />
+            <Input
+              id="username"
+              v-model="form.username"
+              required
+              maxlength="50"
+            />
           </div>
           <div class="space-y-2">
             <Label for="password">Password</Label>
@@ -207,9 +248,15 @@ async function onDeleteConfirm() {
               </SelectContent>
             </Select>
           </div>
-          <div class="flex items-center justify-between rounded-md border px-3 py-2">
+          <div
+            class="flex items-center justify-between rounded-md border px-3 py-2"
+          >
             <Label for="isActive">Aktif</Label>
-            <Switch id="isActive" v-model="form.isActive" :disabled="editingSelf" />
+            <Switch
+              id="isActive"
+              v-model="form.isActive"
+              :disabled="editingSelf"
+            />
           </div>
           <p v-if="editingSelf" class="text-xs text-muted-foreground">
             Role dan status akun sendiri tidak bisa diubah dari sini.
@@ -224,18 +271,25 @@ async function onDeleteConfirm() {
       </DialogContent>
     </Dialog>
 
-    <AlertDialog :open="!!deleteTarget" @update:open="(v) => !v && (deleteTarget = null)">
+    <AlertDialog
+      :open="!!deleteTarget"
+      @update:open="(v) => !v && (deleteTarget = null)"
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Hapus akun "{{ deleteTarget?.username }}"?</AlertDialogTitle>
+          <AlertDialogTitle
+            >Hapus akun "{{ deleteTarget?.username }}"?</AlertDialogTitle
+          >
           <AlertDialogDescription>
-            Tindakan ini tidak bisa dibatalkan. Akun yang sudah punya riwayat aktivitas tidak bisa dihapus —
-            nonaktifkan saja lewat tombol Ubah.
+            Tindakan ini tidak bisa dibatalkan. Akun yang sudah punya riwayat
+            aktivitas tidak bisa dihapus — nonaktifkan saja lewat tombol Ubah.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
-          <AlertDialogAction :disabled="deleting" @click="onDeleteConfirm">Hapus</AlertDialogAction>
+          <AlertDialogAction :disabled="deleting" @click="onDeleteConfirm"
+            >Hapus</AlertDialogAction
+          >
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

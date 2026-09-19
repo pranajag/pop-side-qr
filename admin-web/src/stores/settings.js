@@ -16,7 +16,9 @@ export const useSettingsStore = defineStore('settings', {
     async updateQris(file) {
       const fd = new FormData()
       fd.append('foto', file)
-      const data = await api.put('/admin/settings/qris', fd, { isFormData: true })
+      const data = await api.put('/admin/settings/qris', fd, {
+        isFormData: true,
+      })
       this.qrisImage = data.settings.qrisImage
     },
   },

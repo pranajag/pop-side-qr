@@ -3,7 +3,13 @@ import { computed, reactive, ref, watch } from 'vue'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 const props = defineProps({
   open: { type: Boolean, required: true },
@@ -35,7 +41,9 @@ function isSelected(group, optionId) {
 function toggleOption(group, optionId) {
   if (group.multiple) {
     const current = selections[group.id] ?? []
-    selections[group.id] = current.includes(optionId) ? current.filter((id) => id !== optionId) : [...current, optionId]
+    selections[group.id] = current.includes(optionId)
+      ? current.filter((id) => id !== optionId)
+      : [...current, optionId]
   } else {
     selections[group.id] = [optionId]
   }
@@ -43,7 +51,9 @@ function toggleOption(group, optionId) {
 
 const missingRequired = computed(() => {
   if (!props.product) return []
-  return props.product.variantGroups.filter((g) => g.required && (selections[g.id]?.length ?? 0) === 0)
+  return props.product.variantGroups.filter(
+    (g) => g.required && (selections[g.id]?.length ?? 0) === 0
+  )
 })
 const canConfirm = computed(() => missingRequired.value.length === 0)
 
@@ -87,10 +97,16 @@ function onConfirm() {
       </DialogHeader>
 
       <div class="space-y-4">
-        <section v-for="group in product.variantGroups" :key="group.id" class="space-y-2">
+        <section
+          v-for="group in product.variantGroups"
+          :key="group.id"
+          class="space-y-2"
+        >
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-semibold">{{ group.nama }}</h3>
-            <span v-if="group.required" class="text-xs text-destructive">Wajib pilih</span>
+            <span v-if="group.required" class="text-xs text-destructive"
+              >Wajib pilih</span
+            >
           </div>
 
           <div class="space-y-1.5">
@@ -113,8 +129,12 @@ function onConfirm() {
                 @change="toggleOption(group, option.id)"
               />
               <span class="flex-1">{{ option.nama }}</span>
-              <span v-if="Number(option.hargaTambahan) !== 0" class="text-xs text-muted-foreground">
-                {{ Number(option.hargaTambahan) > 0 ? '+' : '' }}{{ formatRupiah(option.hargaTambahan) }}
+              <span
+                v-if="Number(option.hargaTambahan) !== 0"
+                class="text-xs text-muted-foreground"
+              >
+                {{ Number(option.hargaTambahan) > 0 ? '+' : ''
+                }}{{ formatRupiah(option.hargaTambahan) }}
               </span>
             </label>
           </div>
@@ -123,15 +143,29 @@ function onConfirm() {
         <div class="flex items-center justify-between border-t pt-3">
           <span class="text-sm font-medium">Jumlah</span>
           <div class="flex items-center gap-3">
-            <Button variant="outline" size="icon" type="button" @click="qty = Math.max(1, qty - 1)">-</Button>
+            <Button
+              variant="outline"
+              size="icon"
+              type="button"
+              @click="qty = Math.max(1, qty - 1)"
+              >-</Button
+            >
             <span class="w-4 text-center text-sm tabular-nums">{{ qty }}</span>
-            <Button variant="outline" size="icon" type="button" @click="qty = qty + 1">+</Button>
+            <Button
+              variant="outline"
+              size="icon"
+              type="button"
+              @click="qty = qty + 1"
+              >+</Button
+            >
           </div>
         </div>
       </div>
 
       <DialogFooter>
-        <Button :disabled="!canConfirm" @click="onConfirm"> Tambah &middot; {{ formatRupiah(unitPrice * qty) }} </Button>
+        <Button :disabled="!canConfirm" @click="onConfirm">
+          Tambah &middot; {{ formatRupiah(unitPrice * qty) }}
+        </Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>

@@ -23,7 +23,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,7 +60,9 @@ const router = useRouter()
 const store = useOrdersStore()
 const calls = useStaffCallsStore()
 const products = useProductsStore()
-const lowStockProducts = computed(() => products.items.filter((p) => stockStatus(p) !== null))
+const lowStockProducts = computed(() =>
+  products.items.filter((p) => stockStatus(p) !== null)
+)
 
 const searchQuery = ref('')
 const filteredItems = computed(() => {
@@ -115,7 +123,13 @@ const NEXT_ACTION = {
   cooking: { status: 'ready', label: 'Siap Diambil' },
   ready: { status: 'completed', label: 'Selesai' },
 }
-const CANCELLABLE = new Set(['pending', 'waiting_verif', 'confirmed', 'cooking', 'ready'])
+const CANCELLABLE = new Set([
+  'pending',
+  'waiting_verif',
+  'confirmed',
+  'cooking',
+  'ready',
+])
 // Past the payment gate (confirmed/cooking/ready) means money already
 // changed hands — cancelling one of these is a "void" (customer backed out
 // after paying), not a plain pre-payment cancel. Same statuses, different
@@ -133,10 +147,16 @@ const TERMINAL_STATUSES = new Set(['completed', 'cancelled'])
 const URGENT_MINUTES = 10
 const now = ref(Date.now())
 function elapsedMinutes(order) {
-  return Math.max(0, Math.floor((now.value - new Date(order.updatedAt).getTime()) / 60000))
+  return Math.max(
+    0,
+    Math.floor((now.value - new Date(order.updatedAt).getTime()) / 60000)
+  )
 }
 function isUrgent(order) {
-  return !TERMINAL_STATUSES.has(order.status) && elapsedMinutes(order) >= URGENT_MINUTES
+  return (
+    !TERMINAL_STATUSES.has(order.status) &&
+    elapsedMinutes(order) >= URGENT_MINUTES
+  )
 }
 
 let pollTimer = null
@@ -160,7 +180,10 @@ onUnmounted(() => {
 })
 
 function needsPaymentConfirm(order) {
-  return (order.metode === 'qris' && order.status === 'waiting_verif') || (order.metode !== 'qris' && order.status === 'pending')
+  return (
+    (order.metode === 'qris' && order.status === 'waiting_verif') ||
+    (order.metode !== 'qris' && order.status === 'pending')
+  )
 }
 
 async function onResolveCall(call) {
@@ -229,7 +252,11 @@ const cancelRefundInput = ref('')
 // before that, the customer hadn't paid yet, so there's nothing to give
 // back. QRIS/debit refunds don't run through this system's cash drawer at
 // all, so they're never asked for here either.
-const needsRefundInput = computed(() => cancelTarget.value?.metode === 'tunai' && cancelTarget.value?.status !== 'pending')
+const needsRefundInput = computed(
+  () =>
+    cancelTarget.value?.metode === 'tunai' &&
+    cancelTarget.value?.status !== 'pending'
+)
 
 // Same Number-vs-string gotcha as ShiftView's cash-counted input — Vue
 // auto-casts v-model on a native type="number" input to a Number once
@@ -248,7 +275,10 @@ function openCancel(order) {
   cancelReason.value = ''
   // Voiding a paid tunai order is almost always a full refund — prefilled
   // so the common case takes zero typing, still editable for a partial one.
-  cancelRefundInput.value = isVoidCase(order) && order.metode === 'tunai' ? String(order.totalHarga) : ''
+  cancelRefundInput.value =
+    isVoidCase(order) && order.metode === 'tunai'
+      ? String(order.totalHarga)
+      : ''
 }
 
 async function onCancelConfirm() {
@@ -257,9 +287,20 @@ async function onCancelConfirm() {
 
   cancelling.value = true
   try {
-    const refund = needsRefundInput.value ? cancelRefundNumber.value ?? undefined : undefined
-    await store.updateStatus(target.id, 'cancelled', cancelReason.value || undefined, refund)
-    toast.success(isVoidCase(target) ? `${target.kodeOrder} di-void` : `${target.kodeOrder} dibatalkan`)
+    const refund = needsRefundInput.value
+      ? (cancelRefundNumber.value ?? undefined)
+      : undefined
+    await store.updateStatus(
+      target.id,
+      'cancelled',
+      cancelReason.value || undefined,
+      refund
+    )
+    toast.success(
+      isVoidCase(target)
+        ? `${target.kodeOrder} di-void`
+        : `${target.kodeOrder} dibatalkan`
+    )
   } catch (err) {
     toast.error(formatApiError(err))
     store.fetchAll()
@@ -275,7 +316,9 @@ async function onCancelConfirm() {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-lg font-semibold tracking-tight">Pesanan</h1>
-        <p class="text-sm text-muted-foreground">Konfirmasi pembayaran & update status pesanan.</p>
+        <p class="text-sm text-muted-foreground">
+          Konfirmasi pembayaran & update status pesanan.
+        </p>
       </div>
       <Button class="gap-2" @click="router.push({ name: 'pesanan-manual' })">
         <PlusIcon class="size-4" />
@@ -283,31 +326,61 @@ async function onCancelConfirm() {
       </Button>
     </div>
 
-    <div v-if="calls.items.length > 0" class="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
-      <div v-for="call in calls.items" :key="call.id" class="flex items-center justify-between gap-3">
+    <div
+      v-if="calls.items.length > 0"
+      class="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950"
+    >
+      <div
+        v-for="call in calls.items"
+        :key="call.id"
+        class="flex items-center justify-between gap-3"
+      >
         <span class="flex items-center gap-2 text-sm">
-          <BellIcon class="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <BellIcon
+            class="size-4 shrink-0 text-amber-600 dark:text-amber-400"
+          />
           <span>
             <span class="font-semibold">Meja {{ call.nomorMeja }}</span>
-            <span v-if="call.catatan" class="text-muted-foreground"> · {{ call.catatan }}</span>
+            <span v-if="call.catatan" class="text-muted-foreground">
+              · {{ call.catatan }}</span
+            >
           </span>
         </span>
-        <Button size="sm" variant="outline" :disabled="resolvingCallId === call.id" @click="onResolveCall(call)">
-          <LoaderCircleIcon v-if="resolvingCallId === call.id" class="size-3.5 animate-spin" />
+        <Button
+          size="sm"
+          variant="outline"
+          :disabled="resolvingCallId === call.id"
+          @click="onResolveCall(call)"
+        >
+          <LoaderCircleIcon
+            v-if="resolvingCallId === call.id"
+            class="size-3.5 animate-spin"
+          />
           Selesai
         </Button>
       </div>
     </div>
 
-    <div v-if="lowStockProducts.length > 0" class="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950">
-      <PackageXIcon class="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+    <div
+      v-if="lowStockProducts.length > 0"
+      class="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950"
+    >
+      <PackageXIcon
+        class="size-4 shrink-0 text-amber-600 dark:text-amber-400"
+      />
       <span class="font-medium">Stok menipis:</span>
       <span
         v-for="(p, i) in lowStockProducts"
         :key="p.id"
-        :class="p.stok <= 0 ? 'font-semibold text-destructive' : 'text-amber-700 dark:text-amber-300'"
+        :class="
+          p.stok <= 0
+            ? 'font-semibold text-destructive'
+            : 'text-amber-700 dark:text-amber-300'
+        "
       >
-        {{ p.nama }} ({{ p.stok }}){{ i < lowStockProducts.length - 1 ? ',' : '' }}
+        {{ p.nama }} ({{ p.stok }}){{
+          i < lowStockProducts.length - 1 ? ',' : ''
+        }}
       </span>
     </div>
 
@@ -324,31 +397,54 @@ async function onCancelConfirm() {
         </Button>
       </div>
       <div class="relative w-full max-w-xs sm:w-64">
-        <SearchIcon class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input v-model="searchQuery" placeholder="Cari kode order, meja, nama..." class="pl-8" />
+        <SearchIcon
+          class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          v-model="searchQuery"
+          placeholder="Cari kode order, meja, nama..."
+          class="pl-8"
+        />
       </div>
     </div>
 
-    <p v-if="!store.loading && filteredItems.length === 0" class="py-10 text-center text-sm text-muted-foreground">
+    <p
+      v-if="!store.loading && filteredItems.length === 0"
+      class="py-10 text-center text-sm text-muted-foreground"
+    >
       {{ searchQuery ? 'Tidak ada pesanan yang cocok.' : 'Tidak ada pesanan.' }}
     </p>
 
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      <div v-for="order in filteredItems" :key="order.id" class="space-y-3 rounded-lg border bg-card p-4">
+      <div
+        v-for="order in filteredItems"
+        :key="order.id"
+        class="space-y-3 rounded-lg border bg-card p-4"
+      >
         <div class="flex items-start justify-between gap-2">
           <div>
             <p class="font-mono text-sm font-semibold">{{ order.kodeOrder }}</p>
             <p class="text-xs text-muted-foreground">
-              {{ order.nomorMeja ? `Meja ${order.nomorMeja}` : `Bawa Pulang${order.customerName ? ` · ${order.customerName}` : ''}` }}
+              {{
+                order.nomorMeja
+                  ? `Meja ${order.nomorMeja}`
+                  : `Bawa Pulang${order.customerName ? ` · ${order.customerName}` : ''}`
+              }}
               &middot; {{ order.metode.toUpperCase() }}
             </p>
           </div>
           <div class="flex flex-col items-end gap-1">
-            <Badge :class="STATUS_BADGE_CLASS[order.status]">{{ STATUS_LABEL[order.status] }}</Badge>
+            <Badge :class="STATUS_BADGE_CLASS[order.status]">{{
+              STATUS_LABEL[order.status]
+            }}</Badge>
             <p
               v-if="!TERMINAL_STATUSES.has(order.status)"
               class="flex items-center gap-1 text-[11px]"
-              :class="isUrgent(order) ? 'font-medium text-destructive' : 'text-muted-foreground'"
+              :class="
+                isUrgent(order)
+                  ? 'font-medium text-destructive'
+                  : 'text-muted-foreground'
+              "
             >
               <ClockIcon class="size-3" />
               {{ elapsedMinutes(order) }} menit
@@ -359,13 +455,19 @@ async function onCancelConfirm() {
         <ul class="space-y-0.5 text-sm text-muted-foreground">
           <li v-for="(item, idx) in order.items" :key="idx">
             {{ item.qty }}x {{ item.nama }}
-            <span v-if="item.variants?.length">({{ item.variants.map((v) => v.namaOption).join(', ') }})</span>
+            <span v-if="item.variants?.length"
+              >({{ item.variants.map((v) => v.namaOption).join(', ') }})</span
+            >
             <span v-if="item.catatan" class="italic">({{ item.catatan }})</span>
           </li>
         </ul>
-        <p v-if="order.catatan" class="text-xs italic text-muted-foreground">Catatan: {{ order.catatan }}</p>
+        <p v-if="order.catatan" class="text-xs italic text-muted-foreground">
+          Catatan: {{ order.catatan }}
+        </p>
 
-        <div class="flex items-center justify-between border-t pt-2 text-sm font-semibold">
+        <div
+          class="flex items-center justify-between border-t pt-2 text-sm font-semibold"
+        >
           <span>Total</span>
           <span>{{ formatRupiah(order.totalHarga) }}</span>
         </div>
@@ -383,7 +485,10 @@ async function onCancelConfirm() {
             :disabled="busyId === order.id"
             @click="openConfirm(order)"
           >
-            <LoaderCircleIcon v-if="busyId === order.id" class="size-3.5 animate-spin" />
+            <LoaderCircleIcon
+              v-if="busyId === order.id"
+              class="size-3.5 animate-spin"
+            />
             <CheckIcon v-else class="size-3.5" />
             Konfirmasi Bayar
           </Button>
@@ -394,13 +499,21 @@ async function onCancelConfirm() {
             :disabled="busyId === order.id"
             @click="onAdvance(order)"
           >
-            <LoaderCircleIcon v-if="busyId === order.id" class="size-3.5 animate-spin" />
+            <LoaderCircleIcon
+              v-if="busyId === order.id"
+              class="size-3.5 animate-spin"
+            />
             {{ NEXT_ACTION[order.status].label }}
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger as-child>
-              <Button size="sm" variant="outline" class="shrink-0" aria-label="Aksi lainnya">
+              <Button
+                size="sm"
+                variant="outline"
+                class="shrink-0"
+                aria-label="Aksi lainnya"
+              >
                 <EllipsisVerticalIcon class="size-3.5" />
               </Button>
             </DropdownMenuTrigger>
@@ -409,7 +522,11 @@ async function onCancelConfirm() {
                 <ReceiptIcon class="size-3.5" />
                 Cetak Struk
               </DropdownMenuItem>
-              <DropdownMenuItem v-if="order.hasBuktiBayar" class="gap-2" @click="buktiOrderId = order.id">
+              <DropdownMenuItem
+                v-if="order.hasBuktiBayar"
+                class="gap-2"
+                @click="buktiOrderId = order.id"
+              >
                 <ImageIcon class="size-3.5" />
                 Lihat Bukti
               </DropdownMenuItem>
@@ -433,7 +550,10 @@ async function onCancelConfirm() {
     <AlertDialog :open="confirmOpen" @update:open="(v) => (confirmOpen = v)">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Konfirmasi pembayaran {{ confirmTarget?.kodeOrder }}?</AlertDialogTitle>
+          <AlertDialogTitle
+            >Konfirmasi pembayaran
+            {{ confirmTarget?.kodeOrder }}?</AlertDialogTitle
+          >
           <AlertDialogDescription>
             {{
               confirmTarget?.metode === 'qris'
@@ -444,7 +564,11 @@ async function onCancelConfirm() {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
-          <AlertDialogAction :disabled="busyId === confirmTarget?.id" @click="onConfirm">Ya, Konfirmasi</AlertDialogAction>
+          <AlertDialogAction
+            :disabled="busyId === confirmTarget?.id"
+            @click="onConfirm"
+            >Ya, Konfirmasi</AlertDialogAction
+          >
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -453,43 +577,78 @@ async function onCancelConfirm() {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {{ cancelTarget && isVoidCase(cancelTarget) ? `Void pesanan ${cancelTarget?.kodeOrder}?` : `Batalkan pesanan ${cancelTarget?.kodeOrder}?` }}
+            {{
+              cancelTarget && isVoidCase(cancelTarget)
+                ? `Void pesanan ${cancelTarget?.kodeOrder}?`
+                : `Batalkan pesanan ${cancelTarget?.kodeOrder}?`
+            }}
           </AlertDialogTitle>
           <AlertDialogDescription>
             <template v-if="cancelTarget && isVoidCase(cancelTarget)">
-              Customer tidak jadi memesan, tapi pesanan ini sudah dibayar ({{ cancelTarget.metode.toUpperCase() }}).
-              Stok yang sudah dikurangi akan dikembalikan. Tindakan ini tidak bisa dibatalkan.
+              Customer tidak jadi memesan, tapi pesanan ini sudah dibayar ({{
+                cancelTarget.metode.toUpperCase()
+              }}). Stok yang sudah dikurangi akan dikembalikan. Tindakan ini
+              tidak bisa dibatalkan.
             </template>
             <template v-else>
-              Stok yang sudah dikurangi untuk pesanan ini akan dikembalikan. Tindakan ini tidak bisa dibatalkan.
+              Stok yang sudah dikurangi untuk pesanan ini akan dikembalikan.
+              Tindakan ini tidak bisa dibatalkan.
             </template>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div class="space-y-2">
           <Label for="cancel-reason">Alasan (opsional)</Label>
-          <Input id="cancel-reason" v-model="cancelReason" placeholder="Misal: stok habis, customer batal" maxlength="200" />
+          <Input
+            id="cancel-reason"
+            v-model="cancelReason"
+            placeholder="Misal: stok habis, customer batal"
+            maxlength="200"
+          />
         </div>
         <div v-if="needsRefundInput" class="space-y-2">
           <Label for="cancel-refund">Uang Dikembalikan ke Customer</Label>
-          <Input id="cancel-refund" v-model="cancelRefundInput" type="number" min="0" step="500" placeholder="0" />
+          <Input
+            id="cancel-refund"
+            v-model="cancelRefundInput"
+            type="number"
+            min="0"
+            step="500"
+            placeholder="0"
+          />
           <p class="text-xs text-muted-foreground">
-            Order ini sudah dikonfirmasi (tunai dianggap sudah diterima) — sudah diisi otomatis dengan total order,
-            sesuaikan kalau cuma sebagian yang dikembalikan. Ini yang dipakai rekonsiliasi kas shift ini.
+            Order ini sudah dikonfirmasi (tunai dianggap sudah diterima) — sudah
+            diisi otomatis dengan total order, sesuaikan kalau cuma sebagian
+            yang dikembalikan. Ini yang dipakai rekonsiliasi kas shift ini.
           </p>
         </div>
-        <div v-else-if="cancelTarget && isVoidCase(cancelTarget) && cancelTarget.metode !== 'tunai'" class="rounded-md border bg-muted/50 p-2.5 text-xs text-muted-foreground">
-          Pembayaran {{ cancelTarget.metode.toUpperCase() }} tidak lewat kas — proses refund-nya di luar sistem ini.
+        <div
+          v-else-if="
+            cancelTarget &&
+            isVoidCase(cancelTarget) &&
+            cancelTarget.metode !== 'tunai'
+          "
+          class="rounded-md border bg-muted/50 p-2.5 text-xs text-muted-foreground"
+        >
+          Pembayaran {{ cancelTarget.metode.toUpperCase() }} tidak lewat kas —
+          proses refund-nya di luar sistem ini.
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
           <AlertDialogAction :disabled="cancelling" @click="onCancelConfirm">
-            {{ cancelTarget && isVoidCase(cancelTarget) ? 'Ya, Void Pesanan' : 'Ya, Batalkan Pesanan' }}
+            {{
+              cancelTarget && isVoidCase(cancelTarget)
+                ? 'Ya, Void Pesanan'
+                : 'Ya, Batalkan Pesanan'
+            }}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
 
-    <Dialog :open="!!buktiOrderId" @update:open="(v) => !v && (buktiOrderId = null)">
+    <Dialog
+      :open="!!buktiOrderId"
+      @update:open="(v) => !v && (buktiOrderId = null)"
+    >
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Bukti Pembayaran</DialogTitle>
@@ -503,16 +662,23 @@ async function onCancelConfirm() {
       </DialogContent>
     </Dialog>
 
-    <Dialog :open="!!receiptOrder" @update:open="(v) => !v && (receiptOrder = null)">
+    <Dialog
+      :open="!!receiptOrder"
+      @update:open="(v) => !v && (receiptOrder = null)"
+    >
       <DialogContent class="print:border-0 print:shadow-none sm:max-w-sm">
         <DialogHeader class="print:hidden">
           <DialogTitle>Struk {{ receiptOrder?.kodeOrder }}</DialogTitle>
         </DialogHeader>
         <div v-if="receiptOrder" class="space-y-3 font-mono text-xs">
-          <div class="flex flex-col items-center gap-1.5 border-b border-dashed pb-3 text-center">
+          <div
+            class="flex flex-col items-center gap-1.5 border-b border-dashed pb-3 text-center"
+          >
             <img :src="logoUrl" alt="Popside" class="size-10 rounded-md" />
             <p class="text-sm font-bold">POPSIDE</p>
-            <p class="text-muted-foreground">{{ formatDateTime(receiptOrder.createdAt) }}</p>
+            <p class="text-muted-foreground">
+              {{ formatDateTime(receiptOrder.createdAt) }}
+            </p>
           </div>
           <div class="space-y-0.5 border-b border-dashed pb-3">
             <div class="flex justify-between">
@@ -521,7 +687,10 @@ async function onCancelConfirm() {
             </div>
             <div class="flex justify-between">
               <span>{{ receiptOrder.nomorMeja ? 'Meja' : 'Tipe' }}</span>
-              <span>{{ receiptOrder.nomorMeja || `Bawa Pulang${receiptOrder.customerName ? ` (${receiptOrder.customerName})` : ''}` }}</span>
+              <span>{{
+                receiptOrder.nomorMeja ||
+                `Bawa Pulang${receiptOrder.customerName ? ` (${receiptOrder.customerName})` : ''}`
+              }}</span>
             </div>
             <div class="flex justify-between">
               <span>Bayar</span>
@@ -534,10 +703,18 @@ async function onCancelConfirm() {
                 <span>{{ item.qty }}x {{ item.nama }}</span>
                 <span>{{ formatRupiah(item.harga * item.qty) }}</span>
               </div>
-              <p v-if="item.variants?.length" class="pl-3 text-[11px] text-muted-foreground">
+              <p
+                v-if="item.variants?.length"
+                class="pl-3 text-[11px] text-muted-foreground"
+              >
                 {{ item.variants.map((v) => v.namaOption).join(', ') }}
               </p>
-              <p v-if="item.catatan" class="pl-3 text-[11px] italic text-muted-foreground">{{ item.catatan }}</p>
+              <p
+                v-if="item.catatan"
+                class="pl-3 text-[11px] italic text-muted-foreground"
+              >
+                {{ item.catatan }}
+              </p>
             </div>
           </div>
           <div class="flex justify-between text-sm font-bold">

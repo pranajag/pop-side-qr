@@ -22,7 +22,9 @@ export const useStaffCallsStore = defineStore('staffCalls', {
     async checkForNewCalls() {
       const data = await api.get('/admin/staff-calls')
       const currentIds = new Set(data.calls.map((c) => c.id))
-      const freshCalls = this.knownIds ? data.calls.filter((c) => !this.knownIds.has(c.id)) : []
+      const freshCalls = this.knownIds
+        ? data.calls.filter((c) => !this.knownIds.has(c.id))
+        : []
       this.knownIds = currentIds
       return freshCalls
     },

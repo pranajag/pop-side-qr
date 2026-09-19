@@ -2,7 +2,13 @@ import { defineStore } from 'pinia'
 import { api } from '@/lib/api'
 
 export const useOrdersStore = defineStore('orders', {
-  state: () => ({ items: [], loading: false, statusFilter: undefined, knownActiveIds: null, needsActionCount: 0 }),
+  state: () => ({
+    items: [],
+    loading: false,
+    statusFilter: undefined,
+    knownActiveIds: null,
+    needsActionCount: 0,
+  }),
   actions: {
     // Filter-independent: fetches the full active set regardless of
     // whatever statusFilter the Pesanan grid currently has selected, so a
@@ -13,12 +19,16 @@ export const useOrdersStore = defineStore('orders', {
     async checkForNewOrders() {
       const data = await api.get('/admin/orders')
       const currentIds = new Set(data.orders.map((o) => o.id))
-      const freshOrders = this.knownActiveIds ? data.orders.filter((o) => !this.knownActiveIds.has(o.id)) : []
+      const freshOrders = this.knownActiveIds
+        ? data.orders.filter((o) => !this.knownActiveIds.has(o.id))
+        : []
       this.knownActiveIds = currentIds
       // Sidebar badge count — orders sitting in a state that needs a kasir
       // to act (confirm payment), independent of whatever filter the
       // Pesanan grid itself currently has selected.
-      this.needsActionCount = data.orders.filter((o) => o.status === 'pending' || o.status === 'waiting_verif').length
+      this.needsActionCount = data.orders.filter(
+        (o) => o.status === 'pending' || o.status === 'waiting_verif'
+      ).length
       return freshOrders
     },
     async fetchAll() {
@@ -45,7 +55,11 @@ export const useOrdersStore = defineStore('orders', {
       this.replaceOrUpdate(data.order)
     },
     async updateStatus(id, status, catatan, refundAmount) {
-      const data = await api.patch(`/admin/orders/${id}/status`, { status, catatan, refundAmount })
+      const data = await api.patch(`/admin/orders/${id}/status`, {
+        status,
+        catatan,
+        refundAmount,
+      })
       this.replaceOrUpdate(data.order)
     },
     replaceOrUpdate(order) {

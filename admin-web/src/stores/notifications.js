@@ -43,12 +43,16 @@ export const useNotificationsStore = defineStore('notifications', {
     async checkLaporan() {
       const lastSeen = this.ensureBaseline(LAPORAN_KEY)
       const { shifts } = await api.get('/admin/shifts?limit=50')
-      this.laporanCount = shifts.filter((s) => s.endedAt && new Date(s.endedAt) > new Date(lastSeen)).length
+      this.laporanCount = shifts.filter(
+        (s) => s.endedAt && new Date(s.endedAt) > new Date(lastSeen)
+      ).length
     },
     async checkRiwayat() {
       const lastSeen = this.ensureBaseline(RIWAYAT_KEY)
       const { logs } = await api.get('/admin/orders/activity-log?limit=20')
-      this.riwayatCount = logs.filter((l) => new Date(l.createdAt) > new Date(lastSeen)).length
+      this.riwayatCount = logs.filter(
+        (l) => new Date(l.createdAt) > new Date(lastSeen)
+      ).length
     },
     markLaporanSeen() {
       setLastSeen(LAPORAN_KEY, new Date().toISOString())

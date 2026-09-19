@@ -12,9 +12,13 @@ export const useLocaleStore = defineStore('locale', {
   state: () => ({ locale: loadJSON(localStorage, STORAGE_KEY, 'id') }),
   getters: {
     t: (state) => (key, params) => {
-      const raw = translations[state.locale]?.[key] ?? translations.id[key] ?? key
+      const raw =
+        translations[state.locale]?.[key] ?? translations.id[key] ?? key
       if (!params) return raw
-      return Object.entries(params).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, v), raw)
+      return Object.entries(params).reduce(
+        (s, [k, v]) => s.replaceAll(`{${k}}`, v),
+        raw
+      )
     },
   },
   actions: {

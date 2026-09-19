@@ -13,7 +13,10 @@ export const useRecentOrdersStore = defineStore('recentOrders', {
   state: () => ({ items: initialOrders }),
   actions: {
     add(kodeOrder) {
-      this.items = [kodeOrder, ...this.items.filter((k) => k !== kodeOrder)].slice(0, MAX_RECENT)
+      this.items = [
+        kodeOrder,
+        ...this.items.filter((k) => k !== kodeOrder),
+      ].slice(0, MAX_RECENT)
       saveJSON(localStorage, STORAGE_KEY, this.items)
     },
   },

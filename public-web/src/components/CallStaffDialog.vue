@@ -4,8 +4,18 @@ import { toast } from 'vue-sonner'
 import { useTableStore } from '@/stores/table'
 import { useLocaleStore } from '@/stores/locale'
 import { api, formatApiError } from '@/lib/api'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { GlassWaterIcon, UtensilsCrossedIcon, MessageCircleQuestionIcon, HandIcon } from '@lucide/vue'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  GlassWaterIcon,
+  UtensilsCrossedIcon,
+  MessageCircleQuestionIcon,
+  HandIcon,
+} from '@lucide/vue'
 
 const props = defineProps({ open: { type: Boolean, required: true } })
 const emit = defineEmits(['update:open'])
@@ -15,9 +25,21 @@ const locale = useLocaleStore()
 const submitting = ref(false)
 
 const REASONS = computed(() => [
-  { label: locale.t('mintaAirPutih'), icon: GlassWaterIcon, catatan: 'Minta air putih' },
-  { label: locale.t('sendokGarpu'), icon: UtensilsCrossedIcon, catatan: 'Minta sendok/garpu' },
-  { label: locale.t('tanyaSesuatu'), icon: MessageCircleQuestionIcon, catatan: 'Tanya sesuatu' },
+  {
+    label: locale.t('mintaAirPutih'),
+    icon: GlassWaterIcon,
+    catatan: 'Minta air putih',
+  },
+  {
+    label: locale.t('sendokGarpu'),
+    icon: UtensilsCrossedIcon,
+    catatan: 'Minta sendok/garpu',
+  },
+  {
+    label: locale.t('tanyaSesuatu'),
+    icon: MessageCircleQuestionIcon,
+    catatan: 'Tanya sesuatu',
+  },
   { label: locale.t('lainnya'), icon: HandIcon, catatan: undefined },
 ])
 
@@ -25,7 +47,10 @@ async function call(reason) {
   if (submitting.value) return
   submitting.value = true
   try {
-    await api.post('/public/call-staff', { token: table.token, catatan: reason.catatan })
+    await api.post('/public/call-staff', {
+      token: table.token,
+      catatan: reason.catatan,
+    })
     toast.success(locale.t('staffSegeraKeMeja'))
     emit('update:open', false)
   } catch (err) {

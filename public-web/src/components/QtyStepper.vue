@@ -20,7 +20,9 @@ const locale = useLocaleStore()
     >
       <MinusIcon class="size-4" />
     </button>
-    <span class="w-4 text-center text-sm font-medium tabular-nums">{{ qty }}</span>
+    <span class="w-4 text-center text-sm font-medium tabular-nums">{{
+      qty
+    }}</span>
     <button
       type="button"
       class="flex size-11 shrink-0 items-center justify-center rounded-full border border-input active:bg-accent disabled:pointer-events-none disabled:opacity-40"

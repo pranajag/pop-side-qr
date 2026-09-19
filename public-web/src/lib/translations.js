@@ -49,7 +49,8 @@ export const translations = {
     kembaliKeKeranjangLabel: 'Kembali ke keranjang',
     checkoutTitle: 'Checkout',
     keranjangPerluDiperbarui: 'Keranjang perlu diperbarui',
-    keranjangPerluDiperbaruiDesc: 'Ada item di keranjang yang bermasalah (stok/ketersediaan). Kembali ke keranjang untuk memperbaikinya.',
+    keranjangPerluDiperbaruiDesc:
+      'Ada item di keranjang yang bermasalah (stok/ketersediaan). Kembali ke keranjang untuk memperbaikinya.',
     metodePembayaran: 'Metode Pembayaran',
     metodeQris: 'QRIS',
     metodeQrisDesc: 'Scan QRIS, bayar lewat e-wallet/m-banking apa pun',
@@ -62,7 +63,8 @@ export const translations = {
     ringkasan: 'Ringkasan',
     pesanSekarang: 'Pesan Sekarang',
     kirimPesananIni: 'Kirim pesanan ini?',
-    kirimPesananIniDesc: 'Total {total}, bayar {metode}. Pastikan pesanan sudah sesuai — order yang sudah dikirim tidak bisa diubah sendiri dari sini.',
+    kirimPesananIniDesc:
+      'Total {total}, bayar {metode}. Pastikan pesanan sudah sesuai — order yang sudah dikirim tidak bisa diubah sendiri dari sini.',
     yaPesanSekarang: 'Ya, Pesan Sekarang',
 
     // OrderView — status labels
@@ -83,10 +85,12 @@ export const translations = {
     scanQrisUntukBayar: 'Scan QRIS untuk bayar {total}',
     qrisBelumTersedia: 'QRIS belum tersedia — panggil staff untuk bantuan.',
     uploadBuktiPembayaran: 'Upload Bukti Pembayaran',
-    uploadBuktiDesc: 'Screenshot/foto notifikasi pembayaran dari e-wallet/m-banking kamu.',
+    uploadBuktiDesc:
+      'Screenshot/foto notifikasi pembayaran dari e-wallet/m-banking kamu.',
     sayaSudahBayar: 'Saya Sudah Bayar',
     kirimBuktiIni: 'Kirim bukti pembayaran ini?',
-    kirimBuktiIniDesc: 'Pastikan foto/screenshot yang dipilih benar-benar bukti pembayaran {total} untuk order ini. Kasir akan memverifikasi dari bukti ini.',
+    kirimBuktiIniDesc:
+      'Pastikan foto/screenshot yang dipilih benar-benar bukti pembayaran {total} untuk order ini. Kasir akan memverifikasi dari bukti ini.',
     yaSudahBayar: 'Ya, Sudah Bayar',
     sebutkanKodeKeKasir: 'Sebutkan kode order ini ke kasir',
     bayarMetodeLangsung: 'Bayar {metode} {total} langsung ke kasir.',
@@ -110,7 +114,8 @@ export const translations = {
     billKosong: 'Belum ada pesanan untuk kunjungan ini di meja ini.',
     billTotalKeseluruhan: 'Total Keseluruhan',
     billJumlahPesanan: '{n} pesanan',
-    billScopeNote: 'Cuma pesanan dari kunjungan meja ini yang sedang berjalan — bukan gabungan dari pengunjung sebelumnya.',
+    billScopeNote:
+      'Cuma pesanan dari kunjungan meja ini yang sedang berjalan — bukan gabungan dari pengunjung sebelumnya.',
 
     // CallStaffDialog
     panggilStaffTitle: 'Panggil Staff',
@@ -144,11 +149,13 @@ export const translations = {
     temaTerang: 'Switch to light mode',
 
     qrTidakValid: 'Invalid QR code',
-    qrTidakValidDesc: "This QR code isn't recognized or the table is inactive. Try scanning your table's QR again, or call staff for help.",
+    qrTidakValidDesc:
+      "This QR code isn't recognized or the table is inactive. Try scanning your table's QR again, or call staff for help.",
     memeriksaMeja: 'Checking your table...',
 
     scanQrTitle: 'Scan the QR at your table',
-    scanQrDesc: 'The menu can only be opened by scanning the QR code on your table.',
+    scanQrDesc:
+      'The menu can only be opened by scanning the QR code on your table.',
     pesananSayaLabel: 'My Orders',
     panggilStaffLabel: 'Call Staff',
     semua: 'All',
@@ -174,7 +181,8 @@ export const translations = {
     kembaliKeKeranjangLabel: 'Back to cart',
     checkoutTitle: 'Checkout',
     keranjangPerluDiperbarui: 'Cart needs updating',
-    keranjangPerluDiperbaruiDesc: 'Some items in your cart have an issue (stock/availability). Go back to the cart to fix it.',
+    keranjangPerluDiperbaruiDesc:
+      'Some items in your cart have an issue (stock/availability). Go back to the cart to fix it.',
     metodePembayaran: 'Payment Method',
     metodeQris: 'QRIS',
     metodeQrisDesc: 'Scan QRIS, pay with any e-wallet/mobile banking app',
@@ -187,7 +195,8 @@ export const translations = {
     ringkasan: 'Summary',
     pesanSekarang: 'Place Order',
     kirimPesananIni: 'Send this order?',
-    kirimPesananIniDesc: 'Total {total}, paying with {metode}. Make sure your order is correct — once sent, it can’t be changed yourself from here.',
+    kirimPesananIniDesc:
+      'Total {total}, paying with {metode}. Make sure your order is correct — once sent, it can’t be changed yourself from here.',
     yaPesanSekarang: 'Yes, Place Order',
 
     statusPending: 'Awaiting Payment',
@@ -207,10 +216,12 @@ export const translations = {
     scanQrisUntukBayar: 'Scan QRIS to pay {total}',
     qrisBelumTersedia: 'QRIS not available yet — call staff for help.',
     uploadBuktiPembayaran: 'Upload Payment Proof',
-    uploadBuktiDesc: 'Screenshot/photo of your e-wallet/mobile banking payment notification.',
+    uploadBuktiDesc:
+      'Screenshot/photo of your e-wallet/mobile banking payment notification.',
     sayaSudahBayar: "I've Paid",
     kirimBuktiIni: 'Send this payment proof?',
-    kirimBuktiIniDesc: "Make sure the photo/screenshot you selected is genuinely proof of {total} payment for this order. The cashier will verify it.",
+    kirimBuktiIniDesc:
+      'Make sure the photo/screenshot you selected is genuinely proof of {total} payment for this order. The cashier will verify it.',
     yaSudahBayar: "Yes, I've Paid",
     sebutkanKodeKeKasir: 'Give this order code to the cashier',
     bayarMetodeLangsung: 'Pay {metode} {total} directly to the cashier.',
@@ -224,7 +235,8 @@ export const translations = {
     estimasiSiap: 'Usually ready in about {n} minutes after confirmation',
     detailPesanan: 'Order Details',
     catatanLabel: 'Note: {catatan}',
-    terimaKasihMenungguVerifikasi: 'Thank you! Waiting for cashier verification.',
+    terimaKasihMenungguVerifikasi:
+      'Thank you! Waiting for cashier verification.',
     progresPesanan: 'Order Progress',
     pesananDibatalkanDesc: 'This order has been cancelled.',
 
@@ -234,7 +246,8 @@ export const translations = {
     billKosong: 'No orders yet for this visit at this table.',
     billTotalKeseluruhan: 'Grand Total',
     billJumlahPesanan: '{n} orders',
-    billScopeNote: "Only orders from this table's current visit — not combined with earlier guests.",
+    billScopeNote:
+      "Only orders from this table's current visit — not combined with earlier guests.",
 
     panggilStaffTitle: 'Call Staff',
     mintaAirPutih: 'Request Water',

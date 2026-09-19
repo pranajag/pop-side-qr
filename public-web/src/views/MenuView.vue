@@ -50,11 +50,16 @@ const activeCategoryId = ref(null)
 const searchQuery = ref('')
 const visibleCategories = computed(() => {
   const byCategory =
-    activeCategoryId.value === null ? menu.categories : menu.categories.filter((c) => c.id === activeCategoryId.value)
+    activeCategoryId.value === null
+      ? menu.categories
+      : menu.categories.filter((c) => c.id === activeCategoryId.value)
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return byCategory
   return byCategory
-    .map((c) => ({ ...c, products: c.products.filter((p) => p.nama.toLowerCase().includes(q)) }))
+    .map((c) => ({
+      ...c,
+      products: c.products.filter((p) => p.nama.toLowerCase().includes(q)),
+    }))
     .filter((c) => c.products.length > 0)
 })
 
@@ -102,8 +107,15 @@ const estimatedTotal = computed(() =>
 </script>
 
 <template>
-  <div v-if="!table.isVerified" class="flex min-h-svh flex-col items-center justify-center gap-6 px-6 text-center">
-    <img :src="logoUrl" alt="Popside" class="size-16 rounded-2xl shadow-lg shadow-black/10" />
+  <div
+    v-if="!table.isVerified"
+    class="flex min-h-svh flex-col items-center justify-center gap-6 px-6 text-center"
+  >
+    <img
+      :src="logoUrl"
+      alt="Popside"
+      class="size-16 rounded-2xl shadow-lg shadow-black/10"
+    />
     <QrCodeIcon class="size-10 text-muted-foreground" />
     <div class="space-y-1">
       <h1 class="text-lg font-semibold">{{ locale.t('scanQrTitle') }}</h1>
@@ -112,7 +124,9 @@ const estimatedTotal = computed(() =>
   </div>
 
   <div v-else class="mx-auto min-h-svh max-w-md pb-24 sm:max-w-lg md:max-w-xl">
-    <header class="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur">
+    <header
+      class="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur"
+    >
       <img :src="logoUrl" alt="Popside" class="size-10 shrink-0 rounded-lg" />
       <div class="flex items-center gap-2">
         <button
@@ -131,7 +145,9 @@ const estimatedTotal = computed(() =>
           <SunIcon v-if="theme.isDark" class="size-4" />
           <MoonIcon v-else class="size-4" />
         </button>
-        <span class="rounded-full bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-body">
+        <span
+          class="rounded-full bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-body"
+        >
           {{ locale.t('meja') }} {{ table.nomorMeja }}
         </span>
         <button
@@ -195,8 +211,13 @@ const estimatedTotal = computed(() =>
     </div>
 
     <main class="px-4 py-4">
-      <div v-if="!menu.loading && menu.categories.length > 0" class="relative mb-4">
-        <SearchIcon class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <div
+        v-if="!menu.loading && menu.categories.length > 0"
+        class="relative mb-4"
+      >
+        <SearchIcon
+          class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+        />
         <input
           v-model="searchQuery"
           type="text"
@@ -218,23 +239,44 @@ const estimatedTotal = computed(() =>
         </div>
       </div>
 
-      <p v-else-if="menu.categories.length === 0" class="py-10 text-center text-sm text-muted-foreground">
+      <p
+        v-else-if="menu.categories.length === 0"
+        class="py-10 text-center text-sm text-muted-foreground"
+      >
         {{ locale.t('menuBelumTersedia') }}
       </p>
 
-      <p v-else-if="visibleCategories.length === 0" class="py-10 text-center text-sm text-muted-foreground">
+      <p
+        v-else-if="visibleCategories.length === 0"
+        class="py-10 text-center text-sm text-muted-foreground"
+      >
         {{ locale.t('tidakAdaMenuCocok', { q: searchQuery }) }}
       </p>
 
       <div v-else class="space-y-5">
-        <section v-for="category in visibleCategories" :key="category.id" class="rounded-xl border bg-card p-4 shadow-sm">
-          <h2 class="mb-3 flex items-center gap-2 text-base font-bold text-foreground">
+        <section
+          v-for="category in visibleCategories"
+          :key="category.id"
+          class="rounded-xl border bg-card p-4 shadow-sm"
+        >
+          <h2
+            class="mb-3 flex items-center gap-2 text-base font-bold text-foreground"
+          >
             <span class="h-4 w-1.5 shrink-0 rounded-full bg-brand-cta"></span>
             {{ category.nama }}
           </h2>
-          <p v-if="category.products.length === 0" class="text-sm text-muted-foreground">{{ locale.t('belumAdaProduk') }}</p>
+          <p
+            v-if="category.products.length === 0"
+            class="text-sm text-muted-foreground"
+          >
+            {{ locale.t('belumAdaProduk') }}
+          </p>
           <ul class="divide-y divide-border">
-            <li v-for="product in category.products" :key="product.id" class="flex gap-3 py-3.5 first:pt-0 last:pb-0">
+            <li
+              v-for="product in category.products"
+              :key="product.id"
+              class="flex gap-3 py-3.5 first:pt-0 last:pb-0"
+            >
               <img
                 v-if="product.foto"
                 :src="photoUrl(product.foto)"
@@ -242,23 +284,40 @@ const estimatedTotal = computed(() =>
                 loading="lazy"
                 class="size-16 shrink-0 rounded-xl border object-cover"
               />
-              <div v-else class="flex size-16 shrink-0 items-center justify-center rounded-xl border bg-muted">
+              <div
+                v-else
+                class="flex size-16 shrink-0 items-center justify-center rounded-xl border bg-muted"
+              >
                 <ImageOffIcon class="size-5 text-muted-foreground" />
               </div>
 
               <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-medium">{{ product.nama }}</p>
-                <p class="text-sm text-muted-foreground">{{ formatRupiah(product.harga) }}</p>
-                <Badge v-if="isSoldOut(product)" variant="secondary" class="mt-1">{{ locale.t('habis') }}</Badge>
+                <p class="text-sm text-muted-foreground">
+                  {{ formatRupiah(product.harga) }}
+                </p>
+                <Badge
+                  v-if="isSoldOut(product)"
+                  variant="secondary"
+                  class="mt-1"
+                  >{{ locale.t('habis') }}</Badge
+                >
                 <div v-else class="mt-2">
                   <Button
-                    v-if="product.variantGroups.length > 0 || cart.qtyFor(product.id, []) === 0"
+                    v-if="
+                      product.variantGroups.length > 0 ||
+                      cart.qtyFor(product.id, []) === 0
+                    "
                     size="sm"
                     variant="outline"
                     class="h-9"
                     @click="onTambahClick(product)"
                   >
-                    {{ product.variantGroups.length > 0 ? locale.t('pilih') : locale.t('tambah') }}
+                    {{
+                      product.variantGroups.length > 0
+                        ? locale.t('pilih')
+                        : locale.t('tambah')
+                    }}
                   </Button>
                   <QtyStepper
                     v-else
@@ -274,29 +333,50 @@ const estimatedTotal = computed(() =>
       </div>
     </main>
 
-    <div v-if="!cart.isEmpty" class="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md px-3 pb-3 sm:max-w-lg md:max-w-xl">
+    <div
+      v-if="!cart.isEmpty"
+      class="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md px-3 pb-3 sm:max-w-lg md:max-w-xl"
+    >
       <button
         type="button"
         class="flex w-full items-center gap-3 rounded-2xl bg-brand-cta p-3 pr-4 shadow-lg shadow-black/15 transition-transform active:scale-[0.99]"
         @click="router.push({ name: 'cart' })"
       >
-        <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-primary text-sm font-bold text-body">
+        <span
+          class="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-primary text-sm font-bold text-body"
+        >
           {{ cart.totalQty }}
         </span>
         <span class="min-w-0 flex-1 text-left">
-          <span class="block text-[11px] font-medium text-brand-secondary">{{ locale.t('totalPesanan') }}</span>
-          <span class="block truncate text-base font-semibold text-heading">{{ formatRupiah(estimatedTotal) }}</span>
+          <span class="block text-[11px] font-medium text-brand-secondary">{{
+            locale.t('totalPesanan')
+          }}</span>
+          <span class="block truncate text-base font-semibold text-heading">{{
+            formatRupiah(estimatedTotal)
+          }}</span>
         </span>
-        <span class="flex shrink-0 items-center gap-0.5 text-sm font-semibold text-heading">
+        <span
+          class="flex shrink-0 items-center gap-0.5 text-sm font-semibold text-heading"
+        >
           {{ locale.t('checkout') }}
           <ChevronRightIcon class="size-4" />
         </span>
       </button>
     </div>
 
-    <VariantPickerDialog :open="pickerOpen" :product="pickerProduct" @update:open="pickerOpen = $event" />
-    <CallStaffDialog :open="callStaffOpen" @update:open="callStaffOpen = $event" />
-    <RecentOrdersDialog :open="recentOrdersOpen" @update:open="recentOrdersOpen = $event" />
+    <VariantPickerDialog
+      :open="pickerOpen"
+      :product="pickerProduct"
+      @update:open="pickerOpen = $event"
+    />
+    <CallStaffDialog
+      :open="callStaffOpen"
+      @update:open="callStaffOpen = $event"
+    />
+    <RecentOrdersDialog
+      :open="recentOrdersOpen"
+      @update:open="recentOrdersOpen = $event"
+    />
     <BillDialog :open="billOpen" @update:open="billOpen = $event" />
   </div>
 </template>

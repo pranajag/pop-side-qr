@@ -11,7 +11,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -21,7 +27,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +44,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { PlusIcon, PencilIcon, Trash2Icon, LoaderCircleIcon, ImageOffIcon, SearchIcon } from '@lucide/vue'
+import {
+  PlusIcon,
+  PencilIcon,
+  Trash2Icon,
+  LoaderCircleIcon,
+  ImageOffIcon,
+  SearchIcon,
+} from '@lucide/vue'
 
 const store = useProductsStore()
 const categoriesStore = useCategoriesStore()
@@ -71,7 +90,12 @@ function newVariantOption() {
   return { nama: '', hargaTambahan: 0 }
 }
 function newVariantGroup() {
-  return { nama: '', required: false, multiple: false, options: [newVariantOption()] }
+  return {
+    nama: '',
+    required: false,
+    multiple: false,
+    options: [newVariantOption()],
+  }
 }
 function addVariantGroup() {
   form.variantGroups.push(newVariantGroup())
@@ -159,7 +183,10 @@ function openEdit(product) {
     nama: g.nama,
     required: g.required,
     multiple: g.multiple,
-    options: g.options.map((o) => ({ nama: o.nama, hargaTambahan: Number(o.hargaTambahan) })),
+    options: g.options.map((o) => ({
+      nama: o.nama,
+      hargaTambahan: Number(o.hargaTambahan),
+    })),
   }))
   clearLocalPreview()
   fileInputKey.value++
@@ -218,20 +245,35 @@ async function onDeleteConfirm() {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-lg font-semibold tracking-tight">Produk</h1>
-        <p class="text-sm text-muted-foreground">Kelola menu, harga, dan stok.</p>
+        <p class="text-sm text-muted-foreground">
+          Kelola menu, harga, dan stok.
+        </p>
       </div>
-      <Button class="gap-2" :disabled="categoriesStore.items.length === 0" @click="openCreate">
+      <Button
+        class="gap-2"
+        :disabled="categoriesStore.items.length === 0"
+        @click="openCreate"
+      >
         <PlusIcon class="size-4" />
         Tambah Produk
       </Button>
     </div>
-    <p v-if="categoriesStore.items.length === 0" class="text-sm text-muted-foreground">
+    <p
+      v-if="categoriesStore.items.length === 0"
+      class="text-sm text-muted-foreground"
+    >
       Tambahkan kategori dulu sebelum bisa membuat produk.
     </p>
 
     <div class="relative max-w-xs">
-      <SearchIcon class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input v-model="searchQuery" placeholder="Cari nama produk..." class="pl-8" />
+      <SearchIcon
+        class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+      />
+      <Input
+        v-model="searchQuery"
+        placeholder="Cari nama produk..."
+        class="pl-8"
+      />
     </div>
 
     <div class="rounded-lg border bg-card">
@@ -248,8 +290,13 @@ async function onDeleteConfirm() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableEmpty v-if="!store.loading && filteredItems.length === 0" :colspan="7">
-            {{ searchQuery ? 'Tidak ada produk yang cocok.' : 'Belum ada produk.' }}
+          <TableEmpty
+            v-if="!store.loading && filteredItems.length === 0"
+            :colspan="7"
+          >
+            {{
+              searchQuery ? 'Tidak ada produk yang cocok.' : 'Belum ada produk.'
+            }}
           </TableEmpty>
           <TableRow v-for="p in filteredItems" :key="p.id">
             <TableCell>
@@ -259,18 +306,34 @@ async function onDeleteConfirm() {
                 :alt="p.nama"
                 class="size-10 rounded-md border object-cover"
               />
-              <div v-else class="flex size-10 items-center justify-center rounded-md border bg-muted">
+              <div
+                v-else
+                class="flex size-10 items-center justify-center rounded-md border bg-muted"
+              >
                 <ImageOffIcon class="size-4 text-muted-foreground" />
               </div>
             </TableCell>
             <TableCell class="font-medium">{{ p.nama }}</TableCell>
-            <TableCell class="text-muted-foreground">{{ categoryName(p.categoryId) }}</TableCell>
+            <TableCell class="text-muted-foreground">{{
+              categoryName(p.categoryId)
+            }}</TableCell>
             <TableCell>{{ formatRupiah(p.harga) }}</TableCell>
             <TableCell>
-              <span :class="{ 'font-semibold text-destructive': stockStatus(p) === 'habis', 'font-semibold text-amber-600 dark:text-amber-400': stockStatus(p) === 'menipis' }">
+              <span
+                :class="{
+                  'font-semibold text-destructive': stockStatus(p) === 'habis',
+                  'font-semibold text-amber-600 dark:text-amber-400':
+                    stockStatus(p) === 'menipis',
+                }"
+              >
                 {{ p.trackStock ? p.stok : '—' }}
               </span>
-              <Badge v-if="stockStatus(p) === 'habis'" variant="destructive" class="ml-1.5">Habis</Badge>
+              <Badge
+                v-if="stockStatus(p) === 'habis'"
+                variant="destructive"
+                class="ml-1.5"
+                >Habis</Badge
+              >
               <Badge
                 v-else-if="stockStatus(p) === 'menipis'"
                 class="ml-1.5 bg-amber-100 text-amber-700 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-950"
@@ -299,7 +362,9 @@ async function onDeleteConfirm() {
     <Dialog v-model:open="formOpen">
       <DialogContent class="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{{ editingId ? 'Ubah Produk' : 'Tambah Produk' }}</DialogTitle>
+          <DialogTitle>{{
+            editingId ? 'Ubah Produk' : 'Tambah Produk'
+          }}</DialogTitle>
         </DialogHeader>
         <form id="product-form" class="space-y-4" @submit.prevent="onSubmit">
           <div class="space-y-2">
@@ -309,7 +374,11 @@ async function onDeleteConfirm() {
                 <SelectValue placeholder="Pilih kategori" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem v-for="c in categoriesStore.items" :key="c.id" :value="c.id">
+                <SelectItem
+                  v-for="c in categoriesStore.items"
+                  :key="c.id"
+                  :value="c.id"
+                >
                   {{ c.nama }}
                 </SelectItem>
               </SelectContent>
@@ -324,23 +393,43 @@ async function onDeleteConfirm() {
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-2">
               <Label for="harga">Harga (Rp)</Label>
-              <Input id="harga" v-model.number="form.harga" type="number" min="0" step="1" required />
+              <Input
+                id="harga"
+                v-model.number="form.harga"
+                type="number"
+                min="0"
+                step="1"
+                required
+              />
             </div>
             <div class="space-y-2">
               <Label for="stok">Stok</Label>
-              <Input id="stok" v-model.number="form.stok" type="number" min="0" step="1" :disabled="!form.trackStock" />
+              <Input
+                id="stok"
+                v-model.number="form.stok"
+                type="number"
+                min="0"
+                step="1"
+                :disabled="!form.trackStock"
+              />
             </div>
           </div>
 
-          <div class="flex items-center justify-between rounded-md border px-3 py-2">
+          <div
+            class="flex items-center justify-between rounded-md border px-3 py-2"
+          >
             <div>
               <Label for="trackStock">Lacak stok</Label>
-              <p class="text-xs text-muted-foreground">Aktifkan untuk produk dengan stok fisik terbatas.</p>
+              <p class="text-xs text-muted-foreground">
+                Aktifkan untuk produk dengan stok fisik terbatas.
+              </p>
             </div>
             <Switch id="trackStock" v-model="form.trackStock" />
           </div>
 
-          <div class="flex items-center justify-between rounded-md border px-3 py-2">
+          <div
+            class="flex items-center justify-between rounded-md border px-3 py-2"
+          >
             <Label for="isAvailable">Tersedia</Label>
             <Switch id="isAvailable" v-model="form.isAvailable" />
           </div>
@@ -348,8 +437,16 @@ async function onDeleteConfirm() {
           <div class="space-y-2">
             <Label for="foto">Foto Produk</Label>
             <div class="flex items-center gap-3">
-              <img v-if="previewUrl" :src="previewUrl" alt="Preview" class="size-16 rounded-md border object-cover" />
-              <div v-else class="flex size-16 items-center justify-center rounded-md border bg-muted">
+              <img
+                v-if="previewUrl"
+                :src="previewUrl"
+                alt="Preview"
+                class="size-16 rounded-md border object-cover"
+              />
+              <div
+                v-else
+                class="flex size-16 items-center justify-center rounded-md border bg-muted"
+              >
                 <ImageOffIcon class="size-5 text-muted-foreground" />
               </div>
               <input
@@ -361,25 +458,52 @@ async function onDeleteConfirm() {
                 @change="onFileChange"
               />
             </div>
-            <p class="text-xs text-muted-foreground">JPEG, PNG, atau WebP. Maks 2MB. Opsional.</p>
+            <p class="text-xs text-muted-foreground">
+              JPEG, PNG, atau WebP. Maks 2MB. Opsional.
+            </p>
           </div>
 
           <div class="space-y-3 rounded-md border p-3">
             <div class="flex items-center justify-between">
               <Label>Varian</Label>
-              <Button type="button" size="sm" variant="outline" class="gap-1.5" @click="addVariantGroup">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                class="gap-1.5"
+                @click="addVariantGroup"
+              >
                 <PlusIcon class="size-3.5" />
                 Grup Varian
               </Button>
             </div>
-            <p v-if="form.variantGroups.length === 0" class="text-xs text-muted-foreground">
-              Opsional. Misal grup "Ukuran" (Regular/Large) atau "Topping" (Boba/Jelly).
+            <p
+              v-if="form.variantGroups.length === 0"
+              class="text-xs text-muted-foreground"
+            >
+              Opsional. Misal grup "Ukuran" (Regular/Large) atau "Topping"
+              (Boba/Jelly).
             </p>
 
-            <div v-for="(group, gi) in form.variantGroups" :key="gi" class="space-y-3 rounded-md border bg-muted/40 p-3">
+            <div
+              v-for="(group, gi) in form.variantGroups"
+              :key="gi"
+              class="space-y-3 rounded-md border bg-muted/40 p-3"
+            >
               <div class="flex items-start gap-2">
-                <Input v-model="group.nama" placeholder="Nama grup, mis. Ukuran" required maxlength="100" class="flex-1" />
-                <Button type="button" variant="ghost" size="icon" @click="removeVariantGroup(gi)">
+                <Input
+                  v-model="group.nama"
+                  placeholder="Nama grup, mis. Ukuran"
+                  required
+                  maxlength="100"
+                  class="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  @click="removeVariantGroup(gi)"
+                >
                   <Trash2Icon class="size-4" />
                 </Button>
               </div>
@@ -395,9 +519,25 @@ async function onDeleteConfirm() {
               </div>
 
               <div class="space-y-2">
-                <div v-for="(option, oi) in group.options" :key="oi" class="flex items-center gap-2">
-                  <Input v-model="option.nama" placeholder="Nama opsi, mis. Large" required maxlength="100" class="flex-1" />
-                  <Input v-model.number="option.hargaTambahan" type="number" step="1" placeholder="+0" class="w-28" />
+                <div
+                  v-for="(option, oi) in group.options"
+                  :key="oi"
+                  class="flex items-center gap-2"
+                >
+                  <Input
+                    v-model="option.nama"
+                    placeholder="Nama opsi, mis. Large"
+                    required
+                    maxlength="100"
+                    class="flex-1"
+                  />
+                  <Input
+                    v-model.number="option.hargaTambahan"
+                    type="number"
+                    step="1"
+                    placeholder="+0"
+                    class="w-28"
+                  />
                   <Button
                     type="button"
                     variant="ghost"
@@ -408,7 +548,13 @@ async function onDeleteConfirm() {
                     <Trash2Icon class="size-3.5" />
                   </Button>
                 </div>
-                <Button type="button" size="sm" variant="ghost" class="gap-1.5" @click="addVariantOption(gi)">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  class="gap-1.5"
+                  @click="addVariantOption(gi)"
+                >
                   <PlusIcon class="size-3.5" />
                   Tambah opsi
                 </Button>
@@ -425,18 +571,25 @@ async function onDeleteConfirm() {
       </DialogContent>
     </Dialog>
 
-    <AlertDialog :open="!!deleteTarget" @update:open="(v) => !v && (deleteTarget = null)">
+    <AlertDialog
+      :open="!!deleteTarget"
+      @update:open="(v) => !v && (deleteTarget = null)"
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Hapus produk "{{ deleteTarget?.nama }}"?</AlertDialogTitle>
+          <AlertDialogTitle
+            >Hapus produk "{{ deleteTarget?.nama }}"?</AlertDialogTitle
+          >
           <AlertDialogDescription>
-            Tindakan ini tidak bisa dibatalkan. Produk yang sudah pernah dipesan tidak bisa dihapus — nonaktifkan
-            saja lewat status "Tersedia".
+            Tindakan ini tidak bisa dibatalkan. Produk yang sudah pernah dipesan
+            tidak bisa dihapus — nonaktifkan saja lewat status "Tersedia".
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
-          <AlertDialogAction :disabled="deleting" @click="onDeleteConfirm">Hapus</AlertDialogAction>
+          <AlertDialogAction :disabled="deleting" @click="onDeleteConfirm"
+            >Hapus</AlertDialogAction
+          >
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

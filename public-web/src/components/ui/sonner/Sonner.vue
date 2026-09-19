@@ -6,10 +6,10 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
   XIcon,
-} from "@lucide/vue";
-import { reactiveOmit } from "@vueuse/core";
-import { Toaster as Sonner } from "vue-sonner";
-import { cn } from "@/lib/utils";
+} from '@lucide/vue'
+import { reactiveOmit } from '@vueuse/core'
+import { Toaster as Sonner } from 'vue-sonner'
+import { cn } from '@/lib/utils'
 
 const props = defineProps({
   id: { type: String, required: false },
@@ -33,8 +33,8 @@ const props = defineProps({
   swipeDirections: { type: Array, required: false },
   icons: { type: Object, required: false },
   containerAriaLabel: { type: String, required: false },
-});
-const delegatedProps = reactiveOmit(props, "class", "toastOptions");
+})
+const delegatedProps = reactiveOmit(props, 'class', 'toastOptions')
 </script>
 
 <template>

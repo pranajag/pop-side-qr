@@ -1,6 +1,6 @@
 <script setup>
-import { cn } from "@/lib/utils";
-import { alertVariants } from ".";
+import { cn } from '@/lib/utils'
+import { alertVariants } from '.'
 
 const props = defineProps({
   class: {
@@ -9,7 +9,7 @@ const props = defineProps({
     skipCheck: true,
   },
   variant: { type: null, required: false },
-});
+})
 </script>
 
 <template>

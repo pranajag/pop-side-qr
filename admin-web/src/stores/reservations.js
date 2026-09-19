@@ -7,7 +7,10 @@ export const useReservationsStore = defineStore('reservations', {
     async fetchAll() {
       this.loading = true
       try {
-        const query = this.statusFilter && this.statusFilter !== 'all' ? `?status=${this.statusFilter}` : ''
+        const query =
+          this.statusFilter && this.statusFilter !== 'all'
+            ? `?status=${this.statusFilter}`
+            : ''
         const data = await api.get(`/admin/reservations${query}`)
         this.items = data.reservations
       } finally {
@@ -28,7 +31,9 @@ export const useReservationsStore = defineStore('reservations', {
       if (idx !== -1) this.items[idx] = data.reservation
     },
     async updateStatus(id, status) {
-      const data = await api.patch(`/admin/reservations/${id}/status`, { status })
+      const data = await api.patch(`/admin/reservations/${id}/status`, {
+        status,
+      })
       const idx = this.items.findIndex((r) => r.id === id)
       if (idx !== -1) this.items[idx] = data.reservation
     },

@@ -1,5 +1,5 @@
 <script setup>
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils'
 
 const props = defineProps({
   class: {
@@ -7,7 +7,7 @@ const props = defineProps({
     required: false,
     skipCheck: true,
   },
-});
+})
 </script>
 
 <template>
@@ -16,7 +16,7 @@ const props = defineProps({
     :class="
       cn(
         'col-start-2 row-span-2 row-start-1 self-start justify-self-end',
-        props.class,
+        props.class
       )
     "
   >

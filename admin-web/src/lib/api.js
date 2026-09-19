@@ -1,4 +1,5 @@
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+export const API_URL =
+  import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
 let csrfToken = null
 
@@ -6,7 +7,10 @@ function setCsrfToken(token) {
   csrfToken = token
 }
 
-async function request(path, { method = 'GET', body, isFormData = false } = {}) {
+async function request(
+  path,
+  { method = 'GET', body, isFormData = false } = {}
+) {
   const headers = {}
   if (body !== undefined && !isFormData) {
     headers['Content-Type'] = 'application/json'
@@ -21,7 +25,8 @@ async function request(path, { method = 'GET', body, isFormData = false } = {}) 
     method,
     credentials: 'include',
     headers,
-    body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
+    body:
+      body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
   })
 
   if (res.status === 204) return null
@@ -37,7 +42,8 @@ async function request(path, { method = 'GET', body, isFormData = false } = {}) 
     const remaining = res.headers.get('ratelimit-remaining')
     const resetSeconds = res.headers.get('ratelimit-reset')
     if (remaining !== null) error.rateLimitRemaining = Number(remaining)
-    if (resetSeconds !== null) error.rateLimitResetSeconds = Number(resetSeconds)
+    if (resetSeconds !== null)
+      error.rateLimitResetSeconds = Number(resetSeconds)
     throw error
   }
   return data
@@ -47,7 +53,8 @@ export const api = {
   get: (path) => request(path),
   post: (path, body, opts) => request(path, { method: 'POST', body, ...opts }),
   put: (path, body, opts) => request(path, { method: 'PUT', body, ...opts }),
-  patch: (path, body, opts) => request(path, { method: 'PATCH', body, ...opts }),
+  patch: (path, body, opts) =>
+    request(path, { method: 'PATCH', body, ...opts }),
   del: (path) => request(path, { method: 'DELETE' }),
   setCsrfToken,
 }
@@ -55,7 +62,9 @@ export const api = {
 // Zod validation errors arrive as { error: 'Validation failed', details: [{ field, message }] }
 export function formatApiError(err) {
   if (err?.details?.length) {
-    return err.details.map((d) => (d.field ? `${d.field}: ${d.message}` : d.message)).join(', ')
+    return err.details
+      .map((d) => (d.field ? `${d.field}: ${d.message}` : d.message))
+      .join(', ')
   }
   return err?.message || 'Terjadi kesalahan'
 }

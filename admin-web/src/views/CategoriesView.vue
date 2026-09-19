@@ -17,7 +17,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,7 +44,12 @@ const submitting = ref(false)
 const deleteTarget = ref(null)
 const deleting = ref(false)
 
-const form = reactive({ nama: '', urutan: 0, isActive: true, estimasiMenit: '' })
+const form = reactive({
+  nama: '',
+  urutan: 0,
+  isActive: true,
+  estimasiMenit: '',
+})
 
 onMounted(() => store.fetchAll())
 
@@ -132,13 +143,18 @@ async function onDeleteConfirm() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableEmpty v-if="!store.loading && store.items.length === 0" :colspan="5">
+          <TableEmpty
+            v-if="!store.loading && store.items.length === 0"
+            :colspan="5"
+          >
             Belum ada kategori.
           </TableEmpty>
           <TableRow v-for="cat in store.items" :key="cat.id">
             <TableCell class="font-medium">{{ cat.nama }}</TableCell>
             <TableCell>{{ cat.urutan }}</TableCell>
-            <TableCell class="text-muted-foreground">{{ cat.estimasiMenit ? `~${cat.estimasiMenit} menit` : '—' }}</TableCell>
+            <TableCell class="text-muted-foreground">{{
+              cat.estimasiMenit ? `~${cat.estimasiMenit} menit` : '—'
+            }}</TableCell>
             <TableCell>
               <Badge :variant="cat.isActive ? 'default' : 'secondary'">
                 {{ cat.isActive ? 'Aktif' : 'Nonaktif' }}
@@ -160,7 +176,9 @@ async function onDeleteConfirm() {
     <Dialog v-model:open="formOpen">
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{{ editingId ? 'Ubah Kategori' : 'Tambah Kategori' }}</DialogTitle>
+          <DialogTitle>{{
+            editingId ? 'Ubah Kategori' : 'Tambah Kategori'
+          }}</DialogTitle>
         </DialogHeader>
         <form id="category-form" class="space-y-4" @submit.prevent="onSubmit">
           <div class="space-y-2">
@@ -169,16 +187,34 @@ async function onDeleteConfirm() {
           </div>
           <div class="space-y-2">
             <Label for="urutan">Urutan tampil</Label>
-            <Input id="urutan" v-model.number="form.urutan" type="number" min="0" required />
+            <Input
+              id="urutan"
+              v-model.number="form.urutan"
+              type="number"
+              min="0"
+              required
+            />
           </div>
           <div class="space-y-2">
-            <Label for="estimasiMenit">Estimasi Waktu Siap (menit, opsional)</Label>
-            <Input id="estimasiMenit" v-model="form.estimasiMenit" type="number" min="1" step="1" placeholder="Mis. 10" />
+            <Label for="estimasiMenit"
+              >Estimasi Waktu Siap (menit, opsional)</Label
+            >
+            <Input
+              id="estimasiMenit"
+              v-model="form.estimasiMenit"
+              type="number"
+              min="1"
+              step="1"
+              placeholder="Mis. 10"
+            />
             <p class="text-xs text-muted-foreground">
-              Ditampilkan ke customer di halaman status pesanan. Kosongkan kalau tidak mau menampilkan estimasi.
+              Ditampilkan ke customer di halaman status pesanan. Kosongkan kalau
+              tidak mau menampilkan estimasi.
             </p>
           </div>
-          <div class="flex items-center justify-between rounded-md border px-3 py-2">
+          <div
+            class="flex items-center justify-between rounded-md border px-3 py-2"
+          >
             <Label for="isActive">Aktif</Label>
             <Switch id="isActive" v-model="form.isActive" />
           </div>
@@ -192,17 +228,25 @@ async function onDeleteConfirm() {
       </DialogContent>
     </Dialog>
 
-    <AlertDialog :open="!!deleteTarget" @update:open="(v) => !v && (deleteTarget = null)">
+    <AlertDialog
+      :open="!!deleteTarget"
+      @update:open="(v) => !v && (deleteTarget = null)"
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Hapus kategori "{{ deleteTarget?.nama }}"?</AlertDialogTitle>
+          <AlertDialogTitle
+            >Hapus kategori "{{ deleteTarget?.nama }}"?</AlertDialogTitle
+          >
           <AlertDialogDescription>
-            Tindakan ini tidak bisa dibatalkan. Kategori yang masih punya produk tidak bisa dihapus.
+            Tindakan ini tidak bisa dibatalkan. Kategori yang masih punya produk
+            tidak bisa dihapus.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
-          <AlertDialogAction :disabled="deleting" @click="onDeleteConfirm">Hapus</AlertDialogAction>
+          <AlertDialogAction :disabled="deleting" @click="onDeleteConfirm"
+            >Hapus</AlertDialogAction
+          >
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

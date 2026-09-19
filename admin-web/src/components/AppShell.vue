@@ -39,7 +39,12 @@ const theme = useThemeStore()
 
 const nav = computed(() => {
   const items = [
-    { to: { name: 'pesanan' }, label: 'Pesanan', icon: ClipboardListIcon, badge: orders.needsActionCount },
+    {
+      to: { name: 'pesanan' },
+      label: 'Pesanan',
+      icon: ClipboardListIcon,
+      badge: orders.needsActionCount,
+    },
     { to: { name: 'shift' }, label: 'Shift', icon: TimerIcon },
     { to: { name: 'reservasi' }, label: 'Reservasi', icon: CalendarClockIcon },
   ]
@@ -48,8 +53,18 @@ const nav = computed(() => {
       { to: { name: 'kategori' }, label: 'Kategori', icon: LayoutGridIcon },
       { to: { name: 'produk' }, label: 'Produk', icon: UtensilsIcon },
       { to: { name: 'meja' }, label: 'Meja', icon: QrCodeIcon },
-      { to: { name: 'laporan' }, label: 'Laporan', icon: BarChart3Icon, badge: notifications.laporanCount },
-      { to: { name: 'riwayat' }, label: 'Riwayat Aktivitas', icon: HistoryIcon, badge: notifications.riwayatCount },
+      {
+        to: { name: 'laporan' },
+        label: 'Laporan',
+        icon: BarChart3Icon,
+        badge: notifications.laporanCount,
+      },
+      {
+        to: { name: 'riwayat' },
+        label: 'Riwayat Aktivitas',
+        icon: HistoryIcon,
+        badge: notifications.riwayatCount,
+      },
       { to: { name: 'akun' }, label: 'Akun Staff', icon: UsersIcon },
       { to: { name: 'pengaturan' }, label: 'Pengaturan', icon: SettingsIcon }
     )
@@ -67,9 +82,12 @@ async function onLogout() {
 // (laptop/TV). Closes itself on navigation so tapping a nav link doesn't
 // leave the drawer covering the page it just opened.
 const mobileNavOpen = ref(false)
-watch(() => route.path, () => {
-  mobileNavOpen.value = false
-})
+watch(
+  () => route.path,
+  () => {
+    mobileNavOpen.value = false
+  }
+)
 
 // Runs here (not in OrdersView) so a new order is noticed even while the
 // kasir is on Laporan/Produk/etc, not just while looking at the Pesanan tab.
@@ -78,7 +96,10 @@ watch(() => route.path, () => {
 async function refreshNotificationBadges() {
   if (!auth.isAdmin) return
   try {
-    await Promise.all([notifications.checkLaporan(), notifications.checkRiwayat()])
+    await Promise.all([
+      notifications.checkLaporan(),
+      notifications.checkRiwayat(),
+    ])
   } catch {
     // Next poll tick tries again.
   }
@@ -132,8 +153,16 @@ onUnmounted(() => clearInterval(newOrderTimer))
     <!-- Mobile/tablet top bar (lg:hidden) — the sidebar below is off-canvas
     at these widths, this is the only way to reach it. Sticky rather than
     fixed so it just pushes <main> down in normal flow, no padding math. -->
-    <header class="sticky top-0 z-30 flex items-center gap-3 border-b bg-card px-4 py-3 lg:hidden">
-      <Button variant="ghost" size="icon" class="shrink-0" aria-label="Buka menu" @click="mobileNavOpen = true">
+    <header
+      class="sticky top-0 z-30 flex items-center gap-3 border-b bg-card px-4 py-3 lg:hidden"
+    >
+      <Button
+        variant="ghost"
+        size="icon"
+        class="shrink-0"
+        aria-label="Buka menu"
+        @click="mobileNavOpen = true"
+      >
         <MenuIcon class="size-5" />
       </Button>
       <img :src="logoUrl" alt="Popside" class="size-8 shrink-0 rounded-lg" />
@@ -142,7 +171,9 @@ onUnmounted(() => clearInterval(newOrderTimer))
         variant="ghost"
         size="icon"
         class="ml-auto shrink-0"
-        :aria-label="theme.isDark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'"
+        :aria-label="
+          theme.isDark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'
+        "
         @click="theme.toggle()"
       >
         <SunIcon v-if="theme.isDark" class="size-4" />
@@ -167,7 +198,13 @@ onUnmounted(() => clearInterval(newOrderTimer))
           <p class="truncate text-sm font-semibold tracking-tight">Popside</p>
           <p class="truncate text-xs text-muted-foreground">Admin Dashboard</p>
         </div>
-        <Button variant="ghost" size="icon" class="shrink-0 lg:hidden" aria-label="Tutup menu" @click="mobileNavOpen = false">
+        <Button
+          variant="ghost"
+          size="icon"
+          class="shrink-0 lg:hidden"
+          aria-label="Tutup menu"
+          @click="mobileNavOpen = false"
+        >
           <XIcon class="size-4" />
         </Button>
       </div>
@@ -192,12 +229,19 @@ onUnmounted(() => clearInterval(newOrderTimer))
       <div class="border-t px-3 py-3">
         <div class="flex items-center justify-between gap-2 px-1">
           <p class="min-w-0 truncate text-xs text-muted-foreground">
-            Masuk sebagai <span class="font-medium text-foreground">{{ auth.user?.username }}</span>
-            <span class="text-muted-foreground/70">({{ auth.user?.role }})</span>
+            Masuk sebagai
+            <span class="font-medium text-foreground">{{
+              auth.user?.username
+            }}</span>
+            <span class="text-muted-foreground/70"
+              >({{ auth.user?.role }})</span
+            >
           </p>
           <button
             type="button"
-            :aria-label="theme.isDark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'"
+            :aria-label="
+              theme.isDark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'
+            "
             class="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             @click="theme.toggle()"
           >
@@ -205,7 +249,12 @@ onUnmounted(() => clearInterval(newOrderTimer))
             <MoonIcon v-else class="size-4" />
           </button>
         </div>
-        <Button variant="ghost" size="sm" class="mt-1 w-full justify-start gap-2" @click="onLogout">
+        <Button
+          variant="ghost"
+          size="sm"
+          class="mt-1 w-full justify-start gap-2"
+          @click="onLogout"
+        >
           <LogOutIcon class="size-4" />
           Keluar
         </Button>

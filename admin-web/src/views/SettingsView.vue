@@ -37,7 +37,10 @@ function qrisUrl(filename) {
   return `${API_URL}/public/settings/qris-photo/${filename}`
 }
 
-const previewUrl = computed(() => localPreviewUrl.value || (store.qrisImage ? qrisUrl(store.qrisImage) : null))
+const previewUrl = computed(
+  () =>
+    localPreviewUrl.value || (store.qrisImage ? qrisUrl(store.qrisImage) : null)
+)
 
 function onFileChange(e) {
   const file = e.target.files?.[0]
@@ -72,7 +75,9 @@ async function onSave() {
   <div class="max-w-lg space-y-6">
     <div>
       <h1 class="text-lg font-semibold tracking-tight">Pengaturan</h1>
-      <p class="text-sm text-muted-foreground">Gambar QRIS statis yang ditampilkan ke customer saat checkout.</p>
+      <p class="text-sm text-muted-foreground">
+        Gambar QRIS statis yang ditampilkan ke customer saat checkout.
+      </p>
     </div>
 
     <div class="space-y-4 rounded-lg border bg-card p-6">
@@ -83,7 +88,10 @@ async function onSave() {
           alt="QRIS"
           class="max-h-64 rounded-lg border object-contain"
         />
-        <div v-else class="flex h-48 w-48 items-center justify-center rounded-lg border bg-muted">
+        <div
+          v-else
+          class="flex h-48 w-48 items-center justify-center rounded-lg border bg-muted"
+        >
           <ImageOffIcon class="size-6 text-muted-foreground" />
         </div>
       </div>
@@ -98,27 +106,37 @@ async function onSave() {
           class="w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-input file:bg-transparent file:px-2.5 file:py-1 file:text-sm file:font-medium file:text-foreground"
           @change="onFileChange"
         />
-        <p class="text-xs text-muted-foreground">JPEG, PNG, atau WebP. Maks 2MB.</p>
+        <p class="text-xs text-muted-foreground">
+          JPEG, PNG, atau WebP. Maks 2MB.
+        </p>
       </div>
 
-      <Button :disabled="!selectedFile || submitting" @click="saveConfirmOpen = true">
+      <Button
+        :disabled="!selectedFile || submitting"
+        @click="saveConfirmOpen = true"
+      >
         <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
         Simpan
       </Button>
     </div>
 
-    <AlertDialog :open="saveConfirmOpen" @update:open="(v) => (saveConfirmOpen = v)">
+    <AlertDialog
+      :open="saveConfirmOpen"
+      @update:open="(v) => (saveConfirmOpen = v)"
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Ganti gambar QRIS?</AlertDialogTitle>
           <AlertDialogDescription>
-            Gambar ini akan langsung tampil ke SEMUA customer yang checkout QRIS mulai sekarang. Pastikan ini QRIS
-            yang benar sebelum menyimpan.
+            Gambar ini akan langsung tampil ke SEMUA customer yang checkout QRIS
+            mulai sekarang. Pastikan ini QRIS yang benar sebelum menyimpan.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
-          <AlertDialogAction :disabled="submitting" @click="onSave">Ya, Simpan</AlertDialogAction>
+          <AlertDialogAction :disabled="submitting" @click="onSave"
+            >Ya, Simpan</AlertDialogAction
+          >
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
