@@ -48,10 +48,33 @@ onMounted(() => {
 })
 onUnmounted(() => clearInterval(clockTimer))
 
-async function onStart() {
+// Starting a shift now requires counting the starting float first — same
+// reasoning as the end-shift dialog below: expectedCash at end-shift is
+// meaningless without knowing what the drawer started with.
+const startDialogOpen = ref(false)
+const cashStartInput = ref('')
+
+function openStartDialog() {
+  cashStartInput.value = ''
+  startDialogOpen.value = true
+}
+
+const cashStartNumber = computed(() => {
+  const raw = cashStartInput.value
+  if (raw === '' || raw === null || raw === undefined) return null
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : null
+})
+
+async function onStartConfirm() {
+  if (cashStartNumber.value === null) {
+    toast.error('Masukkan jumlah kas awal yang valid')
+    return
+  }
   busy.value = true
   try {
-    await api.post('/admin/shifts/start')
+    await api.post('/admin/shifts/start', { cashStart: cashStartNumber.value })
+    startDialogOpen.value = false
     toast.success('Shift dimulai')
     await load()
   } catch (err) {
@@ -67,11 +90,13 @@ async function onStart() {
 const endDialogOpen = ref(false)
 const cashCountedInput = ref('')
 
-const onlineSalesInput = ref('')
+const gojekInput = ref('')
+const grabfoodInput = ref('')
 
 function openEndDialog() {
   cashCountedInput.value = ''
-  onlineSalesInput.value = ''
+  gojekInput.value = ''
+  grabfoodInput.value = ''
   endDialogOpen.value = true
 }
 
@@ -86,27 +111,29 @@ const cashCountedNumber = computed(() => {
   return Number.isFinite(n) && n >= 0 ? n : null
 })
 
-const onlineSalesNumber = computed(() => {
-  const raw = onlineSalesInput.value
+function parseAmount(raw) {
   if (raw === '' || raw === null || raw === undefined) return null
   const n = typeof raw === 'number' ? raw : Number(raw)
   return Number.isFinite(n) && n >= 0 ? n : null
-})
+}
+const gojekNumber = computed(() => parseAmount(gojekInput.value))
+const grabfoodNumber = computed(() => parseAmount(grabfoodInput.value))
 
 async function onEndConfirm() {
   if (cashCountedNumber.value === null) {
     toast.error('Masukkan jumlah uang tunai yang valid')
     return
   }
-  if (onlineSalesNumber.value === null) {
-    toast.error('Masukkan jumlah penjualan online (isi 0 kalau tidak ada)')
+  if (gojekNumber.value === null || grabfoodNumber.value === null) {
+    toast.error('Masukkan jumlah uang Gojek & GrabFood (isi 0 kalau tidak ada)')
     return
   }
   busy.value = true
   try {
     const { shift } = await api.post('/admin/shifts/end', {
       cashCounted: cashCountedNumber.value,
-      onlineSalesAmount: onlineSalesNumber.value,
+      gojekAmount: gojekNumber.value,
+      grabfoodAmount: grabfoodNumber.value,
     })
     endDialogOpen.value = false
     if (shift.isMinus) {
@@ -223,7 +250,9 @@ const staleOtherShifts = computed(() =>
         <div class="flex items-center gap-4">
           <div class="text-right text-sm">
             <p class="font-semibold">{{ active.orderCount }} order &middot; {{ formatRupiah(active.revenue) }}</p>
-            <p class="text-xs text-muted-foreground">Sejauh ini &middot; tunai {{ formatRupiah(active.expectedCash) }}</p>
+            <p class="text-xs text-muted-foreground">
+              Kas awal {{ formatRupiah(active.cashStart ?? 0) }} &middot; seharusnya di laci {{ formatRupiah(active.expectedCash) }}
+            </p>
           </div>
           <Button variant="destructive" class="gap-2" :disabled="busy" @click="openEndDialog">
             <SquareIcon class="size-4" />
@@ -236,7 +265,7 @@ const staleOtherShifts = computed(() =>
           <p class="text-sm font-semibold">Kamu belum mulai shift</p>
           <p class="text-xs text-muted-foreground">Mulai shift supaya order yang masuk tercatat di hasil shift ini.</p>
         </div>
-        <Button class="gap-2" :disabled="busy" @click="onStart">
+        <Button class="gap-2" :disabled="busy" @click="openStartDialog">
           <LoaderCircleIcon v-if="busy" class="size-4 animate-spin" />
           <PlayIcon v-else class="size-4" />
           Mulai Shift
@@ -282,6 +311,39 @@ const staleOtherShifts = computed(() =>
       </Table>
     </div>
 
+    <Dialog :open="startDialogOpen" @update:open="(v) => (startDialogOpen = v)">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Mulai Shift</DialogTitle>
+        </DialogHeader>
+        <div class="space-y-4">
+          <p class="text-sm text-muted-foreground">
+            Hitung uang kas yang ada di laci sekarang sebelum mulai jualan, lalu masukkan jumlahnya. Ini dipakai
+            sebagai patokan awal saat rekonsiliasi kas di akhir shift nanti.
+          </p>
+          <div class="space-y-2">
+            <Label for="cash-start">Uang Kas Awal</Label>
+            <Input
+              id="cash-start"
+              v-model="cashStartInput"
+              type="number"
+              min="0"
+              step="500"
+              placeholder="0"
+              autofocus
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" :disabled="busy" @click="startDialogOpen = false">Batal</Button>
+          <Button :disabled="busy || cashStartNumber === null" @click="onStartConfirm">
+            <LoaderCircleIcon v-if="busy" class="size-4 animate-spin" />
+            Konfirmasi Mulai Shift
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <Dialog :open="endDialogOpen" @update:open="(v) => (endDialogOpen = v)">
       <DialogContent>
         <DialogHeader>
@@ -289,8 +351,10 @@ const staleOtherShifts = computed(() =>
         </DialogHeader>
         <div class="space-y-4">
           <p class="text-sm text-muted-foreground">
-            Hitung uang tunai fisik di laci sekarang, lalu masukkan jumlahnya. Sistem mencatat
-            <strong>{{ formatRupiah(active?.expectedCash ?? 0) }}</strong> dari transaksi tunai shift ini.
+            Hitung uang tunai fisik di laci sekarang, lalu masukkan jumlahnya. Kas awal
+            <strong>{{ formatRupiah(active?.cashStart ?? 0) }}</strong> + tunai terjual
+            <strong>{{ formatRupiah(active?.byMetode?.tunai ?? 0) }}</strong> — sistem mencatat seharusnya ada
+            <strong>{{ formatRupiah(active?.expectedCash ?? 0) }}</strong> di laci.
           </p>
           <div class="space-y-2">
             <Label for="cash-counted">Uang Tunai di Laci</Label>
@@ -304,14 +368,20 @@ const staleOtherShifts = computed(() =>
               autofocus
             />
           </div>
-          <div class="space-y-2">
-            <Label for="online-sales">Penjualan Online (GrabFood/GoFood/dll)</Label>
-            <Input id="online-sales" v-model="onlineSalesInput" type="number" min="0" step="500" placeholder="0" />
-            <p class="text-xs text-muted-foreground">
-              Order dari aplikasi ojol tidak masuk sistem ini — isi manual dari total penjualannya. Isi 0 kalau tidak
-              ada.
-            </p>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-2">
+              <Label for="gojek-amount">Uang Gojek</Label>
+              <Input id="gojek-amount" v-model="gojekInput" type="number" min="0" step="500" placeholder="0" />
+            </div>
+            <div class="space-y-2">
+              <Label for="grabfood-amount">Uang GrabFood</Label>
+              <Input id="grabfood-amount" v-model="grabfoodInput" type="number" min="0" step="500" placeholder="0" />
+            </div>
           </div>
+          <p class="text-xs text-muted-foreground">
+            Order dari aplikasi ojol tidak masuk sistem ini — isi manual dari total penjualan masing-masing. Isi 0
+            kalau tidak ada.
+          </p>
           <Alert v-if="cashCountedNumber !== null && cashCountedNumber < (active?.expectedCash ?? 0)" variant="destructive">
             <TriangleAlertIcon class="size-4" />
             <AlertTitle>Kas akan tercatat MINUS</AlertTitle>
@@ -324,7 +394,7 @@ const staleOtherShifts = computed(() =>
           <Button variant="outline" :disabled="busy" @click="endDialogOpen = false">Batal</Button>
           <Button
             variant="destructive"
-            :disabled="busy || cashCountedNumber === null || onlineSalesNumber === null"
+            :disabled="busy || cashCountedNumber === null || gojekNumber === null || grabfoodNumber === null"
             @click="onEndConfirm"
           >
             <LoaderCircleIcon v-if="busy" class="size-4 animate-spin" />
@@ -357,7 +427,7 @@ const staleOtherShifts = computed(() =>
               </Button>
             </a>
           </div>
-          <div class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          <div class="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
             <div class="rounded-md border p-2.5">
               <p class="text-xs text-muted-foreground">QRIS</p>
               <p class="font-semibold">{{ formatRupiah(detailData.byMetode.qris) }}</p>
@@ -371,8 +441,12 @@ const staleOtherShifts = computed(() =>
               <p class="font-semibold">{{ formatRupiah(detailData.byMetode.debit) }}</p>
             </div>
             <div class="rounded-md border p-2.5">
-              <p class="text-xs text-muted-foreground">Online (Ojol)</p>
-              <p class="font-semibold">{{ detailData.onlineSalesAmount === null ? '—' : formatRupiah(detailData.onlineSalesAmount) }}</p>
+              <p class="text-xs text-muted-foreground">Gojek</p>
+              <p class="font-semibold">{{ detailData.gojekAmount === null ? '—' : formatRupiah(detailData.gojekAmount) }}</p>
+            </div>
+            <div class="rounded-md border p-2.5">
+              <p class="text-xs text-muted-foreground">GrabFood</p>
+              <p class="font-semibold">{{ detailData.grabfoodAmount === null ? '—' : formatRupiah(detailData.grabfoodAmount) }}</p>
             </div>
           </div>
           <div v-if="detailData.onlineSalesAmount !== null" class="flex justify-between rounded-md border p-2.5 text-sm">
@@ -382,7 +456,15 @@ const staleOtherShifts = computed(() =>
 
           <div v-if="detailData.cashCounted !== null" class="space-y-1 rounded-md border p-3 text-sm">
             <div class="flex justify-between">
-              <span class="text-muted-foreground">Tunai tercatat sistem</span>
+              <span class="text-muted-foreground">Kas awal</span>
+              <span>{{ detailData.cashStart === null ? '—' : formatRupiah(detailData.cashStart) }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted-foreground">Tunai terjual</span>
+              <span>{{ formatRupiah(detailData.byMetode.tunai) }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted-foreground">Seharusnya di laci</span>
               <span>{{ formatRupiah(detailData.expectedCash) }}</span>
             </div>
             <div class="flex justify-between">

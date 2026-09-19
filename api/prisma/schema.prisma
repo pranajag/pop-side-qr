@@ -303,18 +303,29 @@ model Shift {
   user              User      @relation(fields: [userId], references: [id])
   startedAt         DateTime  @default(now()) @map("started_at")
   endedAt           DateTime? @map("ended_at")
+  // Cash float the kasir puts in the drawer to start the shift (for making
+  // change) — entered once, at startShift time, never editable after. Folded
+  // into expectedCash so cashDifference reflects "ended with what it should
+  // have, given what it started with" instead of silently assuming every
+  // shift starts from zero. Null only for shifts started before this field
+  // existed — never for a new one, startShift requires it.
+  cashStart         Decimal?  @map("cash_start")
   // Physical cash the kasir counted in the drawer at shift end — entered
-  // once, at endShift time, never editable after. Compared against tunai
-  // revenue for the shift window to catch a cash shortfall ("minus").
+  // once, at endShift time, never editable after. Compared against
+  // cashStart + tunai revenue for the shift window to catch a cash
+  // shortfall ("minus").
   // Null until the shift is ended; shifts closed before this field existed
   // stay null forever (no reconciliation data to show for those).
   cashCounted       Decimal?  @map("cash_counted")
-  // Manually entered at endShift time — sales from GrabFood/GoFood/etc, an
-  // order channel that never touches this system (no Order row, no cash
-  // drawer, settled by the marketplace directly) but is still real revenue
-  // for the shift. Purely informational: never factored into cashDifference/
-  // isMinus, since it was never expected to be physical cash in the drawer.
-  onlineSalesAmount Decimal?  @map("online_sales_amount")
+  // Manually entered at endShift time — sales from Gojek/GrabFood, an order
+  // channel that never touches this system (no Order row, no cash drawer,
+  // settled by the marketplace directly) but still real revenue for the
+  // shift. Kept as two fields (not one lumped total) since the two
+  // marketplaces settle with the cafe separately. Purely informational:
+  // neither is ever factored into cashDifference/isMinus, since neither was
+  // ever expected to be physical cash in the drawer.
+  gojekAmount       Decimal?  @map("gojek_amount")
+  grabfoodAmount    Decimal?  @map("grabfood_amount")
 
   @@index([userId])
   @@index([startedAt])

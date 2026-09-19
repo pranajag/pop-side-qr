@@ -6,27 +6,33 @@ async function getActiveShift(userId) {
   return prisma.shift.findFirst({ where: { userId, endedAt: null } });
 }
 
-async function startShift(userId) {
+// cashStart: cash float the kasir put in the drawer to start the shift,
+// required so expectedCash at endShift can be "what it started with, plus
+// today's tunai sales" instead of assuming every drawer starts at zero.
+async function startShift(userId, cashStart) {
   const existing = await getActiveShift(userId);
   if (existing) {
     throw new AppError(409, 'Shift kamu masih berjalan. Akhiri dulu sebelum mulai yang baru.');
   }
-  const shift = await prisma.shift.create({ data: { userId }, include: { user: { select: { username: true } } } });
+  const shift = await prisma.shift.create({
+    data: { userId, cashStart },
+    include: { user: { select: { username: true } } },
+  });
   return shapeShift(shift);
 }
 
 // cashCounted: physical cash the kasir counted in the drawer, required so
 // every closed shift has a real reconciliation, not a silent "unknown".
-// onlineSalesAmount: marketplace sales (GrabFood/GoFood/etc) for the shift,
-// entered manually since those orders never pass through this system.
-async function endShift(userId, cashCounted, onlineSalesAmount) {
+// gojekAmount/grabfoodAmount: marketplace sales for the shift, entered
+// manually since those orders never pass through this system.
+async function endShift(userId, cashCounted, gojekAmount, grabfoodAmount) {
   const active = await getActiveShift(userId);
   if (!active) {
     throw new AppError(409, 'Tidak ada shift yang sedang berjalan.');
   }
   const shift = await prisma.shift.update({
     where: { id: active.id },
-    data: { endedAt: new Date(), cashCounted, onlineSalesAmount },
+    data: { endedAt: new Date(), cashCounted, gojekAmount, grabfoodAmount },
     include: { user: { select: { username: true } } },
   });
   return shapeShift(shift);
@@ -55,12 +61,19 @@ async function shapeShift(shift) {
   const { byMetode, total: revenue } = sumByMetode(orders);
 
   // Only `tunai` is physical cash in the drawer — qris/debit money never
-  // touches it, so only tunai revenue is ever expected to reconcile against
-  // a cash count.
-  const expectedCash = byMetode.tunai;
+  // touches it. What SHOULD be in the drawer at shift end is what it
+  // started with (cashStart) plus that tunai revenue, not tunai revenue
+  // alone — otherwise every shift would look short by exactly its own
+  // starting float. cashStart is null only for shifts started before this
+  // field existed, in which case this falls back to the old zero-start
+  // assumption for that historical data.
+  const cashStart = shift.cashStart == null ? null : Number(shift.cashStart);
+  const expectedCash = (cashStart ?? 0) + byMetode.tunai;
   const cashCounted = shift.cashCounted == null ? null : Number(shift.cashCounted);
   const cashDifference = cashCounted === null ? null : cashCounted - expectedCash;
-  const onlineSalesAmount = shift.onlineSalesAmount == null ? null : Number(shift.onlineSalesAmount);
+  const gojekAmount = shift.gojekAmount == null ? null : Number(shift.gojekAmount);
+  const grabfoodAmount = shift.grabfoodAmount == null ? null : Number(shift.grabfoodAmount);
+  const onlineSalesAmount = gojekAmount === null && grabfoodAmount === null ? null : (gojekAmount ?? 0) + (grabfoodAmount ?? 0);
 
   return {
     id: shift.id,
@@ -71,12 +84,17 @@ async function shapeShift(shift) {
     orderCount: orders.length,
     revenue,
     byMetode,
+    cashStart,
     expectedCash,
     cashCounted,
     cashDifference,
     isMinus: cashDifference !== null && cashDifference < 0,
     // Informational only — never part of expectedCash/cashDifference, since
-    // this revenue was never expected to be physical cash in the drawer.
+    // neither was ever expected to be physical cash in the drawer.
+    gojekAmount,
+    grabfoodAmount,
+    // Derived convenience total (gojek + grabfood) for callers that only
+    // care about "online sales" as a whole, e.g. totalRevenueWithOnline.
     onlineSalesAmount,
     totalRevenueWithOnline: revenue + (onlineSalesAmount ?? 0),
   };

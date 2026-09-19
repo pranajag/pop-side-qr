@@ -62,7 +62,8 @@ async function generateExcel(shiftId) {
   sheet.addRow(['QRIS', rupiah(shift.byMetode.qris)]);
   sheet.addRow(['Tunai', rupiah(shift.byMetode.tunai)]);
   sheet.addRow(['Debit', rupiah(shift.byMetode.debit)]);
-  sheet.addRow(['Penjualan Online (GrabFood/GoFood/dll)', shift.onlineSalesAmount === null ? '—' : rupiah(shift.onlineSalesAmount)]);
+  sheet.addRow(['Gojek', shift.gojekAmount === null ? '—' : rupiah(shift.gojekAmount)]);
+  sheet.addRow(['GrabFood', shift.grabfoodAmount === null ? '—' : rupiah(shift.grabfoodAmount)]);
   const totalRow = sheet.addRow(['Total Pendapatan', rupiah(shift.totalRevenueWithOnline)]);
   totalRow.font = { bold: true };
   sheet.addRow([]);
@@ -70,7 +71,9 @@ async function generateExcel(shiftId) {
   if (shift.cashCounted !== null) {
     const cashHeader = sheet.addRow(['Rekonsiliasi Kas Tunai', '']);
     cashHeader.font = { bold: true };
-    sheet.addRow(['Tunai tercatat sistem', rupiah(shift.expectedCash)]);
+    sheet.addRow(['Kas awal', shift.cashStart === null ? '—' : rupiah(shift.cashStart)]);
+    sheet.addRow(['Tunai terjual', rupiah(shift.byMetode.tunai)]);
+    sheet.addRow(['Seharusnya di laci', rupiah(shift.expectedCash)]);
     sheet.addRow(['Dihitung kasir', rupiah(shift.cashCounted)]);
     const diffRow = sheet.addRow(['Selisih', reconLabel(shift.cashDifference)]);
     if (shift.isMinus) diffRow.font = { bold: true, color: { argb: 'FFCC0000' } };
@@ -117,14 +120,17 @@ function generatePdf(shiftId) {
         doc.text(`QRIS: ${rupiah(shift.byMetode.qris)}`);
         doc.text(`Tunai: ${rupiah(shift.byMetode.tunai)}`);
         doc.text(`Debit: ${rupiah(shift.byMetode.debit)}`);
-        doc.text(`Penjualan Online (GrabFood/GoFood/dll): ${shift.onlineSalesAmount === null ? '—' : rupiah(shift.onlineSalesAmount)}`);
+        doc.text(`Gojek: ${shift.gojekAmount === null ? '—' : rupiah(shift.gojekAmount)}`);
+        doc.text(`GrabFood: ${shift.grabfoodAmount === null ? '—' : rupiah(shift.grabfoodAmount)}`);
         doc.fontSize(12).text(`Total Pendapatan: ${rupiah(shift.totalRevenueWithOnline)}`, { continued: false });
         doc.moveDown();
 
         if (shift.cashCounted !== null) {
           doc.fontSize(13).text('Rekonsiliasi Kas Tunai', { underline: true });
           doc.fontSize(11);
-          doc.text(`Tunai tercatat sistem: ${rupiah(shift.expectedCash)}`);
+          doc.text(`Kas awal: ${shift.cashStart === null ? '—' : rupiah(shift.cashStart)}`);
+          doc.text(`Tunai terjual: ${rupiah(shift.byMetode.tunai)}`);
+          doc.text(`Seharusnya di laci: ${rupiah(shift.expectedCash)}`);
           doc.text(`Dihitung kasir: ${rupiah(shift.cashCounted)}`);
           if (shift.isMinus) doc.fillColor('red');
           doc.text(`Selisih: ${reconLabel(shift.cashDifference)}`);

@@ -6,17 +6,22 @@ const shiftReport = require('../services/shiftReport.service');
 // listed here. What stays visible either way: revenue/orderCount/byMetode
 // (what was sold), never the "was this person's count right" signal.
 function redactCash(shift) {
-  const { cashCounted, expectedCash, cashDifference, isMinus, ...rest } = shift;
+  const { cashStart, cashCounted, expectedCash, cashDifference, isMinus, ...rest } = shift;
   return rest;
 }
 
 async function start(req, res) {
-  const shift = await shiftService.startShift(req.session.user.id);
+  const shift = await shiftService.startShift(req.session.user.id, req.body.cashStart);
   res.status(201).json({ shift });
 }
 
 async function end(req, res) {
-  const shift = await shiftService.endShift(req.session.user.id, req.body.cashCounted, req.body.onlineSalesAmount);
+  const shift = await shiftService.endShift(
+    req.session.user.id,
+    req.body.cashCounted,
+    req.body.gojekAmount,
+    req.body.grabfoodAmount
+  );
   res.json({ shift });
 }
 
