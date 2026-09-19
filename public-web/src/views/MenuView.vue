@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import QtyStepper from '@/components/QtyStepper.vue'
 import VariantPickerDialog from '@/components/VariantPickerDialog.vue'
 import CallStaffDialog from '@/components/CallStaffDialog.vue'
-import { ImageOffIcon, ChevronRightIcon, QrCodeIcon, BellIcon } from '@lucide/vue'
+import { ImageOffIcon, ChevronRightIcon, QrCodeIcon, BellIcon, SearchIcon } from '@lucide/vue'
 import { API_URL } from '@/lib/api'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 
@@ -27,9 +27,15 @@ const callStaffOpen = ref(false)
 // null = "Semua" (no filter). Display-only — menu.categories itself stays
 // untouched so cart/findProduct lookups elsewhere never see a filtered view.
 const activeCategoryId = ref(null)
+const searchQuery = ref('')
 const visibleCategories = computed(() => {
-  if (activeCategoryId.value === null) return menu.categories
-  return menu.categories.filter((c) => c.id === activeCategoryId.value)
+  const byCategory =
+    activeCategoryId.value === null ? menu.categories : menu.categories.filter((c) => c.id === activeCategoryId.value)
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return byCategory
+  return byCategory
+    .map((c) => ({ ...c, products: c.products.filter((p) => p.nama.toLowerCase().includes(q)) }))
+    .filter((c) => c.products.length > 0)
 })
 
 function onTambahClick(product) {
@@ -136,6 +142,16 @@ const estimatedTotal = computed(() =>
     </div>
 
     <main class="px-4 py-4">
+      <div v-if="!menu.loading && menu.categories.length > 0" class="relative mb-4">
+        <SearchIcon class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Cari menu..."
+          class="h-10 w-full rounded-full border border-input bg-transparent pl-9 pr-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        />
+      </div>
+
       <div v-if="menu.loading" class="space-y-6">
         <div v-for="n in 2" :key="n" class="space-y-3">
           <Skeleton class="h-5 w-32" />
@@ -151,6 +167,10 @@ const estimatedTotal = computed(() =>
 
       <p v-else-if="menu.categories.length === 0" class="py-10 text-center text-sm text-muted-foreground">
         Menu belum tersedia.
+      </p>
+
+      <p v-else-if="visibleCategories.length === 0" class="py-10 text-center text-sm text-muted-foreground">
+        Tidak ada menu yang cocok dengan "{{ searchQuery }}".
       </p>
 
       <div v-else class="space-y-6">
