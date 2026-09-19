@@ -204,7 +204,7 @@ async function copyKode() {
   </div>
 
   <div v-else class="min-h-svh px-4 py-6">
-    <div class="mx-auto max-w-md space-y-6">
+    <div class="mx-auto max-w-md space-y-6 sm:max-w-lg md:max-w-xl">
       <div class="space-y-2 text-center">
         <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-white" :class="statusColor">
           <span class="size-1.5 rounded-full bg-white" />

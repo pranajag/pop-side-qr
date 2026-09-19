@@ -94,7 +94,7 @@ async function onSubmit() {
     {{ locale.t('scanQrDulu') }}
   </div>
 
-  <div v-else class="min-h-svh pb-28">
+  <div v-else class="mx-auto min-h-svh max-w-md pb-28 sm:max-w-lg md:max-w-xl">
     <header class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/95 px-3 py-3 backdrop-blur">
       <button
         type="button"
@@ -169,7 +169,7 @@ async function onSubmit() {
       </section>
     </main>
 
-    <div class="fixed inset-x-0 bottom-0 border-t bg-background p-3">
+    <div class="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md border-t bg-background p-3 sm:max-w-lg md:max-w-xl">
       <Button size="lg" class="h-12 w-full" :disabled="submitting || hasIssues || loadingSummary" @click="confirmOpen = true">
         <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
         {{ locale.t('pesanSekarang') }}

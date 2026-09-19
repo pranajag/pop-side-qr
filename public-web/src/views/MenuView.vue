@@ -99,7 +99,7 @@ const estimatedTotal = computed(() =>
     </div>
   </div>
 
-  <div v-else class="min-h-svh pb-24">
+  <div v-else class="mx-auto min-h-svh max-w-md pb-24 sm:max-w-lg md:max-w-xl">
     <header class="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur">
       <img :src="logoUrl" alt="Popside" class="size-10 shrink-0 rounded-lg" />
       <div class="flex items-center gap-2">
@@ -205,23 +205,23 @@ const estimatedTotal = computed(() =>
         {{ locale.t('tidakAdaMenuCocok', { q: searchQuery }) }}
       </p>
 
-      <div v-else class="space-y-6">
-        <section v-for="category in visibleCategories" :key="category.id">
+      <div v-else class="space-y-5">
+        <section v-for="category in visibleCategories" :key="category.id" class="rounded-xl border bg-card p-4 shadow-sm">
           <h2 class="mb-3 flex items-center gap-2 text-base font-bold text-body">
             <span class="h-4 w-1.5 shrink-0 rounded-full bg-brand-cta"></span>
             {{ category.nama }}
           </h2>
           <p v-if="category.products.length === 0" class="text-sm text-muted-foreground">{{ locale.t('belumAdaProduk') }}</p>
-          <ul class="space-y-4">
-            <li v-for="product in category.products" :key="product.id" class="flex gap-3">
+          <ul class="divide-y divide-border">
+            <li v-for="product in category.products" :key="product.id" class="flex gap-3 py-3.5 first:pt-0 last:pb-0">
               <img
                 v-if="product.foto"
                 :src="photoUrl(product.foto)"
                 :alt="product.nama"
                 loading="lazy"
-                class="size-16 shrink-0 rounded-lg border object-cover"
+                class="size-16 shrink-0 rounded-xl border object-cover"
               />
-              <div v-else class="flex size-16 shrink-0 items-center justify-center rounded-lg border bg-muted">
+              <div v-else class="flex size-16 shrink-0 items-center justify-center rounded-xl border bg-muted">
                 <ImageOffIcon class="size-5 text-muted-foreground" />
               </div>
 
@@ -253,7 +253,7 @@ const estimatedTotal = computed(() =>
       </div>
     </main>
 
-    <div v-if="!cart.isEmpty" class="fixed inset-x-0 bottom-0 z-10 px-3 pb-3">
+    <div v-if="!cart.isEmpty" class="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md px-3 pb-3 sm:max-w-lg md:max-w-xl">
       <button
         type="button"
         class="flex w-full items-center gap-3 rounded-2xl bg-brand-cta p-3 pr-4 shadow-lg shadow-black/15 transition-transform active:scale-[0.99]"

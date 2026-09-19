@@ -89,7 +89,7 @@ function onCheckout() {
     {{ locale.t('scanQrDulu') }}
   </div>
 
-  <div v-else class="min-h-svh pb-32">
+  <div v-else class="mx-auto min-h-svh max-w-md pb-32 sm:max-w-lg md:max-w-xl">
     <header class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/95 px-3 py-3 backdrop-blur">
       <button
         type="button"
@@ -147,7 +147,7 @@ function onCheckout() {
       </Alert>
     </main>
 
-    <div v-if="!cart.isEmpty" class="fixed inset-x-0 bottom-0 space-y-3 border-t bg-background p-3">
+    <div v-if="!cart.isEmpty" class="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md space-y-3 border-t bg-background p-3 sm:max-w-lg md:max-w-xl">
       <div class="flex items-center justify-between px-1 text-sm">
         <span class="text-muted-foreground">{{ locale.t('total') }}</span>
         <span class="flex items-center gap-2 font-semibold">
