@@ -9,6 +9,29 @@ const paymentProof = require('./paymentProof.service');
 
 const MAX_CODE_ATTEMPTS = 5;
 const KODE_ORDER_PATTERN = /^ORD-\d{8}-[A-Z0-9]{4}$/;
+// Anything not yet completed/cancelled — used to decide whether a table is
+// still "occupied" by whoever placed its most recent order (see
+// bumpVisitIfTableIsFree below).
+const NON_TERMINAL_STATUSES = ['pending', 'waiting_verif', 'confirmed', 'cooking', 'ready'];
+
+// A table's "visit" is the run of orders from one seating, with no schema
+// concept of its own — approximated here as "since the last time this table
+// had zero non-terminal orders". Bumping it right before a genuinely new
+// visit's first order (not on every order) means a group ordering food in
+// several rounds never gets split into multiple "visits" just because an
+// earlier round of theirs already finished — only a table that was fully
+// clear starts fresh. order.service.js's getTableBill uses this as the
+// lower bound for "what should show up on this table's bill right now",
+// so a new group never sees a previous group's orders mixed in.
+async function bumpVisitIfTableIsFree(tx, tableId) {
+  const hasActiveOrder = await tx.order.findFirst({
+    where: { tableId, status: { in: NON_TERMINAL_STATUSES } },
+    select: { id: true },
+  });
+  if (!hasActiveOrder) {
+    await tx.table.update({ where: { id: tableId }, data: { currentVisitStartedAt: new Date() } });
+  }
+}
 
 // Shared by both createOrder (public QR checkout) and createManualOrder
 // (staff-entered counter/takeaway sale) — same stock/variant/pricing rules
@@ -87,6 +110,7 @@ async function createOrder({ token, metode, catatan, items }) {
       // lost) rolls back everything — including stock already decremented
       // for earlier items in this same attempt.
       return await prisma.$transaction(async (tx) => {
+        await bumpVisitIfTableIsFree(tx, table.id);
         const { orderItemsData, totalHarga } = await buildOrderItems(tx, items);
         return tx.order.create({
           data: {
@@ -271,12 +295,16 @@ async function getTableBill(token) {
     throw new AppError(404, 'Meja tidak valid. Coba scan ulang QR.');
   }
 
-  const { start, end } = jakartaDayBoundsUTC();
+  // Lower bound is the table's current visit (see bumpVisitIfTableIsFree),
+  // not just "today" — a table reused for a new group later the same day
+  // must never show the previous group's orders on this bill. Falls back to
+  // today's start for a table that predates this field (never bumped yet).
+  const visitStart = table.currentVisitStartedAt ?? jakartaDayBoundsUTC().start;
   const orders = await prisma.order.findMany({
     where: {
       tableId: table.id,
       status: { not: 'cancelled' },
-      createdAt: { gte: start, lt: end },
+      createdAt: { gte: visitStart },
     },
     include: { items: { include: { product: { select: { nama: true } } } } },
     orderBy: { createdAt: 'asc' },

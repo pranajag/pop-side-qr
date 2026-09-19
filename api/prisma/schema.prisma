@@ -41,19 +41,26 @@ enum ReservationStatus {
 }
 
 model Table {
-  id           Int           @id @default(autoincrement())
-  nomorMeja    String        @unique @map("nomor_meja")
-  qrToken      String        @unique @map("qr_token")
-  tokenSecret  String        @map("token_secret")
-  isActive     Boolean       @default(true) @map("is_active")
+  id                    Int           @id @default(autoincrement())
+  nomorMeja             String        @unique @map("nomor_meja")
+  qrToken               String        @unique @map("qr_token")
+  tokenSecret           String        @map("token_secret")
+  isActive              Boolean       @default(true) @map("is_active")
   // Seats at this table — lets the reservation feature tell whether a table
   // actually fits an event's guest count. Defaults to 4 (a common table
   // size) so existing rows get a sane value on migration, not a forced
   // null-check everywhere capacity is read.
-  kapasitas    Int           @default(4)
-  orders       Order[]
-  staffCalls   StaffCall[]
-  reservations Reservation[]
+  kapasitas             Int           @default(4)
+  // Start of the current "visit" — bumped by order.service.js right before
+  // a new order is created for this table whenever the table had zero
+  // non-terminal orders at that moment (i.e. genuinely free beforehand).
+  // Null for a table that's never had that check run since this field was
+  // added. Exists purely so getTableBill can tell "this group's orders"
+  // apart from an earlier group's at the same physical table earlier today.
+  currentVisitStartedAt DateTime?     @map("current_visit_started_at")
+  orders                Order[]
+  staffCalls            StaffCall[]
+  reservations          Reservation[]
 
   @@map("tables")
 }

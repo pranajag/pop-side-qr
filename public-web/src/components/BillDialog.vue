@@ -47,6 +47,8 @@ watch(
         <DialogTitle>{{ locale.t('billTitle', { meja: table.nomorMeja }) }}</DialogTitle>
       </DialogHeader>
 
+      <p class="-mt-2 text-xs text-muted-foreground">{{ locale.t('billScopeNote') }}</p>
+
       <div v-if="loading" class="flex justify-center py-8">
         <LoaderCircleIcon class="size-6 animate-spin text-muted-foreground" />
       </div>

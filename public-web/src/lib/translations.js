@@ -105,9 +105,10 @@ export const translations = {
     // BillDialog
     billLabel: 'Bill',
     billTitle: 'Bill Meja {meja}',
-    billKosong: 'Belum ada pesanan hari ini di meja ini.',
+    billKosong: 'Belum ada pesanan untuk kunjungan ini di meja ini.',
     billTotalKeseluruhan: 'Total Keseluruhan',
     billJumlahPesanan: '{n} pesanan',
+    billScopeNote: 'Cuma pesanan dari kunjungan meja ini yang sedang berjalan — bukan gabungan dari pengunjung sebelumnya.',
 
     // CallStaffDialog
     panggilStaffTitle: 'Panggil Staff',
@@ -226,9 +227,10 @@ export const translations = {
     // BillDialog
     billLabel: 'Bill',
     billTitle: 'Table {meja} Bill',
-    billKosong: 'No orders yet today at this table.',
+    billKosong: 'No orders yet for this visit at this table.',
     billTotalKeseluruhan: 'Grand Total',
     billJumlahPesanan: '{n} orders',
+    billScopeNote: "Only orders from this table's current visit — not combined with earlier guests.",
 
     panggilStaffTitle: 'Call Staff',
     mintaAirPutih: 'Request Water',

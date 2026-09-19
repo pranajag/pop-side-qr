@@ -159,7 +159,7 @@ async function verifyToken(token) {
     return null;
   }
 
-  return { id: table.id, nomorMeja: table.nomorMeja };
+  return { id: table.id, nomorMeja: table.nomorMeja, currentVisitStartedAt: table.currentVisitStartedAt };
 }
 
 module.exports = { list, create, update, remove, resetToken, generateQrImage, verifyToken };
