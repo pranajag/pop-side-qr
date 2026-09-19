@@ -96,10 +96,18 @@ async function buildOrderItems(tx, items) {
   return { orderItemsData, totalHarga };
 }
 
-async function createOrder({ token, metode, catatan, items }) {
+async function createOrder({ token, metode, catatan, items, idempotencyKey }) {
   const table = await tableService.verifyToken(token);
   if (!table) {
     throw new AppError(404, 'Meja tidak valid. Coba scan ulang QR.');
+  }
+
+  // A retry (dropped connection, timeout, double-tap) resends the same
+  // idempotencyKey — if the first attempt actually made it through, return
+  // that order as-is instead of taking payment/stock twice for one tap.
+  if (idempotencyKey) {
+    const existing = await prisma.order.findUnique({ where: { idempotencyKey }, include: { items: true } });
+    if (existing) return existing;
   }
 
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
@@ -120,6 +128,7 @@ async function createOrder({ token, metode, catatan, items }) {
             metode,
             totalHarga,
             catatan,
+            idempotencyKey: idempotencyKey ?? undefined,
             items: { create: orderItemsData },
             payment: { create: { metode, amount: totalHarga } },
           },
@@ -127,10 +136,16 @@ async function createOrder({ token, metode, catatan, items }) {
         });
       });
     } catch (err) {
-      // Order has exactly one unique column (kode_order), so any unique
-      // violation here is a same-day code collision — retry with a fresh
-      // code rather than failing the customer's checkout over it.
       if (isUniqueConstraintError(err)) {
+        // Two unique columns can fire here: kode_order (a same-day code
+        // collision — retry with a fresh code) or idempotency_key (a
+        // genuinely concurrent duplicate of this same request beat this
+        // one to the insert — fetch and return ITS order rather than
+        // retrying into a second real order for the same tap).
+        if (idempotencyKey) {
+          const raced = await prisma.order.findUnique({ where: { idempotencyKey }, include: { items: true } });
+          if (raced) return raced;
+        }
         continue;
       }
       throw err;

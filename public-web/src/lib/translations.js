@@ -16,7 +16,7 @@ export const translations = {
     // TableEntryView
     qrTidakValid: 'QR tidak valid',
     qrTidakValidDesc:
-      'Kode QR ini tidak dikenali atau meja sedang tidak aktif. Coba scan ulang QR di meja kamu, atau panggil staff untuk bantuan.',
+      'Kode QR ini tidak dikenali atau meja sedang tidak aktif. Coba scan ulang QR di meja kamu, atau tunjukkan layar ini ke staff terdekat untuk dibantu.',
     memeriksaMeja: 'Memeriksa meja kamu...',
 
     // MenuView
@@ -83,7 +83,7 @@ export const translations = {
     kodeOrderDisalin: 'Kode order disalin',
     gagalMenyalinKode: 'Gagal menyalin kode',
     scanQrisUntukBayar: 'Scan QRIS untuk bayar {total}',
-    qrisBelumTersedia: 'QRIS belum tersedia — panggil staff untuk bantuan.',
+    qrisBelumTersedia: 'QRIS belum tersedia — tunjukkan layar ini ke staff untuk bantuan.',
     uploadBuktiPembayaran: 'Upload Bukti Pembayaran',
     uploadBuktiDesc:
       'Screenshot/foto notifikasi pembayaran dari e-wallet/m-banking kamu.',
@@ -100,6 +100,8 @@ export const translations = {
     sudahNMenit: 'Sudah {n} menit',
     pesananSelesai: 'Pesanan selesai. Terima kasih!',
     pesananSedangDiproses: 'Pesanan sedang diproses dapur.',
+    pesananSiapDiambil: 'Pesanan kamu sudah siap!',
+    pesananSiapDiambilDesc: 'Silakan ambil di kasir, sebutkan kode order ini.',
     sudahNMenitSejakUpdate: 'Sudah {n} menit sejak status terakhir diperbarui',
     estimasiSiap: 'Biasanya siap dalam sekitar {n} menit sejak dikonfirmasi',
     detailPesanan: 'Detail Pesanan',
@@ -150,7 +152,7 @@ export const translations = {
 
     qrTidakValid: 'Invalid QR code',
     qrTidakValidDesc:
-      "This QR code isn't recognized or the table is inactive. Try scanning your table's QR again, or call staff for help.",
+      "This QR code isn't recognized or the table is inactive. Try scanning your table's QR again, or show this screen to the nearest staff member for help.",
     memeriksaMeja: 'Checking your table...',
 
     scanQrTitle: 'Scan the QR at your table',
@@ -214,7 +216,7 @@ export const translations = {
     kodeOrderDisalin: 'Order code copied',
     gagalMenyalinKode: 'Failed to copy code',
     scanQrisUntukBayar: 'Scan QRIS to pay {total}',
-    qrisBelumTersedia: 'QRIS not available yet — call staff for help.',
+    qrisBelumTersedia: 'QRIS not available yet — show this screen to a staff member for help.',
     uploadBuktiPembayaran: 'Upload Payment Proof',
     uploadBuktiDesc:
       'Screenshot/photo of your e-wallet/mobile banking payment notification.',
@@ -231,6 +233,8 @@ export const translations = {
     sudahNMenit: '{n} min so far',
     pesananSelesai: 'Order completed. Thank you!',
     pesananSedangDiproses: 'Your order is being prepared.',
+    pesananSiapDiambil: 'Your order is ready!',
+    pesananSiapDiambilDesc: 'Please pick it up at the counter — mention this order code.',
     sudahNMenitSejakUpdate: '{n} min since the last status update',
     estimasiSiap: 'Usually ready in about {n} minutes after confirmation',
     detailPesanan: 'Order Details',

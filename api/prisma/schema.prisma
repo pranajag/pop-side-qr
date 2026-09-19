@@ -189,33 +189,39 @@ model VariantOption {
 }
 
 model Order {
-  id           Int              @id @default(autoincrement())
-  kodeOrder    String           @unique @map("kode_order")
+  id             Int              @id @default(autoincrement())
+  kodeOrder      String           @unique @map("kode_order")
   // Null = not tied to a physical table — a manual counter/takeaway sale
   // punched in by staff (order.service.js:createManualOrder), which uses
   // customerName instead of a table number to identify the order.
-  tableId      Int?             @map("table_id")
+  tableId        Int?             @map("table_id")
   // onDelete: Restrict (not Prisma's default SetNull for an optional
   // relation) — a table with real order history must still block deletion
   // via table.service.js's isForeignKeyError catch, exactly like before
   // this field became nullable. SetNull would silently orphan those rows,
   // making past dine-in orders look like manual/takeaway ones in reports.
-  table        Table?           @relation(fields: [tableId], references: [id], onDelete: Restrict)
-  customerName String?          @map("customer_name")
-  status       OrderStatus      @default(pending)
-  metode       PaymentMethod
-  totalHarga   Decimal          @map("total_harga")
-  catatan      String?
+  table          Table?           @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  customerName   String?          @map("customer_name")
+  // Client-generated UUID, one per checkout attempt (order.service.js's
+  // createOrder) — a retry after a dropped/timed-out response resends the
+  // same key, so a second real HTTP request for the same tap resolves to
+  // the order the first attempt actually created instead of a duplicate.
+  // Null for manual/counter orders, which have no client retry to guard.
+  idempotencyKey String?          @unique @map("idempotency_key")
+  status         OrderStatus      @default(pending)
+  metode         PaymentMethod
+  totalHarga     Decimal          @map("total_harga")
+  catatan        String?
   // Only ever set when cancelling an order that had already collected cash
   // (tunai, past `pending`) — lets a kasir log what they actually handed
   // back, instead of the cash-reconciliation view only ever guessing from
   // the order total. Null for every other order, forever.
-  refundAmount Decimal?         @map("refund_amount")
-  createdAt    DateTime         @default(now()) @map("created_at")
-  updatedAt    DateTime         @updatedAt @map("updated_at")
-  items        OrderItem[]
-  payment      Payment?
-  statusLogs   OrderStatusLog[]
+  refundAmount   Decimal?         @map("refund_amount")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  items          OrderItem[]
+  payment        Payment?
+  statusLogs     OrderStatusLog[]
 
   @@index([status])
   @@index([createdAt])
@@ -298,25 +304,25 @@ model User {
 // this reports "what happened while I was clocked in", not per-order staff
 // attribution, which this app has no concept of for QR/self-service orders.
 model Shift {
-  id                Int       @id @default(autoincrement())
-  userId            Int       @map("user_id")
-  user              User      @relation(fields: [userId], references: [id])
-  startedAt         DateTime  @default(now()) @map("started_at")
-  endedAt           DateTime? @map("ended_at")
+  id             Int       @id @default(autoincrement())
+  userId         Int       @map("user_id")
+  user           User      @relation(fields: [userId], references: [id])
+  startedAt      DateTime  @default(now()) @map("started_at")
+  endedAt        DateTime? @map("ended_at")
   // Cash float the kasir puts in the drawer to start the shift (for making
   // change) — entered once, at startShift time, never editable after. Folded
   // into expectedCash so cashDifference reflects "ended with what it should
   // have, given what it started with" instead of silently assuming every
   // shift starts from zero. Null only for shifts started before this field
   // existed — never for a new one, startShift requires it.
-  cashStart         Decimal?  @map("cash_start")
+  cashStart      Decimal?  @map("cash_start")
   // Physical cash the kasir counted in the drawer at shift end — entered
   // once, at endShift time, never editable after. Compared against
   // cashStart + tunai revenue for the shift window to catch a cash
   // shortfall ("minus").
   // Null until the shift is ended; shifts closed before this field existed
   // stay null forever (no reconciliation data to show for those).
-  cashCounted       Decimal?  @map("cash_counted")
+  cashCounted    Decimal?  @map("cash_counted")
   // Manually entered at endShift time — sales from Gojek/GrabFood, an order
   // channel that never touches this system (no Order row, no cash drawer,
   // settled by the marketplace directly) but still real revenue for the
@@ -324,8 +330,8 @@ model Shift {
   // marketplaces settle with the cafe separately. Purely informational:
   // neither is ever factored into cashDifference/isMinus, since neither was
   // ever expected to be physical cash in the drawer.
-  gojekAmount       Decimal?  @map("gojek_amount")
-  grabfoodAmount    Decimal?  @map("grabfood_amount")
+  gojekAmount    Decimal?  @map("gojek_amount")
+  grabfoodAmount Decimal?  @map("grabfood_amount")
 
   @@index([userId])
   @@index([startedAt])

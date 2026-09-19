@@ -17,6 +17,11 @@ const createOrderSchema = z.object({
   metode: z.enum(['qris', 'tunai', 'debit']),
   catatan: z.string().trim().max(200).optional(),
   items: orderItemsSchema,
+  // One per checkout attempt, resent unchanged on a client-side retry —
+  // lets createOrder recognize a retry and return the original order
+  // instead of creating a second one. Optional so nothing breaks if an
+  // older frontend build (or a direct API caller) omits it.
+  idempotencyKey: z.string().uuid().optional(),
 });
 
 const createManualOrderSchema = z.object({

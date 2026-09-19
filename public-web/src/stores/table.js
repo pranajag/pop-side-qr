@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { api } from '@/lib/api'
 import { loadJSON, saveJSON } from '@/lib/persist'
+import { useCartStore } from '@/stores/cart'
 
 const STORAGE_KEY = 'popside.table'
 
@@ -28,6 +29,9 @@ export const useTableStore = defineStore('table', {
         this.id = data.table.id
         this.nomorMeja = data.table.nomorMeja
         this.persist()
+        // A cart built for a different (or no) table must not silently
+        // carry over to this one — see cart.js's syncTable() for why.
+        useCartStore().syncTable(this.id)
         return true
       } catch {
         this.token = null

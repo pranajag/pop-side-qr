@@ -25,6 +25,7 @@ import {
   TriangleAlertIcon,
   CopyIcon,
   UtensilsIcon,
+  PackageCheckIcon,
   XCircleIcon,
 } from '@lucide/vue'
 
@@ -430,6 +431,17 @@ async function copyKode() {
         <XCircleIcon class="mx-auto size-6 text-status-cancelled" />
         <p class="text-sm font-medium">
           {{ locale.t('pesananDibatalkanDesc') }}
+        </p>
+      </div>
+
+      <div
+        v-else-if="order.status === 'ready'"
+        class="space-y-1 rounded-lg border p-4 text-center"
+      >
+        <PackageCheckIcon class="mx-auto size-6 text-status-ready" />
+        <p class="text-sm font-medium">{{ locale.t('pesananSiapDiambil') }}</p>
+        <p class="text-xs text-muted-foreground">
+          {{ locale.t('pesananSiapDiambilDesc') }}
         </p>
       </div>
 

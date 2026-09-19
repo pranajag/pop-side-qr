@@ -42,7 +42,11 @@ async function computeTotal(items) {
     const harga = Number(product.harga) + resolved.extraPerUnit;
     const subtotal = harga * qty;
     total += subtotal;
-    lineItems.push({ productId: product.id, nama: product.nama, harga, qty, subtotal });
+    // variants included so two lines of the same product with different
+    // selections (e.g. "Es Teh" Large vs Regular) don't render as two
+    // identical-looking rows in the checkout summary — CheckoutView.vue
+    // needs this to tell them apart before the customer pays.
+    lineItems.push({ productId: product.id, nama: product.nama, harga, qty, subtotal, variants: resolved.snapshots });
   }
 
   return { items: lineItems, total, issues };

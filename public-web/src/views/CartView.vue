@@ -29,26 +29,37 @@ const summary = ref(null) // last server response: { items, total, issues }
 const loading = ref(false)
 
 let debounceTimer = null
+// Rapid qty taps can have two /cart/total requests in flight at once (a
+// debounced call already sent, then another qty change fires a second one
+// before the first resolves) — on a flaky mobile connection the earlier
+// request's response can arrive *after* the later one's. This counter
+// tags each dispatch and only applies a response if it's still the most
+// recent one sent, so a slow, stale response can never overwrite a fresher
+// total.
+let requestSeq = 0
 function refreshTotal() {
   clearTimeout(debounceTimer)
   if (cart.isEmpty) {
+    requestSeq++
     summary.value = { items: [], total: 0, issues: [] }
     return
   }
   debounceTimer = setTimeout(async () => {
+    const seq = ++requestSeq
     loading.value = true
     try {
-      summary.value = await api.post('/public/cart/total', {
+      const result = await api.post('/public/cart/total', {
         items: cart.items.map((i) => ({
           productId: i.productId,
           qty: i.qty,
           variantOptionIds: i.variantOptionIds,
         })),
       })
+      if (seq === requestSeq) summary.value = result
     } catch (err) {
-      toast.error(formatApiError(err))
+      if (seq === requestSeq) toast.error(formatApiError(err))
     } finally {
-      loading.value = false
+      if (seq === requestSeq) loading.value = false
     }
   }, 250)
 }

@@ -128,10 +128,10 @@ const estimatedTotal = computed(() =>
       class="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur"
     >
       <img :src="logoUrl" alt="Popside" class="size-10 shrink-0 rounded-lg" />
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1.5">
         <button
           type="button"
-          class="flex h-9 shrink-0 items-center justify-center rounded-full border px-2.5 text-xs font-semibold active:bg-accent"
+          class="flex h-10 shrink-0 items-center justify-center rounded-full border px-2.5 text-xs font-semibold active:bg-accent"
           @click="locale.toggle()"
         >
           {{ locale.locale === 'id' ? 'EN' : 'ID' }}
@@ -139,7 +139,7 @@ const estimatedTotal = computed(() =>
         <button
           type="button"
           :aria-label="locale.t(theme.isDark ? 'temaTerang' : 'temaGelap')"
-          class="flex size-9 shrink-0 items-center justify-center rounded-full border active:bg-accent"
+          class="flex size-10 shrink-0 items-center justify-center rounded-full border active:bg-accent"
           @click="theme.toggle()"
         >
           <SunIcon v-if="theme.isDark" class="size-4" />
@@ -154,7 +154,7 @@ const estimatedTotal = computed(() =>
           v-if="recentOrders.items.length > 0"
           type="button"
           :aria-label="locale.t('pesananSayaLabel')"
-          class="flex size-9 shrink-0 items-center justify-center rounded-full border active:bg-accent"
+          class="flex size-10 shrink-0 items-center justify-center rounded-full border active:bg-accent"
           @click="recentOrdersOpen = true"
         >
           <ReceiptIcon class="size-4" />
@@ -162,7 +162,7 @@ const estimatedTotal = computed(() =>
         <button
           type="button"
           :aria-label="locale.t('panggilStaffLabel')"
-          class="flex size-9 shrink-0 items-center justify-center rounded-full border active:bg-accent"
+          class="flex size-10 shrink-0 items-center justify-center rounded-full border active:bg-accent"
           @click="callStaffOpen = true"
         >
           <BellIcon class="size-4" />
@@ -170,7 +170,7 @@ const estimatedTotal = computed(() =>
         <button
           type="button"
           :aria-label="locale.t('billLabel')"
-          class="flex size-9 shrink-0 items-center justify-center rounded-full border active:bg-accent"
+          class="flex size-10 shrink-0 items-center justify-center rounded-full border active:bg-accent"
           @click="billOpen = true"
         >
           <ReceiptTextIcon class="size-4" />

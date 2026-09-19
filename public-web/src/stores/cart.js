@@ -7,7 +7,20 @@ const STORAGE_KEY = 'popside.cart'
 // here — never price (AGENTS.md: cart di client cuma boleh product_id +
 // qty + catatan). Price/availability are always re-derived server-side via
 // /cart/total.
-const initialItems = loadJSON(localStorage, STORAGE_KEY, [])
+//
+// tableId travels alongside the items so a cart built at one table can
+// never silently resurface at another: a customer who adds items, leaves
+// without ordering, then later scans a *different* table's QR (same phone,
+// localStorage survives across tabs/days unlike table.js's sessionStorage)
+// would otherwise see and could submit a stale cart against the wrong
+// table. table.js's verify() calls syncTable() below on every successful
+// scan, which clears the cart whenever the table actually changes.
+const loaded = loadJSON(localStorage, STORAGE_KEY, { tableId: null, items: [] })
+// Pre-migration carts saved a bare array under this key. Treat one as
+// "unknown table" (tableId: null) rather than crashing on .items — the very
+// next syncTable() call (table.js's verify(), on this same page load) then
+// clears it for real, same as any other table mismatch.
+const initialState = Array.isArray(loaded) ? { tableId: null, items: loaded } : loaded
 
 // Two lines are the same purchasable line only if they're the same product
 // AND the same variant selection — "Es Teh Large" and "Es Teh Regular" are
@@ -17,7 +30,7 @@ function lineKey(productId, variantOptionIds) {
 }
 
 export const useCartStore = defineStore('cart', {
-  state: () => ({ items: initialItems }),
+  state: () => ({ tableId: initialState.tableId, items: initialState.items }),
   getters: {
     qtyFor:
       (state) =>
@@ -72,8 +85,19 @@ export const useCartStore = defineStore('cart', {
       this.items = []
       this.persist()
     },
+    // Called from table.js's verify() on every successful QR scan. A cart
+    // built at a different table (or no table yet known) doesn't belong
+    // here — drop it rather than let it silently ride along to wherever
+    // the customer scans next.
+    syncTable(tableId) {
+      if (this.tableId !== tableId) {
+        this.tableId = tableId
+        this.items = []
+      }
+      this.persist()
+    },
     persist() {
-      saveJSON(localStorage, STORAGE_KEY, this.items)
+      saveJSON(localStorage, STORAGE_KEY, { tableId: this.tableId, items: this.items })
     },
   },
 })

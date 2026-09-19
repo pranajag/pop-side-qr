@@ -58,11 +58,29 @@ const METHODS = computed(() => [
   },
 ])
 
+// crypto.randomUUID() needs a secure context (HTTPS/localhost) — falls back
+// to crypto.getRandomValues (works everywhere) so an odd in-app browser on
+// a customer's phone can't break checkout entirely over a dedup key that
+// doesn't need to be unguessable, just unique-enough per tap.
+function generateIdempotencyKey() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 const metode = ref('qris')
 const catatan = ref('')
 const summary = ref(null)
 const loadingSummary = ref(false)
 const submitting = ref(false)
+// Generated once per checkout visit, reused across every retry of the same
+// tap (a dropped connection, timeout, or double-click) — never regenerated
+// inside onSubmit — so the backend can recognize a retry and return the
+// order that attempt actually created instead of making a second one.
+const idempotencyKey = generateIdempotencyKey()
 
 onMounted(async () => {
   if (!menu.loaded) await menu.fetchMenu()
@@ -105,6 +123,7 @@ async function onSubmit() {
         variantOptionIds: i.variantOptionIds,
         catatan: i.catatan || undefined,
       })),
+      idempotencyKey,
     })
     cart.clear()
     recentOrders.add(order.kodeOrder)
@@ -210,12 +229,17 @@ async function onSubmit() {
         </h2>
         <div class="space-y-1 rounded-lg border p-3 text-sm">
           <div
-            v-for="item in summary?.items ?? []"
-            :key="item.productId"
-            class="flex justify-between text-muted-foreground"
+            v-for="(item, idx) in summary?.items ?? []"
+            :key="idx"
+            class="flex justify-between gap-2 text-muted-foreground"
           >
-            <span>{{ item.qty }}x {{ item.nama }}</span>
-            <span>{{ formatRupiah(item.subtotal) }}</span>
+            <span>
+              {{ item.qty }}x {{ item.nama }}
+              <span v-if="item.variants?.length" class="text-xs">
+                ({{ item.variants.map((v) => v.namaOption).join(', ') }})
+              </span>
+            </span>
+            <span class="shrink-0">{{ formatRupiah(item.subtotal) }}</span>
           </div>
           <div class="mt-2 flex justify-between border-t pt-2 font-semibold">
             <span>{{ locale.t('total') }}</span>
