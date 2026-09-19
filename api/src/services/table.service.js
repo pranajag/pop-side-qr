@@ -26,6 +26,7 @@ function withUrl(table) {
     nomorMeja: table.nomorMeja,
     qrToken: table.qrToken,
     isActive: table.isActive,
+    kapasitas: table.kapasitas,
     url: tableUrl(table.qrToken),
   };
 }

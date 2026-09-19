@@ -41,7 +41,7 @@ const qrTarget = ref(null)
 const resetting = ref(false)
 const resetConfirmOpen = ref(false)
 
-const form = reactive({ nomorMeja: '', isActive: true })
+const form = reactive({ nomorMeja: '', isActive: true, kapasitas: 4 })
 
 onMounted(() => store.fetchAll())
 
@@ -55,6 +55,7 @@ function openCreate() {
   editingId.value = null
   form.nomorMeja = ''
   form.isActive = true
+  form.kapasitas = 4
   formOpen.value = true
 }
 
@@ -62,6 +63,7 @@ function openEdit(table) {
   editingId.value = table.id
   form.nomorMeja = table.nomorMeja
   form.isActive = table.isActive
+  form.kapasitas = table.kapasitas
   formOpen.value = true
 }
 
@@ -157,17 +159,19 @@ function printQr() {
         <TableHeader>
           <TableRow>
             <TableHead>Nomor Meja</TableHead>
+            <TableHead class="w-24">Kapasitas</TableHead>
             <TableHead class="w-28">Status</TableHead>
             <TableHead class="w-40">QR Code</TableHead>
             <TableHead class="w-36 text-right">Aksi</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableEmpty v-if="!store.loading && store.items.length === 0" :colspan="4">
+          <TableEmpty v-if="!store.loading && store.items.length === 0" :colspan="5">
             Belum ada meja.
           </TableEmpty>
           <TableRow v-for="t in store.items" :key="t.id">
             <TableCell class="font-medium">{{ t.nomorMeja }}</TableCell>
+            <TableCell class="text-muted-foreground">{{ t.kapasitas }} orang</TableCell>
             <TableCell>
               <Badge :variant="t.isActive ? 'default' : 'secondary'">
                 {{ t.isActive ? 'Aktif' : 'Nonaktif' }}
@@ -205,6 +209,10 @@ function printQr() {
           <div class="space-y-2">
             <Label for="nomorMeja">Nomor Meja</Label>
             <Input id="nomorMeja" v-model="form.nomorMeja" required maxlength="20" />
+          </div>
+          <div class="space-y-2">
+            <Label for="kapasitas">Kapasitas (jumlah orang)</Label>
+            <Input id="kapasitas" v-model="form.kapasitas" type="number" min="1" max="999" step="1" required />
           </div>
           <div class="flex items-center justify-between rounded-md border px-3 py-2">
             <Label for="isActive">Aktif</Label>

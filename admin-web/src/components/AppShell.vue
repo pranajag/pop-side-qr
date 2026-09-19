@@ -11,6 +11,7 @@ import { formatRupiah } from '@/lib/format'
 import {
   ClipboardListIcon,
   TimerIcon,
+  CalendarClockIcon,
   LayoutGridIcon,
   UtensilsIcon,
   QrCodeIcon,
@@ -31,6 +32,7 @@ const nav = computed(() => {
   const items = [
     { to: { name: 'pesanan' }, label: 'Pesanan', icon: ClipboardListIcon },
     { to: { name: 'shift' }, label: 'Shift', icon: TimerIcon },
+    { to: { name: 'reservasi' }, label: 'Reservasi', icon: CalendarClockIcon },
   ]
   if (auth.isAdmin) {
     items.push(

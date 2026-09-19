@@ -20,6 +20,7 @@ const reportRoutes = require('./routes/report.routes');
 const shiftRoutes = require('./routes/shift.routes');
 const userRoutes = require('./routes/user.routes');
 const staffCallRoutes = require('./routes/staffCall.routes');
+const reservationRoutes = require('./routes/reservation.routes');
 const publicRoutes = require('./routes/public.routes');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -125,6 +126,7 @@ app.use('/api/admin/reports', reportRoutes);
 app.use('/api/admin/shifts', shiftRoutes);
 app.use('/api/admin/users', userRoutes);
 app.use('/api/admin/staff-calls', staffCallRoutes);
+app.use('/api/admin/reservations', reservationRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });

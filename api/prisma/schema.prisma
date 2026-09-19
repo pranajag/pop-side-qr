@@ -33,14 +33,27 @@ enum StaffCallStatus {
   resolved
 }
 
+enum ReservationStatus {
+  pending
+  confirmed
+  cancelled
+  completed
+}
+
 model Table {
-  id          Int         @id @default(autoincrement())
-  nomorMeja   String      @unique @map("nomor_meja")
-  qrToken     String      @unique @map("qr_token")
-  tokenSecret String      @map("token_secret")
-  isActive    Boolean     @default(true) @map("is_active")
-  orders      Order[]
-  staffCalls  StaffCall[]
+  id           Int           @id @default(autoincrement())
+  nomorMeja    String        @unique @map("nomor_meja")
+  qrToken      String        @unique @map("qr_token")
+  tokenSecret  String        @map("token_secret")
+  isActive     Boolean       @default(true) @map("is_active")
+  // Seats at this table — lets the reservation feature tell whether a table
+  // actually fits an event's guest count. Defaults to 4 (a common table
+  // size) so existing rows get a sane value on migration, not a forced
+  // null-check everywhere capacity is read.
+  kapasitas    Int           @default(4)
+  orders       Order[]
+  staffCalls   StaffCall[]
+  reservations Reservation[]
 
   @@map("tables")
 }
@@ -61,6 +74,35 @@ model StaffCall {
   @@index([status])
   @@index([tableId])
   @@map("staff_calls")
+}
+
+// Booking for a future event/occasion (birthday, gathering, meeting) — kept
+// separate from Order since a reservation exists before any ordering
+// happens, and many are taken over the phone with no order at all yet.
+// tableId is nullable: staff can log a reservation before deciding which
+// table to assign, then assign one later while checking it against that
+// table's kapasitas.
+model Reservation {
+  id               Int               @id @default(autoincrement())
+  namaCustomer     String            @map("nama_customer")
+  namaAcara        String?           @map("nama_acara")
+  telepon          String?
+  jumlahTamu       Int               @map("jumlah_tamu")
+  tanggalReservasi DateTime          @map("tanggal_reservasi")
+  tableId          Int?              @map("table_id")
+  // Restrict, not SetNull — same reasoning as Order.table: a table with
+  // real reservation history must block deletion (table.service.js's
+  // isForeignKeyError catch), not silently orphan the booking.
+  table            Table?            @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  status           ReservationStatus @default(pending)
+  catatan          String?
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([tanggalReservasi])
+  @@index([tableId])
+  @@map("reservations")
 }
 
 // Singleton row (always id=1) — store-wide settings that aren't specific
