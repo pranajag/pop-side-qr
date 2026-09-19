@@ -25,6 +25,19 @@ const publicRoutes = require('./routes/public.routes');
 
 const isProd = process.env.NODE_ENV === 'production';
 
+// Fail fast, not fail open — an empty or short SESSION_SECRET/CSRF_SECRET
+// wouldn't stop the app from starting (express-session/csrf-csrf tolerate
+// undefined), it would just quietly sign cookies with a guessable secret
+// (or none), making session/CSRF-cookie tampering trivial. A misconfigured
+// deploy should crash loudly at startup, not silently ship a broken lock.
+for (const name of ['SESSION_SECRET', 'CSRF_SECRET']) {
+  if (!process.env[name] || process.env[name].length < 32) {
+    throw new Error(
+      `${name} is missing or too short (need >=32 chars). Generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+    );
+  }
+}
+
 const app = express();
 
 // CORS_ORIGIN is comma-separated — admin-web and public-web run on

@@ -17,12 +17,28 @@ const password = ref('')
 const error = ref('')
 const submitting = ref(false)
 
+// vue-router + HTML5 History mode already can't navigate cross-origin (the
+// underlying pushState/replaceState throws on a different origin), so this
+// couldn't send anyone to an external phishing page as-is — but validating
+// explicitly here means the redirect target is provably safe by this code's
+// own logic, not by an incidental platform restriction a future change
+// elsewhere (e.g. switching to a raw window.location assignment) could
+// silently remove. Only a same-app path ("/xyz", never "//xyz" — that's
+// protocol-relative and resolves to an external origin) is honored.
+function safeRedirectTarget() {
+  const target = route.query.redirect
+  if (typeof target === 'string' && target.startsWith('/') && !target.startsWith('//')) {
+    return target
+  }
+  return { name: 'pesanan' }
+}
+
 async function onSubmit() {
   error.value = ''
   submitting.value = true
   try {
     await auth.login(username.value, password.value)
-    router.replace(route.query.redirect || { name: 'pesanan' })
+    router.replace(safeRedirectTarget())
   } catch (err) {
     error.value = err.status === 401 ? 'Username atau password salah' : err.message
   } finally {
