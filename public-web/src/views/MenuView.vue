@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useTableStore } from '@/stores/table'
 import { useMenuStore } from '@/stores/menu'
 import { useCartStore } from '@/stores/cart'
+import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,18 +12,21 @@ import { Skeleton } from '@/components/ui/skeleton'
 import QtyStepper from '@/components/QtyStepper.vue'
 import VariantPickerDialog from '@/components/VariantPickerDialog.vue'
 import CallStaffDialog from '@/components/CallStaffDialog.vue'
-import { ImageOffIcon, ChevronRightIcon, QrCodeIcon, BellIcon, SearchIcon } from '@lucide/vue'
+import RecentOrdersDialog from '@/components/RecentOrdersDialog.vue'
+import { ImageOffIcon, ChevronRightIcon, QrCodeIcon, BellIcon, SearchIcon, ReceiptIcon } from '@lucide/vue'
 import { API_URL } from '@/lib/api'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 
 const table = useTableStore()
 const menu = useMenuStore()
 const cart = useCartStore()
+const recentOrders = useRecentOrdersStore()
 const router = useRouter()
 
 const pickerOpen = ref(false)
 const pickerProduct = ref(null)
 const callStaffOpen = ref(false)
+const recentOrdersOpen = ref(false)
 
 // null = "Semua" (no filter). Display-only — menu.categories itself stays
 // untouched so cart/findProduct lookups elsewhere never see a filtered view.
@@ -98,6 +102,15 @@ const estimatedTotal = computed(() =>
         <span class="rounded-full bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-body">
           Meja {{ table.nomorMeja }}
         </span>
+        <button
+          v-if="recentOrders.items.length > 0"
+          type="button"
+          aria-label="Pesanan Saya"
+          class="flex size-9 shrink-0 items-center justify-center rounded-full border active:bg-accent"
+          @click="recentOrdersOpen = true"
+        >
+          <ReceiptIcon class="size-4" />
+        </button>
         <button
           type="button"
           aria-label="Panggil Staff"
@@ -243,5 +256,6 @@ const estimatedTotal = computed(() =>
 
     <VariantPickerDialog :open="pickerOpen" :product="pickerProduct" @update:open="pickerOpen = $event" />
     <CallStaffDialog :open="callStaffOpen" @update:open="callStaffOpen = $event" />
+    <RecentOrdersDialog :open="recentOrdersOpen" @update:open="recentOrdersOpen = $event" />
   </div>
 </template>

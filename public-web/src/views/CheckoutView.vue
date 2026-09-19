@@ -5,6 +5,7 @@ import { toast } from 'vue-sonner'
 import { useTableStore } from '@/stores/table'
 import { useCartStore } from '@/stores/cart'
 import { useMenuStore } from '@/stores/menu'
+import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { api, formatApiError } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,7 @@ import { ArrowLeftIcon, TriangleAlertIcon, LoaderCircleIcon, QrCodeIcon, Banknot
 const table = useTableStore()
 const cart = useCartStore()
 const menu = useMenuStore()
+const recentOrders = useRecentOrdersStore()
 const router = useRouter()
 
 const METHODS = [
@@ -75,6 +77,7 @@ async function onSubmit() {
       })),
     })
     cart.clear()
+    recentOrders.add(order.kodeOrder)
     router.replace({ name: 'order', params: { kodeOrder: order.kodeOrder } })
   } catch (err) {
     toast.error(formatApiError(err))
