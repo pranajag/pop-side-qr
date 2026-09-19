@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { api, formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
+import { STATUS_LABEL_KEY, STATUS_COLOR } from '@/lib/orderStatus'
 import { useLocaleStore } from '@/stores/locale'
 import { Button } from '@/components/ui/button'
 import {
@@ -38,25 +39,6 @@ const confirming = ref(false)
 const qrisImage = ref(null)
 const buktiFile = ref(null)
 const buktiPreview = ref(null)
-
-const STATUS_LABEL_KEY = {
-  pending: 'statusPending',
-  waiting_verif: 'statusWaitingVerif',
-  confirmed: 'statusConfirmed',
-  cooking: 'statusCooking',
-  ready: 'statusReady',
-  completed: 'statusCompleted',
-  cancelled: 'statusCancelled',
-}
-const STATUS_COLOR = {
-  pending: 'bg-status-pending',
-  waiting_verif: 'bg-status-waiting-verif',
-  confirmed: 'bg-status-confirmed',
-  cooking: 'bg-status-cooking',
-  ready: 'bg-status-ready',
-  completed: 'bg-status-completed',
-  cancelled: 'bg-status-cancelled',
-}
 
 const statusLabel = computed(() => {
   const key = STATUS_LABEL_KEY[order.value?.status]

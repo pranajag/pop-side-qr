@@ -15,4 +15,9 @@ async function track(req, res) {
   res.json({ order });
 }
 
-module.exports = { create, confirmPayment, track };
+async function bill(req, res) {
+  const bill = await orderService.getTableBill(req.params.token);
+  res.json({ bill });
+}
+
+module.exports = { create, confirmPayment, track, bill };

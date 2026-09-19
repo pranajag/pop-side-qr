@@ -3,6 +3,7 @@ const AppError = require('../utils/AppError');
 const { generateOrderCode } = require('../utils/orderCode');
 const { isUniqueConstraintError } = require('../utils/prismaErrors');
 const { resolveProductVariants } = require('../utils/productVariants');
+const { jakartaDayBoundsUTC } = require('../utils/jakartaTime');
 const tableService = require('./table.service');
 const paymentProof = require('./paymentProof.service');
 
@@ -256,4 +257,46 @@ async function getByCode(kodeOrder) {
   };
 }
 
-module.exports = { createOrder, createManualOrder, confirmQrisPayment, getByCode };
+// Combined bill for a table's current visit — this is a pay-as-you-go
+// system (each order is paid individually, at ordering time, not at the
+// end), so this doesn't collect a debt; it's a running summary for a table
+// where several phones scan the same QR and order separately, so no single
+// device's own order history shows what the whole table has spent. Scoped
+// to today (Asia/Jakarta) since a table gets reused indefinitely and there's
+// no visit/session concept in the schema — "today's orders on this table"
+// is the closest available proxy for "this visit".
+async function getTableBill(token) {
+  const table = await tableService.verifyToken(token);
+  if (!table) {
+    throw new AppError(404, 'Meja tidak valid. Coba scan ulang QR.');
+  }
+
+  const { start, end } = jakartaDayBoundsUTC();
+  const orders = await prisma.order.findMany({
+    where: {
+      tableId: table.id,
+      status: { not: 'cancelled' },
+      createdAt: { gte: start, lt: end },
+    },
+    include: { items: { include: { product: { select: { nama: true } } } } },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  const shaped = orders.map((order) => ({
+    kodeOrder: order.kodeOrder,
+    status: order.status,
+    metode: order.metode,
+    totalHarga: Number(order.totalHarga),
+    createdAt: order.createdAt,
+    items: order.items.map((item) => ({
+      nama: item.product.nama,
+      qty: item.qty,
+      harga: Number(item.hargaSaatOrder),
+    })),
+  }));
+  const total = shaped.reduce((sum, o) => sum + o.totalHarga, 0);
+
+  return { nomorMeja: table.nomorMeja, orders: shaped, total };
+}
+
+module.exports = { createOrder, createManualOrder, confirmQrisPayment, getByCode, getTableBill };

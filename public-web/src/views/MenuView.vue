@@ -14,7 +14,8 @@ import QtyStepper from '@/components/QtyStepper.vue'
 import VariantPickerDialog from '@/components/VariantPickerDialog.vue'
 import CallStaffDialog from '@/components/CallStaffDialog.vue'
 import RecentOrdersDialog from '@/components/RecentOrdersDialog.vue'
-import { ImageOffIcon, ChevronRightIcon, QrCodeIcon, BellIcon, SearchIcon, ReceiptIcon } from '@lucide/vue'
+import BillDialog from '@/components/BillDialog.vue'
+import { ImageOffIcon, ChevronRightIcon, QrCodeIcon, BellIcon, SearchIcon, ReceiptIcon, ReceiptTextIcon } from '@lucide/vue'
 import { API_URL } from '@/lib/api'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 
@@ -29,6 +30,7 @@ const pickerOpen = ref(false)
 const pickerProduct = ref(null)
 const callStaffOpen = ref(false)
 const recentOrdersOpen = ref(false)
+const billOpen = ref(false)
 
 // null = "Semua" (no filter). Display-only — menu.categories itself stays
 // untouched so cart/findProduct lookups elsewhere never see a filtered view.
@@ -127,6 +129,14 @@ const estimatedTotal = computed(() =>
           @click="callStaffOpen = true"
         >
           <BellIcon class="size-4" />
+        </button>
+        <button
+          type="button"
+          :aria-label="locale.t('billLabel')"
+          class="flex size-9 shrink-0 items-center justify-center rounded-full border active:bg-accent"
+          @click="billOpen = true"
+        >
+          <ReceiptTextIcon class="size-4" />
         </button>
       </div>
     </header>
@@ -266,5 +276,6 @@ const estimatedTotal = computed(() =>
     <VariantPickerDialog :open="pickerOpen" :product="pickerProduct" @update:open="pickerOpen = $event" />
     <CallStaffDialog :open="callStaffOpen" @update:open="callStaffOpen = $event" />
     <RecentOrdersDialog :open="recentOrdersOpen" @update:open="recentOrdersOpen = $event" />
+    <BillDialog :open="billOpen" @update:open="billOpen = $event" />
   </div>
 </template>

@@ -36,6 +36,7 @@ router.get('/settings/qris-photo/:filename', publicImageLimiter, settingsImage.s
 router.get('/menu', publicReadLimiter, menuController.getMenu);
 router.get('/settings', publicReadLimiter, settingsController.get);
 router.get('/tables/:token', tableVerifyLimiter, tableController.verifyToken);
+router.get('/tables/:token/bill', tableVerifyLimiter, orderController.bill);
 router.post('/cart/total', publicReadLimiter, validate(cartTotalSchema), cartController.total);
 
 router.post('/orders', createOrderLimiter, validate(createOrderSchema), orderController.create);

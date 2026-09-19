@@ -102,6 +102,13 @@ export const translations = {
     progresPesanan: 'Progres Pesanan',
     pesananDibatalkanDesc: 'Pesanan ini sudah dibatalkan.',
 
+    // BillDialog
+    billLabel: 'Bill',
+    billTitle: 'Bill Meja {meja}',
+    billKosong: 'Belum ada pesanan hari ini di meja ini.',
+    billTotalKeseluruhan: 'Total Keseluruhan',
+    billJumlahPesanan: '{n} pesanan',
+
     // CallStaffDialog
     panggilStaffTitle: 'Panggil Staff',
     mintaAirPutih: 'Minta Air Putih',
@@ -215,6 +222,13 @@ export const translations = {
     terimaKasihMenungguVerifikasi: 'Thank you! Waiting for cashier verification.',
     progresPesanan: 'Order Progress',
     pesananDibatalkanDesc: 'This order has been cancelled.',
+
+    // BillDialog
+    billLabel: 'Bill',
+    billTitle: 'Table {meja} Bill',
+    billKosong: 'No orders yet today at this table.',
+    billTotalKeseluruhan: 'Grand Total',
+    billJumlahPesanan: '{n} orders',
 
     panggilStaffTitle: 'Call Staff',
     mintaAirPutih: 'Request Water',
