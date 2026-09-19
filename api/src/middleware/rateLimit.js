@@ -1,5 +1,17 @@
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
+// IP alone over-shares a bucket across every table on the cafe's WiFi (one
+// public IP behind NAT for the whole venue) — a busy shift with several
+// tables ordering/polling concurrently can exhaust a purely-per-IP limit
+// from completely unrelated customers' traffic. Scoping the key to IP +
+// the request's own table-token/order-code keeps each real customer's
+// budget independent of everyone else's, while a single customer/table
+// still can't exceed the same limit AGENTS.md specifies — this narrows
+// the bucket, it doesn't loosen it.
+function scopedKey(req, scope) {
+  return `${ipKeyGenerator(req.ip)}:${scope || ''}`;
+}
+
 // 5 failed logins / 15 minutes / (IP + username) combination.
 // keyGenerator must route req.ip through ipKeyGenerator (not use it raw) —
 // express-rate-limit >=8.2 statically inspects the function source and
@@ -18,25 +30,27 @@ const loginLimiter = rateLimit({
   },
 });
 
-// AGENTS.md rate limit rule: 10/menit/IP untuk create order.
+// AGENTS.md rate limit rule: 10/menit/(IP+token meja) untuk create order —
+// scoped per table, not just per IP (see scopedKey above).
 const createOrderLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  keyGenerator: (req) => scopedKey(req, req.body?.token),
   handler: (req, res) => {
     res.status(429).json({ error: 'Terlalu banyak percobaan order. Coba lagi sebentar.' });
   },
 });
 
-// AGENTS.md rate limit rule: 5/menit/IP untuk cek status order.
+// AGENTS.md rate limit rule: 5/menit/(IP+kode order) untuk cek status order
+// — scoped per order, not just per IP (see scopedKey above).
 const orderStatusLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  keyGenerator: (req) => scopedKey(req, req.params?.kodeOrder),
   handler: (req, res) => {
     res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi sebentar.' });
   },
@@ -52,20 +66,22 @@ const confirmPaymentLimiter = rateLimit({
   limit: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  keyGenerator: (req) => scopedKey(req, req.params?.kodeOrder),
   handler: (req, res) => {
     res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi sebentar.' });
   },
 });
 
 // Not an order, so no anti-guessing rationale like the ones above — this
-// is purely spam-prevention against a customer mashing the button.
+// is purely spam-prevention against a customer mashing the button. Scoped
+// per table so one table hammering it doesn't burn the whole cafe WiFi's
+// shared budget for every other table.
 const staffCallLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 3,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  keyGenerator: (req) => scopedKey(req, req.body?.token),
   handler: (req, res) => {
     res.status(429).json({ error: 'Terlalu banyak permintaan. Coba lagi sebentar.' });
   },
