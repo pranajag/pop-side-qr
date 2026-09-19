@@ -29,6 +29,7 @@ import {
   LoaderCircleIcon,
   CheckIcon,
   XIcon,
+  BanIcon,
   BellIcon,
   PlusIcon,
   ImageIcon,
@@ -59,6 +60,12 @@ const filteredItems = computed(() => {
   })
 })
 const busyId = ref(null)
+// Split from cancelTarget deliberately, same reason as confirmOpen/
+// confirmTarget below: AlertDialogAction closes the dialog (nulling a
+// target ref bound straight to :open) before the close transition finishes,
+// which flashes "kodeOrder undefined" in the title for ~150ms. cancelTarget
+// keeps its last value across a close so the fade-out still reads correctly.
+const cancelOpen = ref(false)
 const cancelTarget = ref(null)
 const cancelReason = ref('')
 const cancelling = ref(false)
@@ -100,6 +107,14 @@ const NEXT_ACTION = {
   ready: { status: 'completed', label: 'Selesai' },
 }
 const CANCELLABLE = new Set(['pending', 'waiting_verif', 'confirmed', 'cooking', 'ready'])
+// Past the payment gate (confirmed/cooking/ready) means money already
+// changed hands — cancelling one of these is a "void" (customer backed out
+// after paying), not a plain pre-payment cancel. Same statuses, different
+// label/copy/refund emphasis in the dialog below.
+const PAID_STATUSES = new Set(['confirmed', 'cooking', 'ready'])
+function isVoidCase(order) {
+  return PAID_STATUSES.has(order.status)
+}
 
 let pollTimer = null
 onMounted(() => {
@@ -172,11 +187,11 @@ async function onAdvance(order) {
   }
 }
 
-// AlertDialogAction closes the dialog itself on click, which fires our
-// @update:open handler and nulls cancelTarget — *before* the @click
-// handler below gets its turn, not just racing it. A plain (non-reactive)
-// variable set on open and read on confirm sidesteps that entirely,
-// since nothing but this file's own code ever touches it.
+// AlertDialogAction closes the dialog itself on click, which flips
+// cancelOpen to false right away — before the @click handler below gets its
+// turn, not just racing it. A plain (non-reactive) variable set on open and
+// read on confirm sidesteps needing cancelTarget to still be "current" at
+// submit time, since nothing but this file's own code ever touches it.
 let pendingCancel = null
 const cancelRefundInput = ref('')
 
@@ -198,9 +213,12 @@ const cancelRefundNumber = computed(() => {
 
 function openCancel(order) {
   cancelTarget.value = order
+  cancelOpen.value = true
   pendingCancel = order
   cancelReason.value = ''
-  cancelRefundInput.value = ''
+  // Voiding a paid tunai order is almost always a full refund — prefilled
+  // so the common case takes zero typing, still editable for a partial one.
+  cancelRefundInput.value = isVoidCase(order) && order.metode === 'tunai' ? String(order.totalHarga) : ''
 }
 
 async function onCancelConfirm() {
@@ -211,7 +229,7 @@ async function onCancelConfirm() {
   try {
     const refund = needsRefundInput.value ? cancelRefundNumber.value ?? undefined : undefined
     await store.updateStatus(target.id, 'cancelled', cancelReason.value || undefined, refund)
-    toast.success(`${target.kodeOrder} dibatalkan`)
+    toast.success(isVoidCase(target) ? `${target.kodeOrder} di-void` : `${target.kodeOrder} dibatalkan`)
   } catch (err) {
     toast.error(formatApiError(err))
     store.fetchAll()
@@ -355,8 +373,9 @@ async function onCancelConfirm() {
             class="gap-1.5 text-destructive hover:text-destructive"
             @click="openCancel(order)"
           >
-            <XIcon class="size-3.5" />
-            Batalkan
+            <BanIcon v-if="isVoidCase(order)" class="size-3.5" />
+            <XIcon v-else class="size-3.5" />
+            {{ isVoidCase(order) ? 'Void' : 'Batalkan' }}
           </Button>
         </div>
       </div>
@@ -381,12 +400,20 @@ async function onCancelConfirm() {
       </AlertDialogContent>
     </AlertDialog>
 
-    <AlertDialog :open="!!cancelTarget" @update:open="(v) => !v && (cancelTarget = null)">
+    <AlertDialog :open="cancelOpen" @update:open="(v) => (cancelOpen = v)">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Batalkan pesanan {{ cancelTarget?.kodeOrder }}?</AlertDialogTitle>
+          <AlertDialogTitle>
+            {{ cancelTarget && isVoidCase(cancelTarget) ? `Void pesanan ${cancelTarget?.kodeOrder}?` : `Batalkan pesanan ${cancelTarget?.kodeOrder}?` }}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            Stok yang sudah dikurangi untuk pesanan ini akan dikembalikan. Tindakan ini tidak bisa dibatalkan.
+            <template v-if="cancelTarget && isVoidCase(cancelTarget)">
+              Customer tidak jadi memesan, tapi pesanan ini sudah dibayar ({{ cancelTarget.metode.toUpperCase() }}).
+              Stok yang sudah dikurangi akan dikembalikan. Tindakan ini tidak bisa dibatalkan.
+            </template>
+            <template v-else>
+              Stok yang sudah dikurangi untuk pesanan ini akan dikembalikan. Tindakan ini tidak bisa dibatalkan.
+            </template>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div class="space-y-2">
@@ -394,16 +421,21 @@ async function onCancelConfirm() {
           <Input id="cancel-reason" v-model="cancelReason" placeholder="Misal: stok habis, customer batal" maxlength="200" />
         </div>
         <div v-if="needsRefundInput" class="space-y-2">
-          <Label for="cancel-refund">Uang Dikembalikan ke Customer (opsional)</Label>
+          <Label for="cancel-refund">Uang Dikembalikan ke Customer</Label>
           <Input id="cancel-refund" v-model="cancelRefundInput" type="number" min="0" step="500" placeholder="0" />
           <p class="text-xs text-muted-foreground">
-            Order ini sudah dikonfirmasi (tunai dianggap sudah diterima) — catat kalau uangnya dikembalikan, supaya
-            rekonsiliasi kas shift ini lebih akurat.
+            Order ini sudah dikonfirmasi (tunai dianggap sudah diterima) — sudah diisi otomatis dengan total order,
+            sesuaikan kalau cuma sebagian yang dikembalikan. Ini yang dipakai rekonsiliasi kas shift ini.
           </p>
+        </div>
+        <div v-else-if="cancelTarget && isVoidCase(cancelTarget) && cancelTarget.metode !== 'tunai'" class="rounded-md border bg-muted/50 p-2.5 text-xs text-muted-foreground">
+          Pembayaran {{ cancelTarget.metode.toUpperCase() }} tidak lewat kas — proses refund-nya di luar sistem ini.
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
-          <AlertDialogAction :disabled="cancelling" @click="onCancelConfirm">Ya, Batalkan Pesanan</AlertDialogAction>
+          <AlertDialogAction :disabled="cancelling" @click="onCancelConfirm">
+            {{ cancelTarget && isVoidCase(cancelTarget) ? 'Ya, Void Pesanan' : 'Ya, Batalkan Pesanan' }}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
