@@ -205,12 +205,12 @@ const activeDuration = computed(() => (active.value ? formatDuration(active.valu
             <TableHead class="w-44">Selesai</TableHead>
             <TableHead class="w-24">Order</TableHead>
             <TableHead class="w-36">Pendapatan</TableHead>
-            <TableHead class="w-40">Kas Tunai</TableHead>
-            <TableHead class="w-24"></TableHead>
+            <TableHead v-if="auth.isAdmin" class="w-40">Kas Tunai</TableHead>
+            <TableHead v-if="auth.isAdmin" class="w-24"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableEmpty v-if="!loading && shifts.length === 0" :colspan="7">Belum ada shift.</TableEmpty>
+          <TableEmpty v-if="!loading && shifts.length === 0" :colspan="auth.isAdmin ? 7 : 5">Belum ada shift.</TableEmpty>
           <TableRow v-for="s in shifts" :key="s.id">
             <TableCell class="font-medium">{{ s.username }}</TableCell>
             <TableCell class="text-sm text-muted-foreground">{{ formatDateTime(s.startedAt) }}</TableCell>
@@ -220,13 +220,13 @@ const activeDuration = computed(() => (active.value ? formatDuration(active.valu
             </TableCell>
             <TableCell class="text-sm">{{ s.orderCount }}</TableCell>
             <TableCell class="text-sm font-medium">{{ formatRupiah(s.revenue) }}</TableCell>
-            <TableCell class="text-sm">
+            <TableCell v-if="auth.isAdmin" class="text-sm">
               <Badge v-if="s.cashDifference !== null" :class="reconBadgeClass(s.cashDifference)">
                 {{ reconLabel(s.cashDifference) }}
               </Badge>
               <span v-else class="text-muted-foreground">&mdash;</span>
             </TableCell>
-            <TableCell class="text-right">
+            <TableCell v-if="auth.isAdmin" class="text-right">
               <Button v-if="!s.isActive" variant="ghost" size="sm" @click="openDetail(s)">Detail</Button>
             </TableCell>
           </TableRow>

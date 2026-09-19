@@ -20,6 +20,9 @@ router.get('/', shiftController.list);
 router.get('/active', shiftController.active);
 router.post('/start', shiftController.start);
 router.post('/end', validate(endShiftSchema), shiftController.end);
-router.get('/:id', validateIdParam, shiftController.detail);
+// Admin-only: this is where the cash-reconciliation detail (redacted out of
+// the list above for non-admins) actually lives, so gating just the list
+// would leak it right back through here.
+router.get('/:id', requireRole('admin'), validateIdParam, shiftController.detail);
 
 module.exports = router;
