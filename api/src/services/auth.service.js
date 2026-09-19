@@ -2,23 +2,12 @@ const bcrypt = require('bcrypt');
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const { generateCsrfToken } = require('../middleware/csrf');
+const { regenerateSession, destroySession } = require('../utils/session');
 
 // Precomputed once at startup so a login attempt for a username that
 // doesn't exist still pays the same bcrypt cost as a real one — otherwise
 // response timing would leak which usernames exist.
 const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-constant-time-compare', 12);
-
-function regenerateSession(req) {
-  return new Promise((resolve, reject) => {
-    req.session.regenerate((err) => (err ? reject(err) : resolve()));
-  });
-}
-
-function destroySession(req) {
-  return new Promise((resolve, reject) => {
-    req.session.destroy((err) => (err ? reject(err) : resolve()));
-  });
-}
 
 async function login(req, res, username, password) {
   const user = await prisma.user.findUnique({ where: { username } });
