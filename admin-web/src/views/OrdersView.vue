@@ -24,7 +24,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { LoaderCircleIcon, CheckIcon, XIcon, BellIcon, PlusIcon, ImageIcon, PackageXIcon } from '@lucide/vue'
+import { LoaderCircleIcon, CheckIcon, XIcon, BellIcon, PlusIcon, ImageIcon, PackageXIcon, SearchIcon } from '@lucide/vue'
 
 const POLL_MS = 8000
 
@@ -33,6 +33,19 @@ const store = useOrdersStore()
 const calls = useStaffCallsStore()
 const products = useProductsStore()
 const lowStockProducts = computed(() => products.items.filter((p) => stockStatus(p) !== null))
+
+const searchQuery = ref('')
+const filteredItems = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return store.items
+  return store.items.filter((o) => {
+    return (
+      o.kodeOrder.toLowerCase().includes(q) ||
+      (o.customerName?.toLowerCase().includes(q) ?? false) ||
+      (o.nomorMeja?.toLowerCase().includes(q) ?? false)
+    )
+  })
+})
 const busyId = ref(null)
 const cancelTarget = ref(null)
 const cancelReason = ref('')
@@ -233,24 +246,30 @@ async function onCancelConfirm() {
       </span>
     </div>
 
-    <div class="flex flex-wrap gap-2">
-      <Button
-        v-for="f in FILTERS"
-        :key="f.label"
-        size="sm"
-        :variant="store.statusFilter === f.value ? 'default' : 'outline'"
-        @click="store.setFilter(f.value)"
-      >
-        {{ f.label }}
-      </Button>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap gap-2">
+        <Button
+          v-for="f in FILTERS"
+          :key="f.label"
+          size="sm"
+          :variant="store.statusFilter === f.value ? 'default' : 'outline'"
+          @click="store.setFilter(f.value)"
+        >
+          {{ f.label }}
+        </Button>
+      </div>
+      <div class="relative w-full max-w-xs sm:w-64">
+        <SearchIcon class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input v-model="searchQuery" placeholder="Cari kode order, meja, nama..." class="pl-8" />
+      </div>
     </div>
 
-    <p v-if="!store.loading && store.items.length === 0" class="py-10 text-center text-sm text-muted-foreground">
-      Tidak ada pesanan.
+    <p v-if="!store.loading && filteredItems.length === 0" class="py-10 text-center text-sm text-muted-foreground">
+      {{ searchQuery ? 'Tidak ada pesanan yang cocok.' : 'Tidak ada pesanan.' }}
     </p>
 
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      <div v-for="order in store.items" :key="order.id" class="space-y-3 rounded-lg border bg-card p-4">
+      <div v-for="order in filteredItems" :key="order.id" class="space-y-3 rounded-lg border bg-card p-4">
         <div class="flex items-start justify-between gap-2">
           <div>
             <p class="font-mono text-sm font-semibold">{{ order.kodeOrder }}</p>

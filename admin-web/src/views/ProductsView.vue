@@ -32,10 +32,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { PlusIcon, PencilIcon, Trash2Icon, LoaderCircleIcon, ImageOffIcon } from '@lucide/vue'
+import { PlusIcon, PencilIcon, Trash2Icon, LoaderCircleIcon, ImageOffIcon, SearchIcon } from '@lucide/vue'
 
 const store = useProductsStore()
 const categoriesStore = useCategoriesStore()
+
+const searchQuery = ref('')
+const filteredItems = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return store.items
+  return store.items.filter((p) => p.nama.toLowerCase().includes(q))
+})
 
 const formOpen = ref(false)
 const editingId = ref(null)
@@ -222,6 +229,11 @@ async function onDeleteConfirm() {
       Tambahkan kategori dulu sebelum bisa membuat produk.
     </p>
 
+    <div class="relative max-w-xs">
+      <SearchIcon class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input v-model="searchQuery" placeholder="Cari nama produk..." class="pl-8" />
+    </div>
+
     <div class="rounded-lg border bg-card">
       <Table>
         <TableHeader>
@@ -236,10 +248,10 @@ async function onDeleteConfirm() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableEmpty v-if="!store.loading && store.items.length === 0" :colspan="7">
-            Belum ada produk.
+          <TableEmpty v-if="!store.loading && filteredItems.length === 0" :colspan="7">
+            {{ searchQuery ? 'Tidak ada produk yang cocok.' : 'Belum ada produk.' }}
           </TableEmpty>
-          <TableRow v-for="p in store.items" :key="p.id">
+          <TableRow v-for="p in filteredItems" :key="p.id">
             <TableCell>
               <img
                 v-if="p.foto"
