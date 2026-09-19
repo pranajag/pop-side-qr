@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { useReservationsStore } from '@/stores/reservations'
 import { useTablesStore } from '@/stores/tables'
@@ -90,6 +90,51 @@ const form = reactive({
 // before the request leaves this component.
 const NO_TABLE = 'none'
 
+// Losing a half-filled reservation to a stray click (backdrop, Escape, the
+// wrong sidebar link) is exactly what was reported — so the in-progress
+// *create* draft survives any close that isn't a successful submit. Scoped
+// to create only: an edit draft would risk showing reservation A's leftover
+// text after closing without saving and then opening a *different*
+// reservation B to edit, which would be worse than the bug being fixed.
+const DRAFT_KEY = 'popside.reservationDraft'
+let restoringDraft = false
+
+function loadDraft() {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+function saveDraft() {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(form))
+  } catch {
+    // Storage unavailable (private mode, quota, disabled) — draft just
+    // won't survive a close; nothing else depends on it persisting.
+  }
+}
+function clearDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY)
+  } catch {
+    // Nothing to clean up if storage was never reachable in the first place.
+  }
+}
+
+watch(
+  form,
+  () => {
+    // Skip the write this same tick restores a saved draft into `form` —
+    // otherwise that restore would immediately re-save itself right back,
+    // which is harmless but pointless.
+    if (restoringDraft || editingId.value !== null) return
+    saveDraft()
+  },
+  { deep: true }
+)
+
 onMounted(() => {
   store.fetchAll()
   tables.fetchAll()
@@ -138,14 +183,20 @@ function activeTables() {
 
 function openCreate() {
   editingId.value = null
-  form.namaCustomer = ''
-  form.namaAcara = ''
-  form.telepon = ''
-  form.jumlahTamu = 1
-  form.tanggalReservasi = ''
-  form.tableId = NO_TABLE
-  form.catatan = ''
+  const draft = loadDraft()
+  restoringDraft = true
+  form.namaCustomer = draft?.namaCustomer ?? ''
+  form.namaAcara = draft?.namaAcara ?? ''
+  form.telepon = draft?.telepon ?? ''
+  form.jumlahTamu = draft?.jumlahTamu ?? 1
+  form.tanggalReservasi = draft?.tanggalReservasi ?? ''
+  form.tableId = draft?.tableId ?? NO_TABLE
+  form.catatan = draft?.catatan ?? ''
+  restoringDraft = false
   formOpen.value = true
+  if (draft) {
+    toast.info('Draf reservasi yang belum tersimpan dipulihkan')
+  }
 }
 
 function openEdit(r) {
@@ -174,6 +225,7 @@ async function onSubmit() {
     } else {
       await store.create(payload)
       toast.success('Reservasi ditambahkan')
+      clearDraft()
     }
     formOpen.value = false
   } catch (err) {
