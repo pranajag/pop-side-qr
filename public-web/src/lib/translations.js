@@ -99,6 +99,8 @@ export const translations = {
     detailPesanan: 'Detail Pesanan',
     catatanLabel: 'Catatan: {catatan}',
     terimaKasihMenungguVerifikasi: 'Terima kasih! Menunggu verifikasi kasir.',
+    progresPesanan: 'Progres Pesanan',
+    pesananDibatalkanDesc: 'Pesanan ini sudah dibatalkan.',
 
     // CallStaffDialog
     panggilStaffTitle: 'Panggil Staff',
@@ -211,6 +213,8 @@ export const translations = {
     detailPesanan: 'Order Details',
     catatanLabel: 'Note: {catatan}',
     terimaKasihMenungguVerifikasi: 'Thank you! Waiting for cashier verification.',
+    progresPesanan: 'Order Progress',
+    pesananDibatalkanDesc: 'This order has been cancelled.',
 
     panggilStaffTitle: 'Call Staff',
     mintaAirPutih: 'Request Water',

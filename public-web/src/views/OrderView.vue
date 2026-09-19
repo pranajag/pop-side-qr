@@ -19,10 +19,12 @@ import {
 import {
   LoaderCircleIcon,
   CircleCheckIcon,
+  CircleIcon,
   ClockIcon,
   TriangleAlertIcon,
   CopyIcon,
   UtensilsIcon,
+  XCircleIcon,
 } from '@lucide/vue'
 
 const route = useRoute()
@@ -64,6 +66,28 @@ const statusColor = computed(() => STATUS_COLOR[order.value?.status] ?? 'bg-mute
 const needsQrisPayment = computed(() => order.value?.status === 'pending' && order.value?.metode === 'qris')
 const isWaitingKasir = computed(() => order.value?.status === 'pending' && order.value?.metode !== 'qris')
 const isTerminal = computed(() => order.value?.status === 'completed' || order.value?.status === 'cancelled')
+
+// waiting_verif shares step 0 with pending — both mean "not confirmed yet",
+// same grouping the needsQrisPayment/isWaitingKasir panels above already
+// use. cancelled has no place on this pipeline (see the dedicated branch in
+// the template) so it's just left out of this map.
+const PROGRESS_STEPS = [
+  { key: 'pending', labelKey: 'statusPending' },
+  { key: 'confirmed', labelKey: 'statusConfirmed' },
+  { key: 'cooking', labelKey: 'statusCooking' },
+  { key: 'ready', labelKey: 'statusReady' },
+  { key: 'completed', labelKey: 'statusCompleted' },
+]
+const STATUS_STEP_INDEX = { pending: 0, waiting_verif: 0, confirmed: 1, cooking: 2, ready: 3, completed: 4 }
+const currentStepIndex = computed(() => STATUS_STEP_INDEX[order.value?.status] ?? -1)
+const showStepper = computed(() => order.value && order.value.status !== 'cancelled')
+
+function stepState(i) {
+  if (order.value?.status === 'completed') return 'done'
+  if (i < currentStepIndex.value) return 'done'
+  if (i === currentStepIndex.value) return 'current'
+  return 'upcoming'
+}
 
 // Elapsed time since the order's last status change — not a promised ETA
 // (this cafe has no per-order kitchen-load data to predict one honestly),
@@ -213,6 +237,35 @@ async function copyKode() {
         </p>
       </div>
 
+      <div v-if="showStepper" class="space-y-3 rounded-lg border p-4">
+        <h2 class="text-sm font-semibold text-muted-foreground">{{ locale.t('progresPesanan') }}</h2>
+        <div class="space-y-0">
+          <div v-for="(step, i) in PROGRESS_STEPS" :key="step.key" class="flex gap-3">
+            <div class="flex flex-col items-center">
+              <CircleCheckIcon v-if="stepState(i) === 'done'" class="size-5 shrink-0 text-status-completed" />
+              <span v-else-if="stepState(i) === 'current'" class="relative flex size-5 shrink-0 items-center justify-center">
+                <span class="absolute size-5 animate-ping rounded-full bg-brand-cta/40" />
+                <span class="relative size-2.5 rounded-full bg-brand-cta" />
+              </span>
+              <CircleIcon v-else class="size-5 shrink-0 text-muted-foreground/40" />
+              <div v-if="i < PROGRESS_STEPS.length - 1" class="my-0.5 h-5 w-px" :class="stepState(i) === 'done' ? 'bg-status-completed' : 'bg-border'" />
+            </div>
+            <p
+              class="pb-4 text-sm"
+              :class="
+                stepState(i) === 'upcoming'
+                  ? 'text-muted-foreground/60'
+                  : stepState(i) === 'current'
+                    ? 'font-medium text-foreground'
+                    : 'text-foreground'
+              "
+            >
+              {{ locale.t(step.labelKey) }}
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div v-if="needsQrisPayment" class="space-y-3 rounded-lg border p-4 text-center">
         <p class="text-sm font-medium">{{ locale.t('scanQrisUntukBayar', { total: formatRupiah(order.totalHarga) }) }}</p>
         <img
@@ -265,6 +318,11 @@ async function copyKode() {
       <div v-else-if="order.status === 'completed'" class="space-y-1 rounded-lg border p-4 text-center">
         <CircleCheckIcon class="mx-auto size-6 text-status-completed" />
         <p class="text-sm font-medium">{{ locale.t('pesananSelesai') }}</p>
+      </div>
+
+      <div v-else-if="order.status === 'cancelled'" class="space-y-1 rounded-lg border p-4 text-center">
+        <XCircleIcon class="mx-auto size-6 text-status-cancelled" />
+        <p class="text-sm font-medium">{{ locale.t('pesananDibatalkanDesc') }}</p>
       </div>
 
       <div v-else class="rounded-lg border p-4 text-center">
