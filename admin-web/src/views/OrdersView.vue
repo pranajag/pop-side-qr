@@ -45,6 +45,7 @@ import {
   ReceiptIcon,
   PrinterIcon,
   EllipsisVerticalIcon,
+  ClockIcon,
 } from '@lucide/vue'
 
 const POLL_MS = 8000
@@ -124,7 +125,22 @@ function isVoidCase(order) {
   return PAID_STATUSES.has(order.status)
 }
 
+// Time since the order's LAST STATUS CHANGE (not since it was placed) — for
+// "ready" that's how long it's sat waiting for pickup, for "confirmed"/
+// "cooking" it's how long the kitchen has had it. Ticks off `now` so the
+// number keeps moving between polls instead of jumping every POLL_MS.
+const TERMINAL_STATUSES = new Set(['completed', 'cancelled'])
+const URGENT_MINUTES = 10
+const now = ref(Date.now())
+function elapsedMinutes(order) {
+  return Math.max(0, Math.floor((now.value - new Date(order.updatedAt).getTime()) / 60000))
+}
+function isUrgent(order) {
+  return !TERMINAL_STATUSES.has(order.status) && elapsedMinutes(order) >= URGENT_MINUTES
+}
+
 let pollTimer = null
+let clockTimer = null
 onMounted(() => {
   store.fetchAll()
   calls.fetchPending()
@@ -134,8 +150,14 @@ onMounted(() => {
     calls.fetchPending()
     products.fetchAll()
   }, POLL_MS)
+  clockTimer = setInterval(() => {
+    now.value = Date.now()
+  }, 30000)
 })
-onUnmounted(() => clearInterval(pollTimer))
+onUnmounted(() => {
+  clearInterval(pollTimer)
+  clearInterval(clockTimer)
+})
 
 function needsPaymentConfirm(order) {
   return (order.metode === 'qris' && order.status === 'waiting_verif') || (order.metode !== 'qris' && order.status === 'pending')
@@ -321,7 +343,17 @@ async function onCancelConfirm() {
               &middot; {{ order.metode.toUpperCase() }}
             </p>
           </div>
-          <Badge :class="STATUS_BADGE_CLASS[order.status]">{{ STATUS_LABEL[order.status] }}</Badge>
+          <div class="flex flex-col items-end gap-1">
+            <Badge :class="STATUS_BADGE_CLASS[order.status]">{{ STATUS_LABEL[order.status] }}</Badge>
+            <p
+              v-if="!TERMINAL_STATUSES.has(order.status)"
+              class="flex items-center gap-1 text-[11px]"
+              :class="isUrgent(order) ? 'font-medium text-destructive' : 'text-muted-foreground'"
+            >
+              <ClockIcon class="size-3" />
+              {{ elapsedMinutes(order) }} menit
+            </p>
+          </div>
         </div>
 
         <ul class="space-y-0.5 text-sm text-muted-foreground">
