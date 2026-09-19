@@ -6,7 +6,7 @@ import { useOrdersStore } from '@/stores/orders'
 import { useStaffCallsStore } from '@/stores/staffCalls'
 import { useProductsStore } from '@/stores/products'
 import { formatApiError, API_URL } from '@/lib/api'
-import { formatRupiah } from '@/lib/format'
+import { formatRupiah, formatDateTime } from '@/lib/format'
 import { STATUS_LABEL, STATUS_BADGE_CLASS } from '@/lib/orderStatus'
 import { stockStatus } from '@/lib/stock'
 import { Button } from '@/components/ui/button'
@@ -23,8 +23,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { LoaderCircleIcon, CheckIcon, XIcon, BellIcon, PlusIcon, ImageIcon, PackageXIcon, SearchIcon } from '@lucide/vue'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import logoUrl from '@/assets/pop-side-logo.jpg'
+import {
+  LoaderCircleIcon,
+  CheckIcon,
+  XIcon,
+  BellIcon,
+  PlusIcon,
+  ImageIcon,
+  PackageXIcon,
+  SearchIcon,
+  ReceiptIcon,
+  PrinterIcon,
+} from '@lucide/vue'
 
 const POLL_MS = 8000
 
@@ -52,6 +64,11 @@ const cancelReason = ref('')
 const cancelling = ref(false)
 const resolvingCallId = ref(null)
 const buktiOrderId = ref(null)
+const receiptOrder = ref(null)
+
+function printReceipt() {
+  window.print()
+}
 // Split from confirmOpen deliberately: confirmTarget must never go back to
 // null on close, or the dialog's description (which interpolates metode/
 // totalHarga, not just an id) renders "undefined"/"NaN" for the ~150ms
@@ -296,6 +313,10 @@ async function onCancelConfirm() {
         </div>
 
         <div class="flex flex-wrap gap-2 pt-1">
+          <Button size="sm" variant="outline" class="gap-1.5" @click="receiptOrder = order">
+            <ReceiptIcon class="size-3.5" />
+            Cetak Struk
+          </Button>
           <Button
             v-if="order.hasBuktiBayar"
             size="sm"
@@ -398,6 +419,58 @@ async function onCancelConfirm() {
           alt="Bukti pembayaran"
           class="w-full rounded-lg border object-contain"
         />
+      </DialogContent>
+    </Dialog>
+
+    <Dialog :open="!!receiptOrder" @update:open="(v) => !v && (receiptOrder = null)">
+      <DialogContent class="print:border-0 print:shadow-none sm:max-w-sm">
+        <DialogHeader class="print:hidden">
+          <DialogTitle>Struk {{ receiptOrder?.kodeOrder }}</DialogTitle>
+        </DialogHeader>
+        <div v-if="receiptOrder" class="space-y-3 font-mono text-xs">
+          <div class="flex flex-col items-center gap-1.5 border-b border-dashed pb-3 text-center">
+            <img :src="logoUrl" alt="Popside" class="size-10 rounded-md" />
+            <p class="text-sm font-bold">POPSIDE</p>
+            <p class="text-muted-foreground">{{ formatDateTime(receiptOrder.createdAt) }}</p>
+          </div>
+          <div class="space-y-0.5 border-b border-dashed pb-3">
+            <div class="flex justify-between">
+              <span>Kode</span>
+              <span class="font-semibold">{{ receiptOrder.kodeOrder }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span>{{ receiptOrder.nomorMeja ? 'Meja' : 'Tipe' }}</span>
+              <span>{{ receiptOrder.nomorMeja || `Bawa Pulang${receiptOrder.customerName ? ` (${receiptOrder.customerName})` : ''}` }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span>Bayar</span>
+              <span>{{ receiptOrder.metode.toUpperCase() }}</span>
+            </div>
+          </div>
+          <div class="space-y-1.5 border-b border-dashed pb-3">
+            <div v-for="(item, idx) in receiptOrder.items" :key="idx">
+              <div class="flex justify-between">
+                <span>{{ item.qty }}x {{ item.nama }}</span>
+                <span>{{ formatRupiah(item.harga * item.qty) }}</span>
+              </div>
+              <p v-if="item.variants?.length" class="pl-3 text-[11px] text-muted-foreground">
+                {{ item.variants.map((v) => v.namaOption).join(', ') }}
+              </p>
+              <p v-if="item.catatan" class="pl-3 text-[11px] italic text-muted-foreground">{{ item.catatan }}</p>
+            </div>
+          </div>
+          <div class="flex justify-between text-sm font-bold">
+            <span>TOTAL</span>
+            <span>{{ formatRupiah(receiptOrder.totalHarga) }}</span>
+          </div>
+          <p class="pt-2 text-center text-muted-foreground">Terima kasih!</p>
+        </div>
+        <DialogFooter class="print:hidden">
+          <Button class="gap-2" @click="printReceipt">
+            <PrinterIcon class="size-4" />
+            Cetak
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   </div>
