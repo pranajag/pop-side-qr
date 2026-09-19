@@ -24,6 +24,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 import {
   LoaderCircleIcon,
@@ -37,6 +44,7 @@ import {
   SearchIcon,
   ReceiptIcon,
   PrinterIcon,
+  EllipsisVerticalIcon,
 } from '@lucide/vue'
 
 const POLL_MS = 8000
@@ -330,25 +338,16 @@ async function onCancelConfirm() {
           <span>{{ formatRupiah(order.totalHarga) }}</span>
         </div>
 
-        <div class="flex flex-wrap gap-2 pt-1">
-          <Button size="sm" variant="outline" class="gap-1.5" @click="receiptOrder = order">
-            <ReceiptIcon class="size-3.5" />
-            Cetak Struk
-          </Button>
-          <Button
-            v-if="order.hasBuktiBayar"
-            size="sm"
-            variant="outline"
-            class="gap-1.5"
-            @click="buktiOrderId = order.id"
-          >
-            <ImageIcon class="size-3.5" />
-            Lihat Bukti
-          </Button>
+        <!-- Exactly 2 top-level controls per card, on purpose: one primary
+        button that's whatever actually moves the order forward, plus one
+        overflow menu for everything else (receipt, proof, cancel/void) — a
+        busy kasir shouldn't have to scan 4-5 buttons to find the one that
+        matters right now. -->
+        <div class="flex items-center gap-2 pt-1">
           <Button
             v-if="needsPaymentConfirm(order)"
             size="sm"
-            class="gap-1.5"
+            class="flex-1 gap-1.5"
             :disabled="busyId === order.id"
             @click="openConfirm(order)"
           >
@@ -357,26 +356,44 @@ async function onCancelConfirm() {
             Konfirmasi Bayar
           </Button>
           <Button
-            v-if="NEXT_ACTION[order.status]"
+            v-else-if="NEXT_ACTION[order.status]"
             size="sm"
-            variant="outline"
+            class="flex-1 gap-1.5"
             :disabled="busyId === order.id"
             @click="onAdvance(order)"
           >
             <LoaderCircleIcon v-if="busyId === order.id" class="size-3.5 animate-spin" />
             {{ NEXT_ACTION[order.status].label }}
           </Button>
-          <Button
-            v-if="CANCELLABLE.has(order.status)"
-            size="sm"
-            variant="ghost"
-            class="gap-1.5 text-destructive hover:text-destructive"
-            @click="openCancel(order)"
-          >
-            <BanIcon v-if="isVoidCase(order)" class="size-3.5" />
-            <XIcon v-else class="size-3.5" />
-            {{ isVoidCase(order) ? 'Void' : 'Batalkan' }}
-          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+              <Button size="sm" variant="outline" class="shrink-0" aria-label="Aksi lainnya">
+                <EllipsisVerticalIcon class="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem class="gap-2" @click="receiptOrder = order">
+                <ReceiptIcon class="size-3.5" />
+                Cetak Struk
+              </DropdownMenuItem>
+              <DropdownMenuItem v-if="order.hasBuktiBayar" class="gap-2" @click="buktiOrderId = order.id">
+                <ImageIcon class="size-3.5" />
+                Lihat Bukti
+              </DropdownMenuItem>
+              <DropdownMenuSeparator v-if="CANCELLABLE.has(order.status)" />
+              <DropdownMenuItem
+                v-if="CANCELLABLE.has(order.status)"
+                variant="destructive"
+                class="gap-2"
+                @click="openCancel(order)"
+              >
+                <BanIcon v-if="isVoidCase(order)" class="size-3.5" />
+                <XIcon v-else class="size-3.5" />
+                {{ isVoidCase(order) ? 'Void' : 'Batalkan' }}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>
