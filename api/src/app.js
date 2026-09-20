@@ -22,7 +22,10 @@ const userRoutes = require('./routes/user.routes');
 const staffCallRoutes = require('./routes/staffCall.routes');
 const reservationRoutes = require('./routes/reservation.routes');
 const customerRoutes = require('./routes/customer.routes');
+const apiKeyRoutes = require('./routes/apiKey.routes');
+const webhookRoutes = require('./routes/webhook.routes');
 const publicRoutes = require('./routes/public.routes');
+const externalRoutes = require('./routes/external.routes');
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -95,6 +98,12 @@ app.use(pinoHttp({ logger }));
 // GET /tables/:token to slow them down.
 app.use('/api/public', publicRoutes);
 
+// Same reasoning as /api/public above — external.routes.js authenticates
+// with a Bearer API key (requireApiKey.js), never a session cookie, so it
+// has no use for session/CSRF either and is mounted in the same
+// before-session zone to avoid allocating one per request.
+app.use('/api/external/v1', externalRoutes);
+
 app.use(
   session({
     name: 'popside.sid',
@@ -149,6 +158,8 @@ app.use('/api/admin/users', userRoutes);
 app.use('/api/admin/staff-calls', staffCallRoutes);
 app.use('/api/admin/reservations', reservationRoutes);
 app.use('/api/admin/customers', customerRoutes);
+app.use('/api/admin/api-keys', apiKeyRoutes);
+app.use('/api/admin/webhooks', webhookRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });

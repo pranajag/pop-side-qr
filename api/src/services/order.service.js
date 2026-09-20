@@ -7,6 +7,7 @@ const { jakartaDayBoundsUTC } = require('../utils/jakartaTime');
 const tableService = require('./table.service');
 const paymentProof = require('./paymentProof.service');
 const customerService = require('./customer.service');
+const webhookService = require('./webhook.service');
 
 const MAX_CODE_ATTEMPTS = 5;
 const KODE_ORDER_PATTERN = /^ORD-\d{8}-[A-Z0-9]{4}$/;
@@ -118,7 +119,7 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey }) {
       // in one DB transaction, so a thrown error (bad item, stock race
       // lost) rolls back everything — including stock already decremented
       // for earlier items in this same attempt.
-      return await prisma.$transaction(async (tx) => {
+      const created = await prisma.$transaction(async (tx) => {
         await bumpVisitIfTableIsFree(tx, table.id);
         const { orderItemsData, totalHarga } = await buildOrderItems(tx, items);
         return tx.order.create({
@@ -136,6 +137,11 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey }) {
           include: { items: true },
         });
       });
+      // After the transaction commits, never inside it — a webhook POST is
+      // real network I/O that must not hold the DB transaction open, and
+      // must never fire for a creation that then rolled back.
+      webhookService.dispatch('order.created', { kodeOrder: created.kodeOrder, metode, totalHarga: Number(created.totalHarga), source: 'qr' });
+      return created;
     } catch (err) {
       if (isUniqueConstraintError(err)) {
         // Two unique columns can fire here: kode_order (a same-day code
@@ -176,7 +182,7 @@ async function createManualOrder({
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
     const kodeOrder = generateOrderCode();
     try {
-      return await prisma.$transaction(async (tx) => {
+      const created = await prisma.$transaction(async (tx) => {
         const { orderItemsData, totalHarga: subtotal } = await buildOrderItems(tx, items);
         // Discount is staff-entered here only — createOrder (public
         // checkout) never accepts one, which would let a customer set
@@ -221,6 +227,13 @@ async function createManualOrder({
         });
         return order;
       });
+      webhookService.dispatch('order.created', {
+        kodeOrder: created.kodeOrder,
+        metode,
+        totalHarga: Number(created.totalHarga),
+        source: 'manual',
+      });
+      return created;
     } catch (err) {
       if (isUniqueConstraintError(err)) {
         continue;

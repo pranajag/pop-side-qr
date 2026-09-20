@@ -124,6 +124,53 @@ model StoreSetting {
   @@map("store_settings")
 }
 
+// External integrations (v1) — a small read-only API + outbound webhooks
+// for a bookkeeping/inventory/etc tool to pull from or be pushed to. Only
+// one tier of access exists for now: any live key can read every external
+// endpoint, no per-key scoping — the honest v1 given nothing has needed
+// finer-grained permissions yet.
+model ApiKey {
+  id         Int       @id @default(autoincrement())
+  nama       String
+  // SHA-256 of the actual key — never the key itself, same reasoning as a
+  // password hash. The raw key is shown to the admin exactly once, at
+  // creation (settings.controller.js), and never stored or retrievable
+  // again after that.
+  keyHash    String    @unique @map("key_hash")
+  // Last few characters of the real key, kept only so the admin can tell
+  // keys apart in the list ("...a91f") without the full value ever being
+  // persisted or re-displayed.
+  keySuffix  String    @map("key_suffix")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  revokedAt  DateTime? @map("revoked_at")
+
+  @@map("api_keys")
+}
+
+// Outbound event subscription — order.service.js / orderManagement.service.js
+// call webhook.service.js's dispatch() at the same points that already
+// matter for everything else in this app (order created, status changed),
+// fire-and-forget so a slow/dead receiving endpoint can never block or fail
+// the actual staff/customer action that triggered it.
+model Webhook {
+  id        Int      @id @default(autoincrement())
+  url       String
+  // Comma-separated event names (order.created, order.status_changed) —
+  // not a relation table, since the event vocabulary is tiny and fixed;
+  // not worth a join for it.
+  events    String
+  // HMAC-SHA256 signing key for the X-Popside-Signature header, shown once
+  // at creation like ApiKey.keyHash's raw value — this one IS stored
+  // (unlike a password/API key) because dispatch() needs it on every
+  // delivery to actually sign the payload, not just verify a claim.
+  secret    String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("webhooks")
+}
+
 model Category {
   id            Int       @id @default(autoincrement())
   nama          String

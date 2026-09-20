@@ -153,6 +153,23 @@ const csrfTokenLimiter = rateLimit({
   },
 });
 
+// Keyed by the verified API key (requireApiKey.js runs first in the same
+// route chain, so req.apiKey is already set), not IP — an external
+// integration server can share an IP with unrelated traffic or run behind
+// a rotating cloud IP, so IP is the wrong unit of "one integration" here.
+// 60/min is generous for a periodic sync job, tight enough to bound a
+// misconfigured client hammering it in a loop.
+const externalApiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `apikey:${req.apiKey?.id ?? ipKeyGenerator(req.ip)}`,
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak permintaan.' });
+  },
+});
+
 module.exports = {
   loginLimiter,
   createOrderLimiter,
@@ -163,4 +180,5 @@ module.exports = {
   publicReadLimiter,
   publicImageLimiter,
   csrfTokenLimiter,
+  externalApiLimiter,
 };

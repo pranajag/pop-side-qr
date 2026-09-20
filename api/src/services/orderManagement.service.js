@@ -3,6 +3,7 @@ const AppError = require('../utils/AppError');
 const paymentProof = require('./paymentProof.service');
 const userService = require('./user.service');
 const customerService = require('./customer.service');
+const webhookService = require('./webhook.service');
 
 const STATUS_PRIORITY = {
   waiting_verif: 0,
@@ -83,6 +84,20 @@ async function list(statusFilter) {
     .map(shapeOrder);
 }
 
+// For external.routes.js's polling endpoint — "everything touched since I
+// last checked", ordered oldest-first so a client that processes
+// sequentially and records the last updatedAt it saw can resume exactly
+// where it left off, even if it's paginating in fixed-size pages.
+async function listSince(since, limit) {
+  const orders = await prisma.order.findMany({
+    where: { updatedAt: { gte: since } },
+    include: ORDER_INCLUDE,
+    orderBy: { updatedAt: 'asc' },
+    take: limit,
+  });
+  return orders.map(shapeOrder);
+}
+
 async function findFull(tx, id) {
   return tx.order.findUnique({ where: { id }, include: ORDER_INCLUDE });
 }
@@ -101,7 +116,7 @@ async function confirmPayment(orderId, userId) {
     throw new AppError(409, `Order berstatus "${order.status}", tidak bisa dikonfirmasi dari sini.`);
   }
 
-  return prisma.$transaction(async (tx) => {
+  const shaped = await prisma.$transaction(async (tx) => {
     // Optimistic lock — two kasir confirming the same order at once only
     // lets one UPDATE actually match a row.
     const result = await tx.order.updateMany({
@@ -118,6 +133,12 @@ async function confirmPayment(orderId, userId) {
 
     return shapeOrder(await findFull(tx, orderId));
   });
+  webhookService.dispatch('order.status_changed', {
+    kodeOrder: shaped.kodeOrder,
+    statusFrom: expectedStatus,
+    statusTo: 'confirmed',
+  });
+  return shaped;
 }
 
 async function updateStatus(orderId, newStatus, userId, catatan, refundAmount, pin) {
@@ -138,7 +159,7 @@ async function updateStatus(orderId, newStatus, userId, catatan, refundAmount, p
     throw new AppError(400, `Tidak bisa mengubah status dari "${currentStatus}" ke "${newStatus}".`);
   }
 
-  return prisma.$transaction(async (tx) => {
+  const shaped = await prisma.$transaction(async (tx) => {
     const result = await tx.order.updateMany({
       where: { id: orderId, status: currentStatus },
       // refundAmount is only ever meaningful on a cancel, and undefined on
@@ -179,6 +200,12 @@ async function updateStatus(orderId, newStatus, userId, catatan, refundAmount, p
 
     return shapeOrder(await findFull(tx, orderId));
   });
+  webhookService.dispatch('order.status_changed', {
+    kodeOrder: shaped.kodeOrder,
+    statusFrom: currentStatus,
+    statusTo: newStatus,
+  });
+  return shaped;
 }
 
 // Filename is looked up here, from this authenticated+role-gated call,
@@ -223,4 +250,4 @@ async function listActivity(limit) {
   }));
 }
 
-module.exports = { list, confirmPayment, updateStatus, serveBuktiBayar, listActivity };
+module.exports = { list, listSince, confirmPayment, updateStatus, serveBuktiBayar, listActivity };
