@@ -529,13 +529,6 @@ async function onCancelConfirm() {
           <span>Total</span>
           <span>{{ formatRupiah(order.totalHarga) }}</span>
         </div>
-        <p
-          v-if="order.metode === 'qris' && order.uniqueCode && needsPaymentConfirm(order)"
-          class="rounded-md bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-700 dark:text-amber-400"
-        >
-          Cocokkan ke mutasi: {{ formatRupiah(order.totalHarga + order.uniqueCode) }}
-          (kode unik {{ order.uniqueCode }})
-        </p>
 
         <!-- Exactly 2 top-level controls per card, on purpose: one primary
         button that's whatever actually moves the order forward, plus one
@@ -629,28 +622,11 @@ async function onCancelConfirm() {
             konfirmasi.
           </AlertDialogDescription>
           <AlertDialogDescription v-else>
-            Cocokkan ke mutasi rekening/e-wallet — cari transaksi masuk tepat
-            sejumlah nominal di bawah ini. Kalau ketemu persis, kemungkinan
-            besar ini pembayaran asli.
+            Pastikan sudah cek bukti pembayarannya sebelum konfirmasi.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
         <div v-if="confirmTarget?.metode === 'qris'" class="space-y-3">
-          <div
-            class="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-center"
-          >
-            <p class="text-xs text-muted-foreground">Cari nominal masuk tepat</p>
-            <p class="text-xl font-bold text-amber-700 dark:text-amber-400">
-              {{
-                formatRupiah(
-                  (confirmTarget?.totalHarga ?? 0) + (confirmTarget?.uniqueCode ?? 0)
-                )
-              }}
-            </p>
-            <p v-if="confirmTarget?.uniqueCode" class="text-xs text-muted-foreground">
-              kode unik {{ confirmTarget.uniqueCode }}
-            </p>
-          </div>
           <img
             v-if="confirmTarget?.hasBuktiBayar"
             :src="buktiBayarUrl(confirmTarget.id)"

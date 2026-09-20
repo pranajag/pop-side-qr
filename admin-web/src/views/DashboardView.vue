@@ -2,21 +2,24 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
+import { useTablesStore } from '@/stores/tables'
 import { api, formatApiError } from '@/lib/api'
 import { formatRupiah, formatDateTime } from '@/lib/format'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import {
   LoaderCircleIcon,
   TrendingUpIcon,
   TrendingDownIcon,
-  AlertCircleIcon,
   TimerIcon,
   TrophyIcon,
   WalletIcon,
   ClipboardListIcon,
+  DoorOpenIcon,
 } from '@lucide/vue'
 
 const router = useRouter()
+const tables = useTablesStore()
 const loading = ref(true)
 const overview = ref(null)
 
@@ -53,104 +56,139 @@ function goToPendingVerif() {
   router.push({ name: 'pesanan', query: { status: 'waiting_verif' } })
 }
 
-onMounted(load)
+const activeTables = computed(() => tables.items.filter((t) => t.isActive))
+const billOpenBusyId = ref(null)
+async function onToggleBillOpen(table, value) {
+  billOpenBusyId.value = table.id
+  try {
+    await tables.setBillOpen(table.id, value)
+  } catch (err) {
+    toast.error(formatApiError(err))
+  } finally {
+    billOpenBusyId.value = null
+  }
+}
+
+onMounted(() => {
+  load()
+  tables.fetchAll()
+})
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="max-w-4xl space-y-8">
     <div>
       <h1 class="text-lg font-semibold tracking-tight">Dashboard</h1>
       <p class="text-sm text-muted-foreground">Ringkasan hari ini.</p>
     </div>
 
-    <div v-if="loading" class="flex justify-center py-12">
+    <div v-if="loading" class="flex justify-center py-16">
       <LoaderCircleIcon class="size-6 animate-spin text-muted-foreground" />
     </div>
 
     <template v-else-if="overview">
-      <div
+      <button
         v-if="overview.pendingVerifCount > 0"
-        class="flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4"
+        type="button"
+        class="flex w-full items-center justify-between gap-3 rounded-lg border-l-4 border-l-amber-500 bg-muted/40 px-4 py-3 text-left transition-colors hover:bg-muted/60"
+        @click="goToPendingVerif"
       >
-        <div class="flex items-center gap-2.5">
-          <AlertCircleIcon class="size-5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <p class="text-sm font-medium text-amber-700 dark:text-amber-400">
-            {{ overview.pendingVerifCount }} pembayaran QRIS menunggu diverifikasi
-          </p>
-        </div>
-        <Button size="sm" variant="outline" @click="goToPendingVerif">Cek Sekarang</Button>
-      </div>
+        <p class="text-sm">
+          <span class="font-semibold">{{ overview.pendingVerifCount }}</span>
+          pembayaran QRIS menunggu diverifikasi
+        </p>
+        <span class="shrink-0 text-xs font-medium text-primary">Cek sekarang →</span>
+      </button>
 
-      <div class="grid gap-4 sm:grid-cols-2">
-        <div class="space-y-1 rounded-lg border bg-card p-5">
+      <!-- The three numbers an admin actually opens this page to see, side
+      by side at equal weight — omzet, berapa order, berapa yang dibatalkan
+      setelah dibayar. No card chrome beyond a divider, so the eye lands on
+      the numbers themselves instead of three competing boxes. -->
+      <div class="grid grid-cols-3 divide-x rounded-lg border">
+        <div class="space-y-1 px-4 py-4 sm:px-6">
           <p class="text-xs text-muted-foreground">Omzet Hari Ini</p>
-          <p class="text-2xl font-bold">{{ formatRupiah(overview.today.total) }}</p>
+          <p class="text-xl font-semibold tracking-tight sm:text-2xl">
+            {{ formatRupiah(overview.today.total) }}
+          </p>
           <p
             v-if="revenueChange !== null"
             class="flex items-center gap-1 text-xs"
             :class="revenueChange >= 0 ? 'text-status-completed' : 'text-destructive'"
           >
-            <TrendingUpIcon v-if="revenueChange >= 0" class="size-3.5" />
-            <TrendingDownIcon v-else class="size-3.5" />
-            {{ Math.abs(revenueChange).toFixed(0) }}% dari kemarin
+            <TrendingUpIcon v-if="revenueChange >= 0" class="size-3.5 shrink-0" />
+            <TrendingDownIcon v-else class="size-3.5 shrink-0" />
+            <span>{{ Math.abs(revenueChange).toFixed(0) }}% dari kemarin</span>
           </p>
           <p v-else class="text-xs text-muted-foreground">Kemarin tidak ada omzet</p>
         </div>
 
-        <div class="space-y-1 rounded-lg border bg-card p-5">
-          <p class="text-xs text-muted-foreground">Jumlah Order Hari Ini</p>
-          <p class="text-2xl font-bold">{{ overview.today.orderCount }}</p>
+        <div class="space-y-1 px-4 py-4 sm:px-6">
+          <p class="text-xs text-muted-foreground">Order Hari Ini</p>
+          <p class="text-xl font-semibold tracking-tight sm:text-2xl">{{ overview.today.orderCount }}</p>
           <p
             v-if="orderCountChange !== null"
             class="flex items-center gap-1 text-xs"
             :class="orderCountChange >= 0 ? 'text-status-completed' : 'text-destructive'"
           >
-            <TrendingUpIcon v-if="orderCountChange >= 0" class="size-3.5" />
-            <TrendingDownIcon v-else class="size-3.5" />
-            {{ Math.abs(orderCountChange).toFixed(0) }}% dari kemarin
+            <TrendingUpIcon v-if="orderCountChange >= 0" class="size-3.5 shrink-0" />
+            <TrendingDownIcon v-else class="size-3.5 shrink-0" />
+            <span>{{ Math.abs(orderCountChange).toFixed(0) }}% dari kemarin</span>
           </p>
           <p v-else class="text-xs text-muted-foreground">Kemarin tidak ada order</p>
         </div>
+
+        <div class="space-y-1 px-4 py-4 sm:px-6">
+          <p class="text-xs text-muted-foreground">Void Hari Ini</p>
+          <p
+            class="text-xl font-semibold tracking-tight sm:text-2xl"
+            :class="overview.today.voidCount > 0 ? 'text-destructive' : ''"
+          >
+            {{ overview.today.voidCount }}
+          </p>
+          <p class="text-xs text-muted-foreground">
+            {{ overview.today.voidCount > 0 ? formatRupiah(overview.today.voidAmount) : 'Tidak ada void' }}
+          </p>
+        </div>
       </div>
 
-      <div class="grid gap-4 lg:grid-cols-2">
-        <div class="space-y-3 rounded-lg border bg-card p-5">
-          <h2 class="flex items-center gap-2 text-sm font-semibold">
+      <div class="grid gap-6 lg:grid-cols-2">
+        <div class="space-y-3">
+          <h2 class="flex items-center gap-2 text-sm font-medium text-muted-foreground">
             <WalletIcon class="size-4" />
-            Metode Pembayaran Hari Ini
+            Metode Pembayaran
           </h2>
           <div v-if="overview.today.orderCount === 0" class="text-sm text-muted-foreground">
             Belum ada order hari ini.
           </div>
-          <div v-else class="space-y-2">
+          <div v-else class="space-y-2.5">
             <div
               v-for="(amount, metode) in overview.today.byMetode"
               :key="metode"
               class="flex items-center justify-between text-sm"
             >
-              <span class="uppercase text-muted-foreground">{{ metode }}</span>
+              <span class="capitalize text-muted-foreground">{{ metode }}</span>
               <span class="font-medium">{{ formatRupiah(amount) }}</span>
             </div>
           </div>
         </div>
 
-        <div class="space-y-3 rounded-lg border bg-card p-5">
-          <h2 class="flex items-center gap-2 text-sm font-semibold">
+        <div class="space-y-3">
+          <h2 class="flex items-center gap-2 text-sm font-medium text-muted-foreground">
             <TrophyIcon class="size-4" />
-            Produk Terlaris Hari Ini
+            Produk Terlaris
           </h2>
           <div v-if="overview.today.topProducts.length === 0" class="text-sm text-muted-foreground">
             Belum ada produk terjual hari ini.
           </div>
-          <ol v-else class="space-y-2">
+          <ol v-else class="space-y-2.5">
             <li
               v-for="(p, idx) in overview.today.topProducts"
               :key="p.nama"
               class="flex items-center justify-between text-sm"
             >
-              <span class="flex items-center gap-2">
-                <span class="text-xs text-muted-foreground">{{ idx + 1 }}.</span>
-                {{ p.nama }}
+              <span class="flex items-center gap-2 text-muted-foreground">
+                <span class="text-xs">{{ idx + 1 }}.</span>
+                <span class="text-foreground">{{ p.nama }}</span>
               </span>
               <span class="text-muted-foreground">{{ p.qty }}x</span>
             </li>
@@ -158,31 +196,58 @@ onMounted(load)
         </div>
       </div>
 
-      <div class="space-y-3 rounded-lg border bg-card p-5">
-        <h2 class="flex items-center gap-2 text-sm font-semibold">
+      <div class="space-y-3">
+        <h2 class="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <TimerIcon class="size-4" />
           Shift Aktif
         </h2>
         <div v-if="overview.activeShifts.length === 0" class="text-sm text-muted-foreground">
           Tidak ada shift yang sedang berjalan.
         </div>
-        <div v-else class="space-y-2">
+        <div v-else class="divide-y rounded-lg border">
           <div
             v-for="shift in overview.activeShifts"
             :key="shift.id"
-            class="flex items-center justify-between rounded-md border p-2.5 text-sm"
+            class="flex items-center justify-between px-4 py-2.5 text-sm"
           >
             <div>
               <p class="font-medium">{{ shift.username }}</p>
-              <p class="text-xs text-muted-foreground">
-                Mulai {{ formatDateTime(shift.startedAt) }}
-              </p>
+              <p class="text-xs text-muted-foreground">Mulai {{ formatDateTime(shift.startedAt) }}</p>
             </div>
             <div class="text-right">
               <p class="text-xs text-muted-foreground">Kas seharusnya</p>
               <p class="font-medium">{{ formatRupiah(shift.expectedCash) }}</p>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <h2 class="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <DoorOpenIcon class="size-4" />
+            Open Bill
+          </h2>
+          <p class="mt-0.5 text-xs text-muted-foreground">
+            Tandai meja yang belum minta bayar — murni penanda buat staff, tidak mengubah cara order/bayar.
+          </p>
+        </div>
+        <div v-if="activeTables.length === 0" class="text-sm text-muted-foreground">
+          Belum ada meja aktif.
+        </div>
+        <div v-else class="grid gap-2 sm:grid-cols-2">
+          <label
+            v-for="t in activeTables"
+            :key="t.id"
+            class="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
+          >
+            <span>Meja {{ t.nomorMeja }}</span>
+            <Switch
+              :model-value="t.isBillOpen"
+              :disabled="billOpenBusyId === t.id"
+              @update:model-value="(v) => onToggleBillOpen(t, v)"
+            />
+          </label>
         </div>
       </div>
 

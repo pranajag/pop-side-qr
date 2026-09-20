@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useTableStore } from '@/stores/table'
@@ -10,6 +10,7 @@ import { useLocaleStore } from '@/stores/locale'
 import { api, formatApiError } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { savePendingOrder } from '@/lib/offlineQueue'
+import { loadJSON, saveJSON } from '@/lib/persist'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
@@ -80,6 +81,26 @@ const catatan = ref('')
 // blank, same as catatan, so a customer who skips this sees zero change
 // from before this field existed.
 const customerPhone = ref('')
+
+// Cart items already survive navigation (cart.js persists to localStorage)
+// — this covers the two free-text fields on THIS page that don't: losing a
+// typed note or member phone number to an accidental back-tap/reload would
+// mean retyping it from scratch. sessionStorage (not localStorage, unlike
+// the cart) since this is this-visit-only scratch state, not something
+// that should still be sitting there a week later. metode is deliberately
+// left out — it's a single tap to redo, not worth persisting.
+const DRAFT_KEY = 'popside.checkoutDraft'
+watch([catatan, customerPhone], ([c, p]) => {
+  saveJSON(sessionStorage, DRAFT_KEY, { catatan: c, customerPhone: p })
+})
+function clearCheckoutDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY)
+  } catch {
+    // Nothing to clean up if storage was never reachable in the first place.
+  }
+}
+
 const summary = ref(null)
 const loadingSummary = ref(false)
 const submitting = ref(false)
@@ -94,6 +115,11 @@ onMounted(async () => {
   if (cart.isEmpty) {
     router.replace({ name: 'menu' })
     return
+  }
+  const draft = loadJSON(sessionStorage, DRAFT_KEY, null)
+  if (draft) {
+    catatan.value = draft.catatan ?? ''
+    customerPhone.value = draft.customerPhone ?? ''
   }
   loadingSummary.value = true
   try {
@@ -135,6 +161,7 @@ async function onSubmit() {
   try {
     const { order } = await api.post('/public/orders', payload)
     cart.clear()
+    clearCheckoutDraft()
     recentOrders.add(order.kodeOrder)
     router.replace({ name: 'order', params: { kodeOrder: order.kodeOrder } })
   } catch (err) {
@@ -147,6 +174,7 @@ async function onSubmit() {
     if (err?.status === undefined) {
       savePendingOrder(payload)
       cart.clear()
+      clearCheckoutDraft()
       toast.warning(locale.t('checkoutOfflineQueued'))
       router.replace({ name: 'menu' })
     } else {

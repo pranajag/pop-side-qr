@@ -31,5 +31,10 @@ export const useTablesStore = defineStore('tables', {
       const idx = this.items.findIndex((t) => t.id === id)
       if (idx !== -1) this.items[idx] = data.table
     },
+    async setBillOpen(id, isBillOpen) {
+      const data = await api.patch(`/admin/tables/${id}/bill-open`, { isBillOpen })
+      const idx = this.items.findIndex((t) => t.id === id)
+      if (idx !== -1) this.items[idx] = data.table
+    },
   },
 })

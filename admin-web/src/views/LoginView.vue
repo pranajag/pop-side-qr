@@ -23,7 +23,7 @@ const password = ref('')
 const showPassword = ref(false)
 const error = ref('')
 const submitting = ref(false)
-// Server (loginLimiter, 5/15 menit per kombinasi IP+username) is the real
+// Server (loginLimiter, 5/1 menit per kombinasi IP+username) is the real
 // gate — this is read from its own RateLimit-Remaining response header, not
 // counted client-side, so it stays accurate across reloads/other tabs
 // instead of a local counter that would just reset on refresh.
@@ -85,9 +85,9 @@ async function onSubmit() {
   } catch (err) {
     if (err.status === 429) {
       // rateLimitResetSeconds comes straight from the server's own window —
-      // 900 (15 menit) is just a fallback for the unlikely case the header
-      // didn't arrive, not the real source of truth.
-      startLockoutCountdown(err.rateLimitResetSeconds ?? 900)
+      // 60 is just a fallback for the unlikely case the header didn't
+      // arrive, not the real source of truth.
+      startLockoutCountdown(err.rateLimitResetSeconds ?? 60)
       error.value = ''
     } else if (err.status === 401) {
       error.value = 'Username atau password salah'

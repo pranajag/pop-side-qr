@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useOrdersStore } from '@/stores/orders'
@@ -44,14 +44,23 @@ const submitting = ref(false)
 // split mode: splitting a single discount fairly across several separate
 // orders has no one obviously-correct answer, so rather than guess, the
 // two features are kept mutually exclusive in this UI.
-const discountAmount = ref('')
+// Input is a percentage, not a rupiah amount (store owner's explicit
+// request — easier to reason about "10% off" than compute the rupiah
+// figure by hand) — discountNumber below derives the actual rupiah amount
+// from it, which is still what's actually sent to the server (the API's
+// discountAmount field never changed shape; only this form's own input
+// method did).
+const discountPercent = ref('')
 const discountReason = ref('')
-const discountNumber = computed(() => {
-  const raw = discountAmount.value
+const discountPercentNumber = computed(() => {
+  const raw = discountPercent.value
   if (raw === '' || raw === null || raw === undefined) return 0
   const n = typeof raw === 'number' ? raw : Number(raw)
-  return Number.isFinite(n) && n >= 0 ? n : 0
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : 0
 })
+const discountNumber = computed(() =>
+  Math.round(subtotal.value * (discountPercentNumber.value / 100))
+)
 
 // { productId, nama, unitPrice, variantOptionIds, variantLabel, qty, group }
 // `group` is only meaningful once splitMode is on — every line starts in
@@ -82,7 +91,7 @@ function toggleSplitMode() {
     // Mutually exclusive with discount and loyalty (see their own fields'
     // comments) — turning split mode on clears both rather than silently
     // ignoring whatever was already entered at submit time.
-    discountAmount.value = ''
+    discountPercent.value = ''
     discountReason.value = ''
     customerPhone.value = ''
   }
@@ -112,9 +121,78 @@ const splitSubtotal = computed(() => (groupIdx) =>
 const pickerOpen = ref(false)
 const pickerProduct = ref(null)
 
+// A kasir mid-order who gets pulled away (a customer question, a staff-call
+// notification, an accidental back-navigation) shouldn't lose a half-built
+// cart — same sessionStorage-draft pattern ReservationsView.vue already
+// established. Split-mode's own group assignments are deliberately left
+// out: restoring a stale multi-way split alongside a plain cart is more
+// likely to confuse than help, and split orders are rare/short-lived
+// enough that losing just that part on an interruption is an acceptable
+// trade for keeping this simple.
+const DRAFT_KEY = 'popside.manualOrderDraft'
+let restoringDraft = false
+
+function loadDraft() {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+function saveDraft() {
+  try {
+    sessionStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        customerName: customerName.value,
+        customerPhone: customerPhone.value,
+        metode: metode.value,
+        catatan: catatan.value,
+        discountPercent: discountPercent.value,
+        discountReason: discountReason.value,
+        lines: lines.value,
+      })
+    )
+  } catch {
+    // Storage unavailable (private mode, quota, disabled) — draft just
+    // won't survive a close; nothing else depends on it persisting.
+  }
+}
+function clearDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY)
+  } catch {
+    // Nothing to clean up if storage was never reachable in the first place.
+  }
+}
+
+watch(
+  [customerName, customerPhone, metode, catatan, discountPercent, discountReason, lines],
+  () => {
+    if (restoringDraft) return
+    saveDraft()
+  },
+  { deep: true }
+)
+
 onMounted(() => {
   if (productsStore.items.length === 0) productsStore.fetchAll()
   if (categoriesStore.items.length === 0) categoriesStore.fetchAll()
+
+  const draft = loadDraft()
+  if (draft && (draft.lines?.length > 0 || draft.customerName || draft.catatan)) {
+    restoringDraft = true
+    customerName.value = draft.customerName ?? ''
+    customerPhone.value = draft.customerPhone ?? ''
+    metode.value = draft.metode ?? 'tunai'
+    catatan.value = draft.catatan ?? ''
+    discountPercent.value = draft.discountPercent ?? ''
+    discountReason.value = draft.discountReason ?? ''
+    lines.value = draft.lines ?? []
+    restoringDraft = false
+    toast.info('Draf pesanan yang belum tersimpan dipulihkan')
+  }
 })
 
 const availableProducts = computed(() =>
@@ -220,6 +298,7 @@ async function onSubmit() {
         created.push(order.kodeOrder)
       }
       toast.success(`${created.length} pesanan dibuat: ${created.join(', ')}`)
+      clearDraft()
       router.push({ name: 'pesanan' })
     } catch (err) {
       toast.error(formatApiError(err))
@@ -250,6 +329,7 @@ async function onSubmit() {
         ? `Pesanan ${order.kodeOrder} dibuat — +${order.pointsEarned} poin`
         : `Pesanan ${order.kodeOrder} dibuat`
     )
+    clearDraft()
     router.push({ name: 'pesanan' })
   } catch (err) {
     toast.error(formatApiError(err))
@@ -331,15 +411,19 @@ async function onSubmit() {
       <h2 class="text-sm font-medium">Diskon (opsional)</h2>
       <div class="grid gap-3 sm:grid-cols-2">
         <div class="space-y-2">
-          <Label for="discountAmount">Potongan (Rp)</Label>
+          <Label for="discountPercent">Diskon (%)</Label>
           <Input
-            id="discountAmount"
-            v-model="discountAmount"
+            id="discountPercent"
+            v-model="discountPercent"
             type="number"
             min="0"
-            step="500"
+            max="100"
+            step="1"
             placeholder="0"
           />
+          <p v-if="discountPercentNumber > 0" class="text-xs text-muted-foreground">
+            = {{ formatRupiah(discountNumber) }}
+          </p>
         </div>
         <div class="space-y-2">
           <Label for="discountReason">Alasan</Label>
@@ -509,7 +593,7 @@ async function onSubmit() {
             <span>{{ formatRupiah(subtotal) }}</span>
           </div>
           <div class="flex items-center justify-between text-sm text-destructive">
-            <span>Diskon</span>
+            <span>Diskon ({{ discountPercentNumber }}%)</span>
             <span>-{{ formatRupiah(discountNumber) }}</span>
           </div>
         </template>

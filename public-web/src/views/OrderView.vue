@@ -94,14 +94,6 @@ const statusColor = computed(
 const needsQrisPayment = computed(
   () => order.value?.status === 'pending' && order.value?.metode === 'qris'
 )
-// The exact amount to transfer, not just the menu total — QRIS orders
-// carry a small per-order uniqueCode (api's order.service.js) so a kasir
-// with no payment gateway can match this oddly-specific figure against a
-// real bank/e-wallet mutation instead of trusting an uploaded screenshot
-// alone. Falls back to the plain total for every non-QRIS order.
-const totalBayar = computed(
-  () => (order.value?.totalHarga ?? 0) + (order.value?.uniqueCode ?? 0)
-)
 // totalHarga already has discount subtracted and tax/service added
 // (api's order.service.js computeTaxAndService) — the receipt-style
 // breakdown below has to walk that back out to show a real subtotal.
@@ -429,12 +421,9 @@ async function copyKode() {
         <p class="text-sm font-medium">
           {{
             locale.t('scanQrisUntukBayar', {
-              total: formatRupiah(totalBayar),
+              total: formatRupiah(order.totalHarga),
             })
           }}
-        </p>
-        <p v-if="order.uniqueCode" class="text-xs text-muted-foreground">
-          {{ locale.t('kodeUnikDesc', { code: order.uniqueCode }) }}
         </p>
         <img
           v-if="qrisImage"
@@ -569,7 +558,7 @@ async function copyKode() {
             <AlertDialogDescription>
               {{
                 locale.t('kirimBuktiIniDesc', {
-                  total: formatRupiah(totalBayar),
+                  total: formatRupiah(order.totalHarga),
                 })
               }}
             </AlertDialogDescription>

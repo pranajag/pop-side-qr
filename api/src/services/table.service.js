@@ -27,6 +27,7 @@ function withUrl(table) {
     qrToken: table.qrToken,
     isActive: table.isActive,
     kapasitas: table.kapasitas,
+    isBillOpen: table.isBillOpen,
     url: tableUrl(table.qrToken),
   };
 }
@@ -158,6 +159,20 @@ async function resetToken(id) {
   return withUrl(table);
 }
 
+// Staff floor-status toggle — deliberately not gated behind admin-only like
+// the rest of this file's mutations, since this is day-to-day table
+// management a kasir does just as much as an admin (unlike creating/
+// deleting a table or resetting its QR). See table.routes.js for the
+// separate, wider role check this specific action gets.
+async function setBillOpen(id, isBillOpen) {
+  const existing = await prisma.table.findUnique({ where: { id } });
+  if (!existing) {
+    throw new AppError(404, 'Meja tidak ditemukan');
+  }
+  const table = await prisma.table.update({ where: { id }, data: { isBillOpen } });
+  return withUrl(table);
+}
+
 async function generateQrImage(id) {
   const table = await prisma.table.findUnique({ where: { id } });
   if (!table) {
@@ -193,4 +208,4 @@ async function verifyToken(token) {
   return { id: table.id, nomorMeja: table.nomorMeja, currentVisitStartedAt: table.currentVisitStartedAt };
 }
 
-module.exports = { list, create, update, remove, resetToken, generateQrImage, verifyToken };
+module.exports = { list, create, update, remove, resetToken, setBillOpen, generateQrImage, verifyToken };

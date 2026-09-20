@@ -1,4 +1,3 @@
-const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const { generateOrderCode } = require('../utils/orderCode');
@@ -11,11 +10,6 @@ const customerService = require('./customer.service');
 const webhookService = require('./webhook.service');
 
 const MAX_CODE_ATTEMPTS = 5;
-// Adds Rp1-499 on top of totalHarga for QRIS orders — small enough to still
-// visually read as "the same total", large enough that two unrelated
-// pending orders landing on the exact same final rupiah by chance is rare
-// (and pickUniqueCode below actively avoids it anyway).
-const UNIQUE_CODE_MAX = 500;
 const KODE_ORDER_PATTERN = /^ORD-\d{8}-[A-Z0-9]{4}$/;
 // Anything not yet completed/cancelled — used to decide whether a table is
 // still "occupied" by whoever placed its most recent order (see
@@ -37,7 +31,13 @@ async function bumpVisitIfTableIsFree(tx, tableId) {
     select: { id: true },
   });
   if (!hasActiveOrder) {
-    await tx.table.update({ where: { id: tableId }, data: { currentVisitStartedAt: new Date() } });
+    // isBillOpen resets here too — a genuinely new visit (table was fully
+    // clear beforehand) must never inherit an earlier, unrelated group's
+    // "belum minta bayar" flag that staff simply forgot to close out.
+    await tx.table.update({
+      where: { id: tableId },
+      data: { currentVisitStartedAt: new Date(), isBillOpen: false },
+    });
   }
 }
 
@@ -106,9 +106,9 @@ async function buildOrderItems(tx, items) {
 
 // Tax/service charge, both optional and 0 by default (StoreSetting) — folds
 // straight into totalHarga so every already-built system keyed off it
-// (revenue reports, shift cash reconciliation, QRIS uniqueCode, loyalty
-// points, webhooks) keeps working with zero changes of its own; taxAmount/
-// serviceChargeAmount are kept only so a receipt can show the breakdown.
+// (revenue reports, shift cash reconciliation, loyalty points, webhooks)
+// keeps working with zero changes of its own; taxAmount/serviceChargeAmount
+// are kept only so a receipt can show the breakdown.
 // baseAmount is the subtotal AFTER discount (manual orders) — tax/service
 // apply to what's actually being charged, not the pre-discount price.
 async function computeTaxAndService(tx, baseAmount) {
@@ -118,33 +118,6 @@ async function computeTaxAndService(tx, baseAmount) {
   const taxAmount = Math.round(baseAmount * (pajakPersen / 100));
   const serviceChargeAmount = Math.round(baseAmount * (serviceChargePersen / 100));
   return { taxAmount, serviceChargeAmount, totalHarga: baseAmount + taxAmount + serviceChargeAmount };
-}
-
-// QRIS-only reconciliation trick (see schema.prisma's uniqueCode comment) —
-// picks a code such that totalHarga + code doesn't collide with any OTHER
-// order a kasir might currently be trying to match against a real bank/
-// e-wallet mutation. That's every QRIS order not yet kasir-confirmed
-// (pending: customer hasn't paid yet but might any second; waiting_verif:
-// customer claims they paid, kasir hasn't confirmed yet) — once an order
-// leaves that window its nominal is no longer "live" and the code is free
-// to be reused by a later order.
-async function pickUniqueCode(tx, totalHarga) {
-  const live = await tx.order.findMany({
-    where: { metode: 'qris', status: { in: ['pending', 'waiting_verif'] }, uniqueCode: { not: null } },
-    select: { totalHarga: true, uniqueCode: true },
-  });
-  const taken = new Set(live.map((o) => Number(o.totalHarga) + o.uniqueCode));
-
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const code = crypto.randomInt(1, UNIQUE_CODE_MAX);
-    if (!taken.has(totalHarga + code)) {
-      return code;
-    }
-  }
-  // Would need ~30 simultaneous pending QRIS orders that all happen to
-  // collide on this specific total — vanishingly unlikely for a single
-  // cafe. Widened range as a last resort rather than failing the order.
-  return UNIQUE_CODE_MAX + crypto.randomInt(1, UNIQUE_CODE_MAX);
 }
 
 async function createOrder({ token, metode, catatan, items, idempotencyKey, customerPhone }) {
@@ -172,7 +145,6 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
         await bumpVisitIfTableIsFree(tx, table.id);
         const { orderItemsData, totalHarga: subtotal } = await buildOrderItems(tx, items);
         const { taxAmount, serviceChargeAmount, totalHarga } = await computeTaxAndService(tx, subtotal);
-        const uniqueCode = metode === 'qris' ? await pickUniqueCode(tx, totalHarga) : null;
 
         // Member auto-join: the customer's own opt-in on public checkout,
         // not staff entering it on their behalf (createManualOrder's own
@@ -203,7 +175,6 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
             totalHarga,
             taxAmount,
             serviceChargeAmount,
-            uniqueCode,
             catatan,
             idempotencyKey: idempotencyKey ?? undefined,
             items: { create: orderItemsData },
@@ -410,11 +381,6 @@ async function getByCode(kodeOrder) {
     discountReason: order.discountReason,
     taxAmount: Number(order.taxAmount),
     serviceChargeAmount: Number(order.serviceChargeAmount),
-    // Only ever set for QRIS — the exact rupiah the customer must transfer
-    // is totalHarga + uniqueCode (frontend's job to add them; kept separate
-    // here since totalHarga alone is still the real menu total everywhere
-    // else — receipts, reports, tracking-page order summary).
-    uniqueCode: order.uniqueCode,
     catatan: order.catatan,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,

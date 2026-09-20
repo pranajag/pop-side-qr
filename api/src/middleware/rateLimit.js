@@ -12,14 +12,23 @@ function scopedKey(req, scope) {
   return `${ipKeyGenerator(req.ip)}:${scope || ''}`;
 }
 
-// 5 failed logins / 15 minutes / (IP + username) combination.
+// 5 failed logins / 1 minute / (IP + username) combination. Shortened from
+// 15 minutes at the store owner's explicit request (faster recovery for a
+// staff member who just mistyped their password) — worth being clear about
+// the tradeoff this accepts: at 5 attempts/min instead of 5/15min, a
+// sustained guessing attempt can try ~15x more passwords per hour than
+// before. Real-world exposure stays bounded by passwordSchema's own
+// 8-72 char minimum (validators/common.js) and by this still being an
+// (IP+username)-scoped lock, not a global one — but a weak, guessable
+// password is meaningfully easier to eventually brute-force under this
+// window than under the old one.
 // keyGenerator must route req.ip through ipKeyGenerator (not use it raw) —
 // express-rate-limit >=8.2 statically inspects the function source and
 // refuses to start (ERR_ERL_KEY_GEN_IPV6) if it sees a bare req.ip, since a
 // raw IPv6 address lets an attacker dodge the limit by rotating within their
 // assigned /64 prefix.
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 60 * 1000,
   limit: 5,
   standardHeaders: true,
   legacyHeaders: false,

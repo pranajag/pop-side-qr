@@ -83,9 +83,7 @@ export const translations = {
     cobaLagi: 'Coba Lagi',
     kodeOrderDisalin: 'Kode order disalin',
     gagalMenyalinKode: 'Gagal menyalin kode',
-    scanQrisUntukBayar: 'Scan QRIS lalu transfer tepat {total}',
-    kodeUnikDesc:
-      'Sudah termasuk kode unik {code} — jangan dibulatkan, supaya kasir bisa cek pembayaranmu lebih cepat.',
+    scanQrisUntukBayar: 'Scan QRIS untuk bayar {total}',
     qrisBelumTersedia: 'QRIS belum tersedia — tunjukkan layar ini ke staff untuk bantuan.',
     uploadBuktiPembayaran: 'Upload Bukti Pembayaran',
     uploadBuktiDesc:
@@ -233,9 +231,7 @@ export const translations = {
     cobaLagi: 'Try Again',
     kodeOrderDisalin: 'Order code copied',
     gagalMenyalinKode: 'Failed to copy code',
-    scanQrisUntukBayar: 'Scan QRIS and transfer exactly {total}',
-    kodeUnikDesc:
-      "Includes a unique code ({code}) — don't round it, so the cashier can verify your payment faster.",
+    scanQrisUntukBayar: 'Scan QRIS to pay {total}',
     qrisBelumTersedia: 'QRIS not available yet — show this screen to a staff member for help.',
     uploadBuktiPembayaran: 'Upload Payment Proof',
     uploadBuktiDesc:

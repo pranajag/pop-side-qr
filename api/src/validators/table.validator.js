@@ -9,4 +9,8 @@ const createTableSchema = z.object({
 
 const updateTableSchema = createTableSchema.partial();
 
-module.exports = { createTableSchema, updateTableSchema };
+const setBillOpenSchema = z.object({
+  isBillOpen: zBooleanish,
+});
+
+module.exports = { createTableSchema, updateTableSchema, setBillOpenSchema };

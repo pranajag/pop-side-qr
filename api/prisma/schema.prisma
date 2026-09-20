@@ -58,6 +58,14 @@ model Table {
   // added. Exists purely so getTableBill can tell "this group's orders"
   // apart from an earlier group's at the same physical table earlier today.
   currentVisitStartedAt DateTime?     @map("current_visit_started_at")
+  // Staff-set marker for "this table hasn't been asked to pay yet" — pure
+  // floor-status signal for DashboardView.vue, no effect on how orders or
+  // payments actually work (each round still confirms/pays the same way it
+  // always has). Auto-reset to false by order.service.js's
+  // bumpVisitIfTableIsFree whenever a genuinely new visit starts, so it
+  // can't accidentally carry over and mislabel a later, unrelated party's
+  // table as still "open" from a previous group staff forgot to close.
+  isBillOpen            Boolean       @default(false) @map("is_bill_open")
   orders                Order[]
   staffCalls            StaffCall[]
   reservations          Reservation[]
@@ -285,14 +293,12 @@ model Order {
   status              OrderStatus      @default(pending)
   metode              PaymentMethod
   totalHarga          Decimal          @map("total_harga")
-  // QRIS-only anti-fraud/reconciliation trick (no payment gateway — QRIS
-  // is a static admin-uploaded image, customer self-reports "sudah bayar").
-  // A small extra amount (Rp1-499, order.service.js's pickUniqueCode) on
-  // top of totalHarga that the customer is asked to transfer exactly —
-  // kasir then matches that oddly-specific total against their real bank/
-  // e-wallet mutation instead of trusting an uploaded screenshot alone.
-  // Null for cash/debit (kasir handles those in person, no reconciliation
-  // gap to close) and for every order before this feature existed.
+  // Retired at the store owner's explicit request — customers found the
+  // odd extra rupiah on the QRIS amount confusing, easy to mistake for a
+  // surcharge. No longer generated for new orders (order.service.js no
+  // longer has pickUniqueCode); column kept, not dropped, purely so
+  // historical orders created while this was active keep their real value
+  // instead of losing data to a migration. Always null going forward.
   uniqueCode          Int?             @map("unique_code")
   // Manual discount, staff-entered orders only (order.service.js's
   // createManualOrder — never accepted from the public checkout, which

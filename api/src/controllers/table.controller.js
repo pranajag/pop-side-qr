@@ -26,6 +26,11 @@ async function resetToken(req, res) {
   res.json({ table });
 }
 
+async function setBillOpen(req, res) {
+  const table = await tableService.setBillOpen(req.params.id, req.body.isBillOpen);
+  res.json({ table });
+}
+
 async function qrImage(req, res) {
   const buffer = await tableService.generateQrImage(req.params.id);
   res.set('Content-Type', 'image/png');
@@ -47,4 +52,4 @@ async function verifyToken(req, res) {
   res.json({ table });
 }
 
-module.exports = { list, create, update, remove, resetToken, qrImage, verifyToken };
+module.exports = { list, create, update, remove, resetToken, setBillOpen, qrImage, verifyToken };
