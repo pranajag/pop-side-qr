@@ -8,6 +8,7 @@ const {
   createReservationSchema,
   updateReservationSchema,
   updateReservationStatusSchema,
+  setDepositPaidSchema,
 } = require('../validators/reservation.validator');
 
 const router = Router();
@@ -21,6 +22,7 @@ router.get('/:id', validateIdParam, reservationController.get);
 router.post('/', validate(createReservationSchema), reservationController.create);
 router.put('/:id', validateIdParam, validate(updateReservationSchema), reservationController.update);
 router.patch('/:id/status', validateIdParam, validate(updateReservationStatusSchema), reservationController.updateStatus);
+router.patch('/:id/deposit-paid', validateIdParam, validate(setDepositPaidSchema), reservationController.setDepositPaid);
 router.delete('/:id', validateIdParam, reservationController.remove);
 
 module.exports = router;

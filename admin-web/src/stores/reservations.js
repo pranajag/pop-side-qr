@@ -37,6 +37,11 @@ export const useReservationsStore = defineStore('reservations', {
       const idx = this.items.findIndex((r) => r.id === id)
       if (idx !== -1) this.items[idx] = data.reservation
     },
+    async setDepositPaid(id, metode) {
+      const data = await api.patch(`/admin/reservations/${id}/deposit-paid`, { metode })
+      const idx = this.items.findIndex((r) => r.id === id)
+      if (idx !== -1) this.items[idx] = data.reservation
+    },
     async remove(id) {
       await api.del(`/admin/reservations/${id}`)
       this.items = this.items.filter((r) => r.id !== id)

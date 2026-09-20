@@ -16,6 +16,10 @@ function toShaped(reservation) {
     kapasitasMeja: reservation.table?.kapasitas ?? null,
     status: reservation.status,
     catatan: reservation.catatan,
+    depositAmount: reservation.depositAmount === null ? 0 : Number(reservation.depositAmount),
+    depositPaid: reservation.depositPaid,
+    depositMetode: reservation.depositMetode,
+    depositPaidAt: reservation.depositPaidAt,
     createdAt: reservation.createdAt,
     updatedAt: reservation.updatedAt,
   };
@@ -131,6 +135,25 @@ async function updateStatus(id, status) {
   return toShaped(reservation);
 }
 
+// Staff-recorded (see schema.prisma's depositMetode comment for why this
+// has no QRIS-proof-upload step like a real Order does) — a plain "yes,
+// this deposit actually came in, here's how" toggle. Deliberately doesn't
+// require a deposit to already be set >0 on the reservation: staff might
+// reasonably collect one on the spot that wasn't planned for at booking
+// time.
+async function setDepositPaid(id, metode) {
+  const existing = await prisma.reservation.findUnique({ where: { id } });
+  if (!existing) {
+    throw new AppError(404, 'Reservasi tidak ditemukan');
+  }
+  const reservation = await prisma.reservation.update({
+    where: { id },
+    data: { depositPaid: true, depositMetode: metode, depositPaidAt: new Date() },
+    include: INCLUDE_TABLE,
+  });
+  return toShaped(reservation);
+}
+
 async function remove(id) {
   const existing = await prisma.reservation.findUnique({ where: { id } });
   if (!existing) {
@@ -139,4 +162,4 @@ async function remove(id) {
   await prisma.reservation.delete({ where: { id } });
 }
 
-module.exports = { list, get, create, update, updateStatus, remove };
+module.exports = { list, get, create, update, updateStatus, setDepositPaid, remove };

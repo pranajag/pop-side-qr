@@ -25,9 +25,14 @@ async function updateStatus(req, res) {
   res.json({ reservation });
 }
 
+async function setDepositPaid(req, res) {
+  const reservation = await reservationService.setDepositPaid(req.params.id, req.body.metode);
+  res.json({ reservation });
+}
+
 async function remove(req, res) {
   await reservationService.remove(req.params.id);
   res.status(204).end();
 }
 
-module.exports = { list, get, create, update, updateStatus, remove };
+module.exports = { list, get, create, update, updateStatus, setDepositPaid, remove };

@@ -111,6 +111,22 @@ model Reservation {
   table            Table?            @relation(fields: [tableId], references: [id], onDelete: Restrict)
   status           ReservationStatus @default(pending)
   catatan          String?
+  // Deposit/DP to secure the booking — separate from the food bill the
+  // guest's table racks up once they actually arrive and order (that still
+  // goes through the normal per-order Payment flow, untouched by this).
+  // 0/null depositAmount means no deposit required for this reservation,
+  // which is every reservation before this feature existed and stays the
+  // default for a new one unless staff sets one.
+  depositAmount    Decimal?          @default(0) @map("deposit_amount")
+  depositPaid      Boolean           @default(false) @map("deposit_paid")
+  // Staff-recorded, not customer-self-service — there's no public booking
+  // flow for reservations at all (ReservationsView.vue is the only place
+  // one is ever created), so unlike Order there's no QRIS-proof-upload
+  // step here; a staff member just marks it paid after collecting it
+  // in whatever form actually happened (cash in hand, a transfer they
+  // saw land, etc).
+  depositMetode    PaymentMethod?    @map("deposit_metode")
+  depositPaidAt    DateTime?         @map("deposit_paid_at")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
 

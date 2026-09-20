@@ -20,6 +20,13 @@ const createReservationSchema = z.object({
   tanggalReservasi: z.coerce.date(),
   tableId: tableIdSchema.optional(),
   catatan: z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(300).optional()),
+  // Deposit/DP to secure the booking — optional, 0 (no deposit) unless
+  // staff sets one. Empty string from a cleared form field means "no
+  // deposit", not "reject the request".
+  depositAmount: z.preprocess(
+    (v) => (v === '' || v === undefined ? undefined : v),
+    z.coerce.number().int().min(0).max(999999999).optional()
+  ),
 });
 
 const updateReservationSchema = createReservationSchema.partial();
@@ -28,9 +35,14 @@ const updateReservationStatusSchema = z.object({
   status: z.enum(RESERVATION_STATUSES),
 });
 
+const setDepositPaidSchema = z.object({
+  metode: z.enum(['qris', 'tunai', 'debit']),
+});
+
 module.exports = {
   createReservationSchema,
   updateReservationSchema,
   updateReservationStatusSchema,
+  setDepositPaidSchema,
   RESERVATION_STATUSES,
 };

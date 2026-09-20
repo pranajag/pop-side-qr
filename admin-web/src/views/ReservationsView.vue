@@ -4,7 +4,7 @@ import { toast } from 'vue-sonner'
 import { useReservationsStore } from '@/stores/reservations'
 import { useTablesStore } from '@/stores/tables'
 import { formatApiError, API_URL } from '@/lib/api'
-import { formatDateTime } from '@/lib/format'
+import { formatDateTime, formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -74,6 +74,26 @@ function qrImageUrl(tableId) {
   return `${API_URL}/admin/tables/${tableId}/qr`
 }
 
+// Deposit collected off-system (cash in hand, a transfer staff saw land) —
+// no QRIS-proof-upload step like an Order gets (see schema.prisma's
+// depositMetode comment), just staff confirming which method it came in
+// as before marking it settled.
+const depositTarget = ref(null)
+const depositMetode = ref('tunai')
+const markingDeposit = ref(false)
+async function onConfirmDepositPaid() {
+  markingDeposit.value = true
+  try {
+    await store.setDepositPaid(depositTarget.value.id, depositMetode.value)
+    toast.success('DP ditandai lunas')
+    depositTarget.value = null
+  } catch (err) {
+    toast.error(formatApiError(err))
+  } finally {
+    markingDeposit.value = false
+  }
+}
+
 const FILTERS = [
   { value: undefined, label: 'Aktif' },
   { value: 'pending', label: 'Pending' },
@@ -117,6 +137,7 @@ const form = reactive({
   tanggalReservasi: '',
   tableId: 'none',
   catatan: '',
+  depositAmount: '',
 })
 
 // reka-ui's SelectItem forbids value="" (reserved to mean "cleared"), so
@@ -242,6 +263,7 @@ function openCreate() {
   form.tanggalReservasi = draft?.tanggalReservasi ?? ''
   form.tableId = draft?.tableId ?? NO_TABLE
   form.catatan = draft?.catatan ?? ''
+  form.depositAmount = draft?.depositAmount ?? ''
   restoringDraft = false
   formOpen.value = true
   if (draft) {
@@ -258,6 +280,7 @@ function openEdit(r) {
   form.tanggalReservasi = isoToLocalInput(r.tanggalReservasi)
   form.tableId = r.tableId ? String(r.tableId) : NO_TABLE
   form.catatan = r.catatan || ''
+  form.depositAmount = r.depositAmount > 0 ? String(r.depositAmount) : ''
   formOpen.value = true
 }
 
@@ -394,8 +417,24 @@ async function onDeleteConfirm() {
               <Badge :variant="STATUS_VARIANT[r.status]">{{
                 STATUS_LABEL[r.status]
               }}</Badge>
+              <span
+                v-if="r.depositAmount > 0"
+                class="mt-1 block text-xs"
+                :class="r.depositPaid ? 'text-status-completed' : 'text-muted-foreground'"
+              >
+                DP {{ formatRupiah(r.depositAmount) }}{{ r.depositPaid ? ' — lunas' : ' — belum bayar' }}
+              </span>
             </TableCell>
             <TableCell class="text-right">
+              <Button
+                v-if="r.depositAmount > 0 && !r.depositPaid"
+                size="sm"
+                variant="outline"
+                class="mr-1"
+                @click="depositTarget = r"
+              >
+                Tandai DP Dibayar
+              </Button>
               <Button
                 v-if="r.status === 'pending'"
                 size="sm"
@@ -538,6 +577,20 @@ async function onDeleteConfirm() {
               placeholder="Mis. butuh dekorasi tambahan"
             />
           </div>
+          <div class="space-y-2">
+            <Label for="depositAmount">Deposit/DP (opsional)</Label>
+            <Input
+              id="depositAmount"
+              v-model="form.depositAmount"
+              type="number"
+              min="0"
+              step="1000"
+              placeholder="0"
+            />
+            <p class="text-xs text-muted-foreground">
+              Kosongkan kalau reservasi ini tidak perlu DP.
+            </p>
+          </div>
         </form>
         <DialogFooter>
           <Button type="submit" form="reservation-form" :disabled="submitting">
@@ -588,5 +641,35 @@ async function onDeleteConfirm() {
         />
       </DialogContent>
     </Dialog>
+
+    <AlertDialog :open="!!depositTarget" @update:open="(v) => !v && (depositTarget = null)">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Tandai DP {{ depositTarget?.namaCustomer }} lunas?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Pastikan sudah benar-benar terima {{ formatRupiah(depositTarget?.depositAmount) }} dari customer.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div class="space-y-2">
+          <Label for="depositMetode">Diterima lewat</Label>
+          <Select v-model="depositMetode">
+            <SelectTrigger id="depositMetode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tunai">Tunai</SelectItem>
+              <SelectItem value="qris">QRIS</SelectItem>
+              <SelectItem value="debit">Debit</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Batal</AlertDialogCancel>
+          <AlertDialogAction :disabled="markingDeposit" @click="onConfirmDepositPaid">
+            Ya, Sudah Lunas
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>
