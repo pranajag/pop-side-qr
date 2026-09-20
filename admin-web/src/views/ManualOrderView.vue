@@ -24,6 +24,8 @@ import {
   PlusIcon,
   Trash2Icon,
   LoaderCircleIcon,
+  UsersIcon,
+  XIcon,
 } from '@lucide/vue'
 
 const router = useRouter()
@@ -36,8 +38,54 @@ const metode = ref('tunai')
 const catatan = ref('')
 const submitting = ref(false)
 
-// { productId, nama, unitPrice, variantOptionIds, variantLabel, qty }
+// { productId, nama, unitPrice, variantOptionIds, variantLabel, qty, group }
+// `group` is only meaningful once splitMode is on — every line starts in
+// group 0 either way, so turning split mode off just means "everything is
+// group 0 again" without needing to touch the lines themselves.
 const lines = ref([])
+
+// Split bill: one table/cart, several people paying their own portion
+// separately — each with its own method. Off by default (today's single-
+// payer behavior, unchanged); turning it on reveals per-line group
+// assignment plus one payment-method picker per group instead of one for
+// the whole cart. Submitting fires one createManualOrder per non-empty
+// group rather than trying to teach the Order model itself "one order,
+// several payments" — same end result (each person's portion becomes its
+// own real order, paid its own way), none of the risk of touching the
+// Payment/shift-reconciliation model every other feature already relies on.
+const splitMode = ref(false)
+const splitGroups = ref([
+  { label: 'Bagian 1', metode: 'tunai' },
+  { label: 'Bagian 2', metode: 'tunai' },
+])
+
+function toggleSplitMode() {
+  splitMode.value = !splitMode.value
+  if (!splitMode.value) {
+    for (const line of lines.value) line.group = 0
+  }
+}
+
+function addSplitGroup() {
+  splitGroups.value.push({ label: `Bagian ${splitGroups.value.length + 1}`, metode: 'tunai' })
+}
+
+function removeSplitGroup(idx) {
+  if (splitGroups.value.length <= 2) return
+  splitGroups.value.splice(idx, 1)
+  // Lines pointed at the removed group (or anything after it, since indexes
+  // shift down) fall back to group 0 rather than silently pointing at a
+  // group that no longer exists.
+  for (const line of lines.value) {
+    if (line.group >= splitGroups.value.length) line.group = 0
+  }
+}
+
+const splitSubtotal = computed(() => (groupIdx) =>
+  lines.value
+    .filter((l) => l.group === groupIdx)
+    .reduce((sum, l) => sum + l.unitPrice * l.qty, 0)
+)
 
 const pickerOpen = ref(false)
 const pickerProduct = ref(null)
@@ -89,6 +137,7 @@ function addLine({ product, variantOptionIds, variantLabel, qty, unitPrice }) {
       variantOptionIds,
       variantLabel,
       qty,
+      group: 0,
     })
   }
 }
@@ -110,22 +159,60 @@ const total = computed(() =>
   lines.value.reduce((sum, l) => sum + l.unitPrice * l.qty, 0)
 )
 
+function itemsFor(groupLines) {
+  return groupLines.map((l) => ({
+    productId: l.productId,
+    qty: l.qty,
+    variantOptionIds: l.variantOptionIds,
+  }))
+}
+
 async function onSubmit() {
   if (lines.value.length === 0) {
     toast.error('Tambahkan produk dulu')
     return
   }
+
+  if (splitMode.value) {
+    const nonEmptyGroups = splitGroups.value
+      .map((g, idx) => ({ ...g, idx, lines: lines.value.filter((l) => l.group === idx) }))
+      .filter((g) => g.lines.length > 0)
+    if (nonEmptyGroups.length < 2) {
+      toast.error('Isi produk di minimal 2 bagian untuk split, atau matikan mode split')
+      return
+    }
+    submitting.value = true
+    try {
+      // Sequential, not Promise.all — if one fails partway, the toast below
+      // names exactly which orders already went through so nothing has to
+      // be guessed from the order list afterward.
+      const created = []
+      for (const g of nonEmptyGroups) {
+        const order = await store.createManual({
+          customerName: [customerName.value, g.label].filter(Boolean).join(' - ') || g.label,
+          metode: g.metode,
+          catatan: catatan.value || undefined,
+          items: itemsFor(g.lines),
+        })
+        created.push(order.kodeOrder)
+      }
+      toast.success(`${created.length} pesanan dibuat: ${created.join(', ')}`)
+      router.push({ name: 'pesanan' })
+    } catch (err) {
+      toast.error(formatApiError(err))
+    } finally {
+      submitting.value = false
+    }
+    return
+  }
+
   submitting.value = true
   try {
     const order = await store.createManual({
       customerName: customerName.value || undefined,
       metode: metode.value,
       catatan: catatan.value || undefined,
-      items: lines.value.map((l) => ({
-        productId: l.productId,
-        qty: l.qty,
-        variantOptionIds: l.variantOptionIds,
-      })),
+      items: itemsFor(lines.value),
     })
     toast.success(`Pesanan ${order.kodeOrder} dibuat`)
     router.push({ name: 'pesanan' })
@@ -165,7 +252,7 @@ async function onSubmit() {
           placeholder="Mis. Budi"
         />
       </div>
-      <div class="space-y-2">
+      <div v-if="!splitMode" class="space-y-2">
         <Label for="metode">Metode Pembayaran</Label>
         <Select v-model="metode">
           <SelectTrigger id="metode" class="w-full">
@@ -188,6 +275,64 @@ async function onSubmit() {
         maxlength="200"
         placeholder="Mis. tolong dibungkus terpisah"
       />
+    </div>
+
+    <div class="rounded-lg border p-3">
+      <button
+        type="button"
+        class="flex w-full items-center justify-between gap-2 text-left text-sm font-medium"
+        @click="toggleSplitMode"
+      >
+        <span class="flex items-center gap-2">
+          <UsersIcon class="size-4 text-muted-foreground" />
+          Bagi Pembayaran
+        </span>
+        <span
+          class="flex h-5 w-9 shrink-0 items-center rounded-full border px-0.5 transition-colors"
+          :class="splitMode ? 'justify-end border-primary bg-primary' : 'justify-start bg-muted'"
+        >
+          <span class="size-3.5 rounded-full bg-white"></span>
+        </span>
+      </button>
+      <p class="mt-1 text-xs text-muted-foreground">
+        Satu pesanan dipecah jadi beberapa pesanan terpisah, tiap bagian bisa bayar dengan metode sendiri-sendiri.
+      </p>
+
+      <div v-if="splitMode" class="mt-3 space-y-2 border-t pt-3">
+        <div
+          v-for="(g, idx) in splitGroups"
+          :key="idx"
+          class="flex items-center gap-2"
+        >
+          <Input v-model="g.label" class="flex-1" maxlength="50" />
+          <Select v-model="g.metode">
+            <SelectTrigger class="w-28 shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tunai">Tunai</SelectItem>
+              <SelectItem value="qris">QRIS</SelectItem>
+              <SelectItem value="debit">Debit</SelectItem>
+            </SelectContent>
+          </Select>
+          <span class="w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+            {{ formatRupiah(splitSubtotal(idx)) }}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-7 shrink-0"
+            :disabled="splitGroups.length <= 2"
+            @click="removeSplitGroup(idx)"
+          >
+            <XIcon class="size-3.5" />
+          </Button>
+        </div>
+        <Button variant="outline" size="sm" class="gap-1.5" @click="addSplitGroup">
+          <PlusIcon class="size-3.5" />
+          Tambah Bagian
+        </Button>
+      </div>
     </div>
 
     <div class="space-y-3">
@@ -244,6 +389,16 @@ async function onSubmit() {
             </p>
           </div>
           <div class="flex shrink-0 items-center gap-2">
+            <Select v-if="splitMode" :model-value="String(line.group)" @update:model-value="(v) => (line.group = Number(v))">
+              <SelectTrigger class="h-8 w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="(g, gIdx) in splitGroups" :key="gIdx" :value="String(gIdx)">
+                  {{ g.label }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
             <Button
               variant="outline"
               size="icon"
