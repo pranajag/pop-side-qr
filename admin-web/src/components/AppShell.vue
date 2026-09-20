@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { clearAllDrafts } from '@/lib/drafts'
 import { useOrdersStore } from '@/stores/orders'
 import { useStaffCallsStore } from '@/stores/staffCalls'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -84,6 +85,7 @@ const nav = computed(() => {
 
 async function onLogout() {
   await auth.logout()
+  clearAllDrafts()
   router.replace({ name: 'login' })
   toast('Berhasil keluar')
 }
