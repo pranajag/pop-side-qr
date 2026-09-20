@@ -10,5 +10,8 @@ const router = Router();
 router.use(requireAuth, requireRole('admin'));
 
 router.get('/', reportController.get);
+router.get('/daily', reportController.dailyBreakdown);
+router.get('/export.xlsx', reportController.exportExcel);
+router.get('/jurnal.xlsx', reportController.exportJournalExcel);
 
 module.exports = router;

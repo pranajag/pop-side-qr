@@ -109,6 +109,55 @@ async function getReport(fromStr, toStr) {
   };
 }
 
+// Per-day revenue/order-count within the range, for ReportView.vue's trend
+// chart — getReport() above only ever returns one aggregate for the whole
+// range, which can't drive a line chart. Grouped in JS off the same
+// per-order rows rather than a SQL GROUP BY: this codebase has no raw SQL
+// anywhere (every query goes through Prisma's query builder), and range is
+// already capped at MAX_RANGE_DAYS so this never means scanning more than
+// this same size of range getReport() itself accepts.
+async function getDailyBreakdown(fromStr, toStr) {
+  const fromBounds = jakartaDayBoundsUTC(fromStr);
+  const toBounds = jakartaDayBoundsUTC(toStr);
+  if (!fromBounds || !toBounds) {
+    throw new AppError(400, 'Format tanggal harus YYYY-MM-DD');
+  }
+  if (fromBounds.start > toBounds.start) {
+    throw new AppError(400, 'Tanggal awal harus sebelum atau sama dengan tanggal akhir');
+  }
+  const rangeDays = Math.round((toBounds.start - fromBounds.start) / 86400000) + 1;
+  if (rangeDays > MAX_RANGE_DAYS) {
+    throw new AppError(400, `Rentang tanggal maksimal ${MAX_RANGE_DAYS} hari`);
+  }
+
+  const orders = await prisma.order.findMany({
+    where: {
+      createdAt: { gte: fromBounds.start, lt: toBounds.end },
+      status: { in: REVENUE_STATUSES },
+    },
+    select: { createdAt: true, totalHarga: true },
+  });
+
+  const byDate = new Map();
+  for (const order of orders) {
+    const date = jakartaDateISO(order.createdAt);
+    const entry = byDate.get(date) ?? { date, total: 0, orderCount: 0 };
+    entry.total += Number(order.totalHarga);
+    entry.orderCount += 1;
+    byDate.set(date, entry);
+  }
+
+  // Every day in the range gets a point even with zero orders — a chart
+  // with silently-skipped dates would misrepresent a genuinely slow day as
+  // if it never happened, and would throw off the x-axis spacing besides.
+  const days = [];
+  for (let d = new Date(fromBounds.start); d < toBounds.end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const date = jakartaDateISO(d);
+    days.push(byDate.get(date) ?? { date, total: 0, orderCount: 0 });
+  }
+  return days;
+}
+
 // Shared with shift.service.js's cash-reconciliation calc — same "how much
 // revenue, split by payment method" question, just windowed differently.
 function sumByMetode(orders) {
@@ -122,4 +171,4 @@ function sumByMetode(orders) {
   return { byMetode, total };
 }
 
-module.exports = { getReport, REVENUE_STATUSES, sumByMetode };
+module.exports = { getReport, getDailyBreakdown, REVENUE_STATUSES, sumByMetode };
