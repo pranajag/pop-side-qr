@@ -508,7 +508,18 @@ async function copyKode() {
             formatRupiah(item.harga * item.qty)
           }}</span>
         </div>
-        <div class="flex justify-between border-t pt-2 text-sm font-semibold">
+        <div v-if="order.discountAmount > 0" class="flex justify-between border-t pt-2 text-sm text-muted-foreground">
+          <span>Subtotal</span>
+          <span>{{ formatRupiah(order.totalHarga + order.discountAmount) }}</span>
+        </div>
+        <div v-if="order.discountAmount > 0" class="flex justify-between text-sm text-status-completed">
+          <span>{{ locale.t('diskon') }}{{ order.discountReason ? ` (${order.discountReason})` : '' }}</span>
+          <span>-{{ formatRupiah(order.discountAmount) }}</span>
+        </div>
+        <div
+          class="flex justify-between text-sm font-semibold"
+          :class="order.discountAmount > 0 ? '' : 'border-t pt-2'"
+        >
           <span>{{ locale.t('total') }}</span>
           <span>{{ formatRupiah(order.totalHarga) }}</span>
         </div>

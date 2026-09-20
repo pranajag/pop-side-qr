@@ -38,6 +38,20 @@ const metode = ref('tunai')
 const catatan = ref('')
 const submitting = ref(false)
 
+// Staff-entered discount only — never exposed on the public checkout flow,
+// which would let a customer set their own price. Only meaningful outside
+// split mode: splitting a single discount fairly across several separate
+// orders has no one obviously-correct answer, so rather than guess, the
+// two features are kept mutually exclusive in this UI.
+const discountAmount = ref('')
+const discountReason = ref('')
+const discountNumber = computed(() => {
+  const raw = discountAmount.value
+  if (raw === '' || raw === null || raw === undefined) return 0
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : 0
+})
+
 // { productId, nama, unitPrice, variantOptionIds, variantLabel, qty, group }
 // `group` is only meaningful once splitMode is on — every line starts in
 // group 0 either way, so turning split mode off just means "everything is
@@ -63,6 +77,12 @@ function toggleSplitMode() {
   splitMode.value = !splitMode.value
   if (!splitMode.value) {
     for (const line of lines.value) line.group = 0
+  } else {
+    // Mutually exclusive with discount (see discountAmount's own comment) —
+    // turning split mode on clears any discount already entered rather
+    // than silently ignoring it at submit time.
+    discountAmount.value = ''
+    discountReason.value = ''
   }
 }
 
@@ -155,9 +175,10 @@ function incLine(idx, delta) {
   else lines.value[idx].qty = Math.min(next, MAX_QTY)
 }
 
-const total = computed(() =>
+const subtotal = computed(() =>
   lines.value.reduce((sum, l) => sum + l.unitPrice * l.qty, 0)
 )
+const total = computed(() => Math.max(0, subtotal.value - discountNumber.value))
 
 function itemsFor(groupLines) {
   return groupLines.map((l) => ({
@@ -206,6 +227,11 @@ async function onSubmit() {
     return
   }
 
+  if (discountNumber.value > 0 && !discountReason.value.trim()) {
+    toast.error('Isi alasan diskon dulu')
+    return
+  }
+
   submitting.value = true
   try {
     const order = await store.createManual({
@@ -213,6 +239,8 @@ async function onSubmit() {
       metode: metode.value,
       catatan: catatan.value || undefined,
       items: itemsFor(lines.value),
+      discountAmount: discountNumber.value || undefined,
+      discountReason: discountNumber.value > 0 ? discountReason.value.trim() : undefined,
     })
     toast.success(`Pesanan ${order.kodeOrder} dibuat`)
     router.push({ name: 'pesanan' })
@@ -275,6 +303,33 @@ async function onSubmit() {
         maxlength="200"
         placeholder="Mis. tolong dibungkus terpisah"
       />
+    </div>
+
+    <div v-if="!splitMode" class="space-y-3 rounded-lg border p-3">
+      <h2 class="text-sm font-medium">Diskon (opsional)</h2>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div class="space-y-2">
+          <Label for="discountAmount">Potongan (Rp)</Label>
+          <Input
+            id="discountAmount"
+            v-model="discountAmount"
+            type="number"
+            min="0"
+            step="500"
+            placeholder="0"
+          />
+        </div>
+        <div class="space-y-2">
+          <Label for="discountReason">Alasan</Label>
+          <Input
+            id="discountReason"
+            v-model="discountReason"
+            maxlength="200"
+            :required="discountNumber > 0"
+            placeholder="Mis. langganan, komplain, promo"
+          />
+        </div>
+      </div>
     </div>
 
     <div class="rounded-lg border p-3">
@@ -426,6 +481,16 @@ async function onSubmit() {
             </Button>
           </div>
         </div>
+        <template v-if="!splitMode && discountNumber > 0">
+          <div class="flex items-center justify-between pt-1 text-sm text-muted-foreground">
+            <span>Subtotal</span>
+            <span>{{ formatRupiah(subtotal) }}</span>
+          </div>
+          <div class="flex items-center justify-between text-sm text-destructive">
+            <span>Diskon</span>
+            <span>-{{ formatRupiah(discountNumber) }}</span>
+          </div>
+        </template>
         <div
           class="flex items-center justify-between pt-1 text-sm font-semibold"
         >

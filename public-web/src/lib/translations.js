@@ -5,6 +5,7 @@ export const translations = {
     // Shared
     kembaliKeMenu: 'Kembali ke Menu',
     total: 'Total',
+    diskon: 'Diskon',
     cekLagi: 'Cek Lagi',
     meja: 'Meja',
     bawaPulang: 'Bawa Pulang',
@@ -149,6 +150,7 @@ export const translations = {
   en: {
     kembaliKeMenu: 'Back to Menu',
     total: 'Total',
+    diskon: 'Discount',
     cekLagi: 'Check Again',
     meja: 'Table',
     bawaPulang: 'Takeaway',

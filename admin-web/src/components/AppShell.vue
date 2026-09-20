@@ -129,7 +129,7 @@ onMounted(() => {
       // gets a wider window and a manual close button rather than relying
       // on being glanced at within a few seconds.
       toast.success(`Pesanan baru: ${order.kodeOrder}`, {
-        description: `Meja ${order.nomorMeja} · ${formatRupiah(order.totalHarga)}`,
+        description: `${order.nomorMeja ? `Meja ${order.nomorMeja}` : `Bawa Pulang${order.customerName ? ` · ${order.customerName}` : ''}`} · ${formatRupiah(order.totalHarga)}`,
         duration: 10000,
       })
     }

@@ -162,12 +162,20 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey }) {
 // the one both taking payment and entering the order in the same moment,
 // so there's nothing to wait on. The status_log entry still records the
 // jump for the same audit-trail reason every other transition is logged.
-async function createManualOrder({ customerName, metode, catatan, items, userId }) {
+async function createManualOrder({ customerName, metode, catatan, items, userId, discountAmount, discountReason }) {
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
     const kodeOrder = generateOrderCode();
     try {
       return await prisma.$transaction(async (tx) => {
-        const { orderItemsData, totalHarga } = await buildOrderItems(tx, items);
+        const { orderItemsData, totalHarga: subtotal } = await buildOrderItems(tx, items);
+        // Discount is staff-entered here only — createOrder (public
+        // checkout) never accepts one, which would let a customer set
+        // their own price. Capped at the subtotal so totalHarga can never
+        // go negative; validator.js already requires discountReason
+        // whenever discountAmount > 0, so this can't collect an
+        // unexplained deduction.
+        const discount = Math.min(discountAmount ?? 0, subtotal);
+        const totalHarga = subtotal - discount;
         const order = await tx.order.create({
           data: {
             kodeOrder,
@@ -176,6 +184,8 @@ async function createManualOrder({ customerName, metode, catatan, items, userId 
             status: 'confirmed',
             metode,
             totalHarga,
+            discountAmount: discount,
+            discountReason: discount > 0 ? discountReason : null,
             catatan,
             items: { create: orderItemsData },
             payment: { create: { metode, amount: totalHarga } },
@@ -280,6 +290,8 @@ async function getByCode(kodeOrder) {
     status: order.status,
     metode: order.metode,
     totalHarga: Number(order.totalHarga),
+    discountAmount: order.discountAmount === null ? 0 : Number(order.discountAmount),
+    discountReason: order.discountReason,
     catatan: order.catatan,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,

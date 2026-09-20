@@ -469,6 +469,9 @@ async function onCancelConfirm() {
         <p v-if="order.catatan" class="text-xs italic text-muted-foreground">
           Catatan: {{ order.catatan }}
         </p>
+        <p v-if="order.discountAmount > 0" class="text-xs text-destructive">
+          Diskon {{ formatRupiah(order.discountAmount) }}{{ order.discountReason ? ` — ${order.discountReason}` : '' }}
+        </p>
 
         <div
           class="flex items-center justify-between border-t pt-2 text-sm font-semibold"
@@ -745,6 +748,16 @@ async function onCancelConfirm() {
               >
                 {{ item.catatan }}
               </p>
+            </div>
+          </div>
+          <div v-if="receiptOrder.discountAmount > 0" class="space-y-0.5 border-b border-dashed pb-3">
+            <div class="flex justify-between text-muted-foreground">
+              <span>Subtotal</span>
+              <span>{{ formatRupiah(receiptOrder.totalHarga + receiptOrder.discountAmount) }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span>Diskon{{ receiptOrder.discountReason ? ` (${receiptOrder.discountReason})` : '' }}</span>
+              <span>-{{ formatRupiah(receiptOrder.discountAmount) }}</span>
             </div>
           </div>
           <div class="flex justify-between text-sm font-bold">

@@ -40,6 +40,8 @@ function shapeOrder(order) {
     status: order.status,
     metode: order.metode,
     totalHarga: Number(order.totalHarga),
+    discountAmount: order.discountAmount === null ? 0 : Number(order.discountAmount),
+    discountReason: order.discountReason,
     catatan: order.catatan,
     refundAmount: order.refundAmount === null ? null : Number(order.refundAmount),
     createdAt: order.createdAt,

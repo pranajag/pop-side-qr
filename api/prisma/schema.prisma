@@ -216,6 +216,14 @@ model Order {
   status         OrderStatus      @default(pending)
   metode         PaymentMethod
   totalHarga     Decimal          @map("total_harga")
+  // Manual discount, staff-entered orders only (order.service.js's
+  // createManualOrder — never accepted from the public checkout, which
+  // would let a customer set their own price). totalHarga above is already
+  // net of this; discountAmount is kept only so a receipt/report can show
+  // what was actually knocked off and why. 0/null for every order without
+  // one, which is most of them.
+  discountAmount Decimal?         @default(0) @map("discount_amount")
+  discountReason String?          @map("discount_reason")
   catatan        String?
   // Only ever set when cancelling an order that had already collected cash
   // (tunai, past `pending`) — lets a kasir log what they actually handed

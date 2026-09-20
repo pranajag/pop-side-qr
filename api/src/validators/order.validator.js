@@ -24,11 +24,22 @@ const createOrderSchema = z.object({
   idempotencyKey: z.string().uuid().optional(),
 });
 
-const createManualOrderSchema = z.object({
-  customerName: z.string().trim().max(100).optional(),
-  metode: z.enum(['qris', 'tunai', 'debit']),
-  catatan: z.string().trim().max(200).optional(),
-  items: orderItemsSchema,
-});
+const createManualOrderSchema = z
+  .object({
+    customerName: z.string().trim().max(100).optional(),
+    metode: z.enum(['qris', 'tunai', 'debit']),
+    catatan: z.string().trim().max(200).optional(),
+    items: orderItemsSchema,
+    // Staff-entered discount — createOrderSchema (public checkout) has no
+    // equivalent field on purpose, a customer must never set their own
+    // price. discountReason required whenever an amount is given, so a
+    // discount always has an audited reason attached, never a bare number.
+    discountAmount: z.coerce.number().int().min(0).max(999999999).optional(),
+    discountReason: z.string().trim().max(200).optional(),
+  })
+  .refine((data) => !data.discountAmount || data.discountReason, {
+    message: 'Alasan diskon wajib diisi kalau ada potongan',
+    path: ['discountReason'],
+  });
 
 module.exports = { createOrderSchema, createManualOrderSchema };
