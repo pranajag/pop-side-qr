@@ -21,13 +21,26 @@ async function request(
     headers['x-csrf-token'] = csrfToken
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    credentials: 'include',
-    headers,
-    body:
-      body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
-  })
+  let res
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method,
+      credentials: 'include',
+      headers,
+      body:
+        body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
+    })
+  } catch {
+    // fetch() itself threw — no connectivity, not the server rejecting the
+    // request. Every call site already shows err.message via
+    // formatApiError(), so fixing the message once here (instead of
+    // "Failed to fetch") is what actually gives staff a clear reason a
+    // status change/confirm/etc. didn't go through, with no need to
+    // individually gate every mutating button in the app.
+    const error = new Error('Tidak ada koneksi internet. Coba lagi setelah online.')
+    error.isOffline = true
+    throw error
+  }
 
   if (res.status === 204) return null
 

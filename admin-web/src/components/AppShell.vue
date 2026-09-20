@@ -6,6 +6,7 @@ import { useOrdersStore } from '@/stores/orders'
 import { useStaffCallsStore } from '@/stores/staffCalls'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useThemeStore } from '@/stores/theme'
+import { useNetworkStore } from '@/stores/network'
 import { Button } from '@/components/ui/button'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 import { playNotifySound } from '@/lib/notifySound'
@@ -26,6 +27,7 @@ import {
   XIcon,
   SunIcon,
   MoonIcon,
+  WifiOffIcon,
 } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 
@@ -36,6 +38,7 @@ const orders = useOrdersStore()
 const staffCalls = useStaffCallsStore()
 const notifications = useNotificationsStore()
 const theme = useThemeStore()
+const network = useNetworkStore()
 
 const nav = computed(() => {
   const items = [
@@ -108,6 +111,7 @@ async function refreshNotificationBadges() {
 const NEW_ORDER_POLL_MS = 8000
 let newOrderTimer = null
 onMounted(() => {
+  network.init()
   refreshNotificationBadges()
   newOrderTimer = setInterval(async () => {
     refreshNotificationBadges()
@@ -149,6 +153,13 @@ onUnmounted(() => clearInterval(newOrderTimer))
 </script>
 
 <template>
+  <div
+    v-if="!network.isOnline"
+    class="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-destructive px-4 py-1.5 text-xs font-medium text-white"
+  >
+    <WifiOffIcon class="size-3.5" />
+    Tidak ada koneksi internet — perubahan (konfirmasi, ubah status, dll) tidak akan tersimpan sampai online lagi.
+  </div>
   <div class="flex min-h-svh flex-col lg:flex-row">
     <!-- Mobile/tablet top bar (lg:hidden) — the sidebar below is off-canvas
     at these widths, this is the only way to reach it. Sticky rather than

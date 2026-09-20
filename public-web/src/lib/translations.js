@@ -110,6 +110,13 @@ export const translations = {
     progresPesanan: 'Progres Pesanan',
     pesananDibatalkanDesc: 'Pesanan ini sudah dibatalkan.',
 
+    // Offline queue (CheckoutView, App)
+    checkoutOfflineQueued:
+      'Tidak ada koneksi internet. Pesanan disimpan & akan otomatis terkirim begitu online lagi.',
+    offlineOrderSent: 'Koneksi kembali — pesanan kamu berhasil terkirim.',
+    offlineOrderFailed: 'Koneksi kembali, tapi pesanan gagal terkirim: {error}',
+    offlineBanner: 'Tidak ada koneksi internet',
+
     // BillDialog
     billLabel: 'Bill',
     billTitle: 'Bill Meja {meja}',
@@ -243,6 +250,13 @@ export const translations = {
       'Thank you! Waiting for cashier verification.',
     progresPesanan: 'Order Progress',
     pesananDibatalkanDesc: 'This order has been cancelled.',
+
+    // Offline queue (CheckoutView, App)
+    checkoutOfflineQueued:
+      'No internet connection. Your order is saved & will be sent automatically once back online.',
+    offlineOrderSent: "Connection's back — your order was sent successfully.",
+    offlineOrderFailed: "Connection's back, but the order failed to send: {error}",
+    offlineBanner: 'No internet connection',
 
     // BillDialog
     billLabel: 'Bill',

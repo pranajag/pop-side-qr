@@ -9,6 +9,7 @@ import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { useLocaleStore } from '@/stores/locale'
 import { api, formatApiError } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
+import { savePendingOrder } from '@/lib/offlineQueue'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
@@ -112,24 +113,38 @@ const selectedMethod = computed(() =>
 
 async function onSubmit() {
   submitting.value = true
+  const payload = {
+    token: table.token,
+    metode: metode.value,
+    catatan: catatan.value || undefined,
+    items: cart.items.map((i) => ({
+      productId: i.productId,
+      qty: i.qty,
+      variantOptionIds: i.variantOptionIds,
+      catatan: i.catatan || undefined,
+    })),
+    idempotencyKey,
+  }
   try {
-    const { order } = await api.post('/public/orders', {
-      token: table.token,
-      metode: metode.value,
-      catatan: catatan.value || undefined,
-      items: cart.items.map((i) => ({
-        productId: i.productId,
-        qty: i.qty,
-        variantOptionIds: i.variantOptionIds,
-        catatan: i.catatan || undefined,
-      })),
-      idempotencyKey,
-    })
+    const { order } = await api.post('/public/orders', payload)
     cart.clear()
     recentOrders.add(order.kodeOrder)
     router.replace({ name: 'order', params: { kodeOrder: order.kodeOrder } })
   } catch (err) {
-    toast.error(formatApiError(err))
+    // err.status is only ever set once a real HTTP response came back
+    // (lib/api.js) — its absence means fetch() itself failed, i.e. no
+    // connectivity right now rather than the server rejecting the order.
+    // Queue it instead of just failing: cart.clear() never ran, so the
+    // customer would otherwise be stuck re-submitting the same order by
+    // hand every time they notice the WiFi is back.
+    if (err?.status === undefined) {
+      savePendingOrder(payload)
+      cart.clear()
+      toast.warning(locale.t('checkoutOfflineQueued'))
+      router.replace({ name: 'menu' })
+    } else {
+      toast.error(formatApiError(err))
+    }
   } finally {
     submitting.value = false
   }
