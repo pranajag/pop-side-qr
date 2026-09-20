@@ -10,4 +10,9 @@ async function updateQris(req, res) {
   res.json({ settings });
 }
 
-module.exports = { get, updateQris };
+async function updateStoreInfo(req, res) {
+  const settings = await settingsService.updateStoreInfo(req.body);
+  res.json({ settings });
+}
+
+module.exports = { get, updateQris, updateStoreInfo };

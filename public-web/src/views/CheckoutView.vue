@@ -74,6 +74,12 @@ function generateIdempotencyKey() {
 
 const metode = ref('qris')
 const catatan = ref('')
+// Member auto-join — entirely optional, earning-only (redeeming points
+// stays staff-mediated in Pesanan Manual; see order.validator.js's
+// customerPhone comment for why). Omitted from the payload below when
+// blank, same as catatan, so a customer who skips this sees zero change
+// from before this field existed.
+const customerPhone = ref('')
 const summary = ref(null)
 const loadingSummary = ref(false)
 const submitting = ref(false)
@@ -124,6 +130,7 @@ async function onSubmit() {
       catatan: i.catatan || undefined,
     })),
     idempotencyKey,
+    customerPhone: customerPhone.value.trim() || undefined,
   }
   try {
     const { order } = await api.post('/public/orders', payload)
@@ -236,6 +243,23 @@ async function onSubmit() {
           :placeholder="locale.t('catatanPesananPlaceholder')"
           class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         />
+      </section>
+
+      <section>
+        <h2 class="mb-2 text-sm font-semibold text-muted-foreground">
+          {{ locale.t('memberLabel') }}
+        </h2>
+        <input
+          v-model="customerPhone"
+          type="tel"
+          inputmode="numeric"
+          maxlength="20"
+          :placeholder="locale.t('memberPlaceholder')"
+          class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        />
+        <p class="mt-1.5 text-xs text-muted-foreground">
+          {{ locale.t('memberDesc') }}
+        </p>
       </section>
 
       <section>

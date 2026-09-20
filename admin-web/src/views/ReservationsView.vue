@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { useReservationsStore } from '@/stores/reservations'
 import { useTablesStore } from '@/stores/tables'
-import { formatApiError } from '@/lib/api'
+import { formatApiError, API_URL } from '@/lib/api'
 import { formatDateTime } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,6 +48,7 @@ import {
   Trash2Icon,
   LoaderCircleIcon,
   CalendarClockIcon,
+  QrCodeIcon,
 } from '@lucide/vue'
 
 const store = useReservationsStore()
@@ -59,6 +60,19 @@ const submitting = ref(false)
 const deleteTarget = ref(null)
 const deleting = ref(false)
 const statusBusyId = ref(null)
+// "Mulai Pesanan" for a confirmed, table-assigned reservation — there's no
+// staff-side dine-in order creation (ManualOrderView.vue is takeaway-only,
+// tableId always null there); the real flow is the guest's own phone
+// scanning that table's QR, same as any other dine-in customer. This just
+// surfaces that QR from the reservation instead of staff cross-referencing
+// the table number back to TablesView.vue themselves. getTableBill's own
+// per-visit scoping (table.service.js) already keeps whatever this table
+// ordered before today's reservation out of the new party's bill — no new
+// billing concept needed for that part.
+const qrReservation = ref(null)
+function qrImageUrl(tableId) {
+  return `${API_URL}/admin/tables/${tableId}/qr`
+}
 
 const FILTERS = [
   { value: undefined, label: 'Aktif' },
@@ -393,6 +407,16 @@ async function onDeleteConfirm() {
                 Konfirmasi
               </Button>
               <Button
+                v-if="r.status === 'confirmed' && r.tableId"
+                size="sm"
+                variant="outline"
+                class="mr-1 gap-1.5"
+                @click="qrReservation = r"
+              >
+                <QrCodeIcon class="size-3.5" />
+                Mulai Pesanan
+              </Button>
+              <Button
                 v-if="r.status === 'confirmed'"
                 size="sm"
                 variant="outline"
@@ -547,5 +571,22 @@ async function onDeleteConfirm() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    <Dialog :open="!!qrReservation" @update:open="(v) => !v && (qrReservation = null)">
+      <DialogContent class="sm:max-w-xs">
+        <DialogHeader>
+          <DialogTitle>Meja {{ qrReservation?.nomorMeja }} — {{ qrReservation?.namaCustomer }}</DialogTitle>
+        </DialogHeader>
+        <p class="text-xs text-muted-foreground">
+          Sama seperti QR yang tertempel di meja — tunjukkan ini ke tamu untuk mulai pesan, atau scan sendiri kalau mau bantu input.
+        </p>
+        <img
+          v-if="qrReservation"
+          :src="qrImageUrl(qrReservation.tableId)"
+          alt="QR Meja"
+          class="mx-auto w-full max-w-56 rounded-lg border"
+        />
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

@@ -49,6 +49,8 @@ function shapeOrder(order) {
     uniqueCode: order.uniqueCode,
     discountAmount: order.discountAmount === null ? 0 : Number(order.discountAmount),
     discountReason: order.discountReason,
+    taxAmount: Number(order.taxAmount),
+    serviceChargeAmount: Number(order.serviceChargeAmount),
     catatan: order.catatan,
     refundAmount: order.refundAmount === null ? null : Number(order.refundAmount),
     createdAt: order.createdAt,
@@ -132,6 +134,16 @@ async function confirmPayment(orderId, userId) {
       throw new AppError(409, 'Order ini sudah diproses staff lain.');
     }
 
+    // Member points (public checkout's own phone opt-in — order.service.js's
+    // createOrder) were only ever snapshotted at creation, never credited —
+    // an order that never gets this far (cancelled, abandoned QRIS) must
+    // never have paid out points for a sale that didn't happen. This is the
+    // actual "was paid" moment, symmetric with updateStatus's void path
+    // clawing the same snapshot back out via reversePoints.
+    if (order.customerId && order.pointsEarned > 0) {
+      await customerService.awardPoints(tx, order.customerId, order.pointsEarned);
+    }
+
     await tx.orderStatusLog.create({
       data: { orderId, statusFrom: expectedStatus, statusTo: 'confirmed', changedBy: userId },
     });
@@ -191,10 +203,18 @@ async function updateStatus(orderId, newStatus, userId, catatan, refundAmount, p
           )
         );
       }
-      // Symmetric with awarding them at creation (order.service.js) — a
-      // voided order never happened, so the loyalty points it credited
-      // shouldn't still be sitting in the member's balance either.
-      if (order.customerId && order.pointsEarned > 0) {
+      // Symmetric with awarding them at confirmPayment (not at creation —
+      // a public order's points are only snapshotted then, credited later,
+      // see order.service.js's createOrder) — a voided order never
+      // happened, so any points it credited shouldn't still be sitting in
+      // the member's balance. Gated on PAID_STATUSES, same set
+      // requireAuth's PIN check above already uses to mean "money already
+      // changed hands": a pending/waiting_verif order cancelled before
+      // ever being confirmed never actually credited its snapshotted
+      // pointsEarned in the first place (confirmPayment is what credits
+      // it), so reversing here would wrongly dock points the member never
+      // received.
+      if (PAID_STATUSES.has(currentStatus) && order.customerId && order.pointsEarned > 0) {
         await customerService.reversePoints(tx, order.customerId, order.pointsEarned);
       }
     }

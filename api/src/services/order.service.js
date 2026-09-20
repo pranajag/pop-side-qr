@@ -104,6 +104,22 @@ async function buildOrderItems(tx, items) {
   return { orderItemsData, totalHarga };
 }
 
+// Tax/service charge, both optional and 0 by default (StoreSetting) — folds
+// straight into totalHarga so every already-built system keyed off it
+// (revenue reports, shift cash reconciliation, QRIS uniqueCode, loyalty
+// points, webhooks) keeps working with zero changes of its own; taxAmount/
+// serviceChargeAmount are kept only so a receipt can show the breakdown.
+// baseAmount is the subtotal AFTER discount (manual orders) — tax/service
+// apply to what's actually being charged, not the pre-discount price.
+async function computeTaxAndService(tx, baseAmount) {
+  const settings = await tx.storeSetting.findUnique({ where: { id: 1 } });
+  const pajakPersen = settings ? Number(settings.pajakPersen) : 0;
+  const serviceChargePersen = settings ? Number(settings.serviceChargePersen) : 0;
+  const taxAmount = Math.round(baseAmount * (pajakPersen / 100));
+  const serviceChargeAmount = Math.round(baseAmount * (serviceChargePersen / 100));
+  return { taxAmount, serviceChargeAmount, totalHarga: baseAmount + taxAmount + serviceChargeAmount };
+}
+
 // QRIS-only reconciliation trick (see schema.prisma's uniqueCode comment) —
 // picks a code such that totalHarga + code doesn't collide with any OTHER
 // order a kasir might currently be trying to match against a real bank/
@@ -131,7 +147,7 @@ async function pickUniqueCode(tx, totalHarga) {
   return UNIQUE_CODE_MAX + crypto.randomInt(1, UNIQUE_CODE_MAX);
 }
 
-async function createOrder({ token, metode, catatan, items, idempotencyKey }) {
+async function createOrder({ token, metode, catatan, items, idempotencyKey, customerPhone }) {
   const table = await tableService.verifyToken(token);
   if (!table) {
     throw new AppError(404, 'Meja tidak valid. Coba scan ulang QR.');
@@ -154,15 +170,39 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey }) {
       // for earlier items in this same attempt.
       const created = await prisma.$transaction(async (tx) => {
         await bumpVisitIfTableIsFree(tx, table.id);
-        const { orderItemsData, totalHarga } = await buildOrderItems(tx, items);
+        const { orderItemsData, totalHarga: subtotal } = await buildOrderItems(tx, items);
+        const { taxAmount, serviceChargeAmount, totalHarga } = await computeTaxAndService(tx, subtotal);
         const uniqueCode = metode === 'qris' ? await pickUniqueCode(tx, totalHarga) : null;
+
+        // Member auto-join: the customer's own opt-in on public checkout,
+        // not staff entering it on their behalf (createManualOrder's own
+        // customerPhone). Earning only — see this schema field's own
+        // comment in order.validator.js for why redemption never lives
+        // here. pointsEarned is snapshotted now but NOT credited yet —
+        // unlike a manual order (already 'confirmed', payment already in
+        // hand at creation), this one starts 'pending'/'waiting_verif' and
+        // might never actually get paid. orderManagement.service.js's
+        // confirmPayment credits it at the moment a kasir actually
+        // confirms payment, the same snapshot updateStatus's void path
+        // already claws back with reversePoints.
+        let customer = null;
+        let pointsEarned = 0;
+        if (customerPhone) {
+          customer = await customerService.findOrCreateByPhone(tx, customerPhone, null);
+          pointsEarned = customerService.pointsFor(totalHarga);
+        }
+
         return tx.order.create({
           data: {
             kodeOrder,
             tableId: table.id,
+            customerId: customer?.id ?? null,
+            pointsEarned,
             status: 'pending',
             metode,
             totalHarga,
+            taxAmount,
+            serviceChargeAmount,
             uniqueCode,
             catatan,
             idempotencyKey: idempotencyKey ?? undefined,
@@ -226,11 +266,13 @@ async function createManualOrder({
         // whenever discountAmount > 0, so this can't collect an
         // unexplained deduction.
         const discount = Math.min(discountAmount ?? 0, subtotal);
-        const totalHarga = subtotal - discount;
+        const afterDiscount = subtotal - discount;
+        const { taxAmount, serviceChargeAmount, totalHarga } = await computeTaxAndService(tx, afterDiscount);
 
         // Loyalty: optional, staff-entered here only (same reasoning as
         // discount above — the public QR flow doesn't collect a phone
-        // number). Earns points on what was actually paid, post-discount.
+        // number). Earns points on what was actually paid, post-discount
+        // and post-tax/service.
         let customer = null;
         let pointsEarned = 0;
         if (customerPhone) {
@@ -249,6 +291,8 @@ async function createManualOrder({
             status: 'confirmed',
             metode,
             totalHarga,
+            taxAmount,
+            serviceChargeAmount,
             discountAmount: discount,
             discountReason: discount > 0 ? discountReason : null,
             catatan,
@@ -364,6 +408,8 @@ async function getByCode(kodeOrder) {
     totalHarga: Number(order.totalHarga),
     discountAmount: order.discountAmount === null ? 0 : Number(order.discountAmount),
     discountReason: order.discountReason,
+    taxAmount: Number(order.taxAmount),
+    serviceChargeAmount: Number(order.serviceChargeAmount),
     // Only ever set for QRIS — the exact rupiah the customer must transfer
     // is totalHarga + uniqueCode (frontend's job to add them; kept separate
     // here since totalHarga alone is still the real menu total everywhere
@@ -374,6 +420,7 @@ async function getByCode(kodeOrder) {
     updatedAt: order.updatedAt,
     nomorMeja: order.table?.nomorMeja ?? null,
     customerName: order.customerName,
+    pointsEarned: order.pointsEarned ?? 0,
     estimasiMenit,
     items: order.items.map((item) => ({
       nama: item.product.nama,

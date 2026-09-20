@@ -117,9 +117,18 @@ model Reservation {
 // shown at checkout (MEMORY.md: one shared QRIS image for the whole
 // store, not a per-transaction dynamic code).
 model StoreSetting {
-  id        Int      @id @default(1)
-  qrisImage String?  @map("qris_image")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                  Int      @id @default(1)
+  qrisImage           String?  @map("qris_image")
+  // Receipt header + tax/service config. All optional/zero by default —
+  // a store that never opens Pengaturan's new fields sees zero change from
+  // before this existed: no store header line prints, no tax/service is
+  // added to any total.
+  namaToko            String?  @map("nama_toko")
+  alamat              String?
+  telepon             String?
+  pajakPersen         Decimal  @default(0) @map("pajak_persen")
+  serviceChargePersen Decimal  @default(0) @map("service_charge_persen")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   @@map("store_settings")
 }
@@ -241,41 +250,41 @@ model VariantOption {
 }
 
 model Order {
-  id             Int              @id @default(autoincrement())
-  kodeOrder      String           @unique @map("kode_order")
+  id                  Int              @id @default(autoincrement())
+  kodeOrder           String           @unique @map("kode_order")
   // Null = not tied to a physical table — a manual counter/takeaway sale
   // punched in by staff (order.service.js:createManualOrder), which uses
   // customerName instead of a table number to identify the order.
-  tableId        Int?             @map("table_id")
+  tableId             Int?             @map("table_id")
   // onDelete: Restrict (not Prisma's default SetNull for an optional
   // relation) — a table with real order history must still block deletion
   // via table.service.js's isForeignKeyError catch, exactly like before
   // this field became nullable. SetNull would silently orphan those rows,
   // making past dine-in orders look like manual/takeaway ones in reports.
-  table          Table?           @relation(fields: [tableId], references: [id], onDelete: Restrict)
-  customerName   String?          @map("customer_name")
+  table               Table?           @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  customerName        String?          @map("customer_name")
   // Loyalty program, staff-entered orders only (order.service.js's
   // createManualOrder — the public QR flow has no phone-collection step
   // yet, so this stays null for dine-in self-orders for now). Restrict, not
   // SetNull: a member's real purchase history must block deleting them,
   // never silently orphan the order onto no one.
-  customerId     Int?             @map("customer_id")
-  customer       Customer?        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customerId          Int?             @map("customer_id")
+  customer            Customer?        @relation(fields: [customerId], references: [id], onDelete: Restrict)
   // Snapshot of points actually credited for this order, not recomputed
   // live from totalHarga — if the points-per-rupiah rate ever changes
   // later, a past order's own history must still say what it really
   // earned, and voiding it (orderManagement.service.js's updateStatus)
   // needs the exact amount to claw back, not a rate that may have moved on.
-  pointsEarned   Int              @default(0) @map("points_earned")
+  pointsEarned        Int              @default(0) @map("points_earned")
   // Client-generated UUID, one per checkout attempt (order.service.js's
   // createOrder) — a retry after a dropped/timed-out response resends the
   // same key, so a second real HTTP request for the same tap resolves to
   // the order the first attempt actually created instead of a duplicate.
   // Null for manual/counter orders, which have no client retry to guard.
-  idempotencyKey String?          @unique @map("idempotency_key")
-  status         OrderStatus      @default(pending)
-  metode         PaymentMethod
-  totalHarga     Decimal          @map("total_harga")
+  idempotencyKey      String?          @unique @map("idempotency_key")
+  status              OrderStatus      @default(pending)
+  metode              PaymentMethod
+  totalHarga          Decimal          @map("total_harga")
   // QRIS-only anti-fraud/reconciliation trick (no payment gateway — QRIS
   // is a static admin-uploaded image, customer self-reports "sudah bayar").
   // A small extra amount (Rp1-499, order.service.js's pickUniqueCode) on
@@ -284,26 +293,38 @@ model Order {
   // e-wallet mutation instead of trusting an uploaded screenshot alone.
   // Null for cash/debit (kasir handles those in person, no reconciliation
   // gap to close) and for every order before this feature existed.
-  uniqueCode     Int?             @map("unique_code")
+  uniqueCode          Int?             @map("unique_code")
   // Manual discount, staff-entered orders only (order.service.js's
   // createManualOrder — never accepted from the public checkout, which
   // would let a customer set their own price). totalHarga above is already
   // net of this; discountAmount is kept only so a receipt/report can show
   // what was actually knocked off and why. 0/null for every order without
   // one, which is most of them.
-  discountAmount Decimal?         @default(0) @map("discount_amount")
-  discountReason String?          @map("discount_reason")
-  catatan        String?
+  discountAmount      Decimal?         @default(0) @map("discount_amount")
+  discountReason      String?          @map("discount_reason")
+  // Snapshotted from StoreSetting's rates at the moment this order was
+  // created (order.service.js's computeTaxAndService), never recomputed
+  // later — a receipt must keep showing the rate that applied when the
+  // sale happened even if the store's configured rate changes afterward.
+  // Both are already folded into totalHarga below (that stays the one
+  // source of truth every existing revenue/shift-cash/QRIS-code/webhook
+  // calculation already keys off), kept separately only so a receipt can
+  // show the subtotal -> tax -> service charge breakdown. 0 for every
+  // order before this feature existed and for any store that never sets
+  // a rate.
+  taxAmount           Decimal          @default(0) @map("tax_amount")
+  serviceChargeAmount Decimal          @default(0) @map("service_charge_amount")
+  catatan             String?
   // Only ever set when cancelling an order that had already collected cash
   // (tunai, past `pending`) — lets a kasir log what they actually handed
   // back, instead of the cash-reconciliation view only ever guessing from
   // the order total. Null for every other order, forever.
-  refundAmount   Decimal?         @map("refund_amount")
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
-  items          OrderItem[]
-  payment        Payment?
-  statusLogs     OrderStatusLog[]
+  refundAmount        Decimal?         @map("refund_amount")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+  items               OrderItem[]
+  payment             Payment?
+  statusLogs          OrderStatusLog[]
 
   @@index([status])
   @@index([createdAt])

@@ -100,6 +100,19 @@ async function shapeShift(shift) {
   };
 }
 
+// Every shift currently open right now, across all staff — not scoped to
+// one userId like getActiveShift/getMyActiveShift above, since this is for
+// dashboard.service.js's admin overview (multiple kasir can have a shift
+// open at once) rather than "does THIS user have one running".
+async function listActiveShifts() {
+  const shifts = await prisma.shift.findMany({
+    where: { endedAt: null },
+    include: { user: { select: { username: true } } },
+    orderBy: { startedAt: 'asc' },
+  });
+  return Promise.all(shifts.map(shapeShift));
+}
+
 async function listShifts(limit) {
   const capped = Math.min(Math.max(Number(limit) || 50, 1), 200);
   const shifts = await prisma.shift.findMany({
@@ -155,4 +168,4 @@ async function getShiftDetail(shiftId) {
   return { ...summary, cancelledAfterConfirm };
 }
 
-module.exports = { startShift, endShift, getMyActiveShift, listShifts, getShiftDetail };
+module.exports = { startShift, endShift, getMyActiveShift, listActiveShifts, listShifts, getShiftDetail };

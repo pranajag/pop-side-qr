@@ -22,6 +22,14 @@ const createOrderSchema = z.object({
   // instead of creating a second one. Optional so nothing breaks if an
   // older frontend build (or a direct API caller) omits it.
   idempotencyKey: z.string().uuid().optional(),
+  // Member auto-join: a customer opting in on public checkout, not staff
+  // entering it for them — earns points same as createManualOrder's own
+  // customerPhone, but this is the ONLY thing a customer can set about
+  // their own membership here. No discount/points-redemption field exists
+  // on this schema on purpose (confirmed with the store owner): spending
+  // points stays staff-mediated in Pesanan Manual, same as manual discount
+  // already is — a customer can join and earn here, never redeem here.
+  customerPhone: z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(20).optional()),
 });
 
 const createManualOrderSchema = z

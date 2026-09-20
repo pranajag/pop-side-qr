@@ -25,9 +25,42 @@ import {
   CopyIcon,
   Trash2Icon,
   PlusIcon,
+  StoreIcon,
 } from '@lucide/vue'
 
 const store = useSettingsStore()
+
+// --- Informasi Toko (identitas struk + pajak/service charge) ---
+const tokoForm = ref({
+  namaToko: '',
+  alamat: '',
+  telepon: '',
+  pajakPersen: 0,
+  serviceChargePersen: 0,
+})
+const savingToko = ref(false)
+
+function syncTokoForm() {
+  tokoForm.value = {
+    namaToko: store.namaToko ?? '',
+    alamat: store.alamat ?? '',
+    telepon: store.telepon ?? '',
+    pajakPersen: store.pajakPersen ?? 0,
+    serviceChargePersen: store.serviceChargePersen ?? 0,
+  }
+}
+
+async function saveTokoInfo() {
+  savingToko.value = true
+  try {
+    await store.updateStoreInfo(tokoForm.value)
+    toast.success('Informasi toko disimpan')
+  } catch (err) {
+    toast.error(formatApiError(err))
+  } finally {
+    savingToko.value = false
+  }
+}
 
 // --- API Keys & Webhooks ("API & Integrasi") ---
 const apiKeys = ref([])
@@ -150,8 +183,9 @@ const localPreviewUrl = ref(null)
 const submitting = ref(false)
 const saveConfirmOpen = ref(false)
 
-onMounted(() => {
-  store.fetchSettings()
+onMounted(async () => {
+  await store.fetchSettings()
+  syncTokoForm()
   loadIntegrations()
 })
 onBeforeUnmount(clearLocalPreview)
@@ -204,11 +238,60 @@ async function onSave() {
     <div>
       <h1 class="text-lg font-semibold tracking-tight">Pengaturan</h1>
       <p class="text-sm text-muted-foreground">
-        Gambar QRIS statis yang ditampilkan ke customer saat checkout.
+        Identitas toko, QRIS, dan integrasi.
       </p>
     </div>
 
     <div class="space-y-4 rounded-lg border bg-card p-6">
+      <div>
+        <h2 class="flex items-center gap-2 text-sm font-semibold">
+          <StoreIcon class="size-4" />
+          Informasi Toko
+        </h2>
+        <p class="mt-1 text-xs text-muted-foreground">
+          Dicetak di kop struk. Pajak/service charge (opsional) ditambahkan
+          otomatis ke total setiap order baru — kosongkan/isi 0 kalau harga
+          menu sudah termasuk semuanya.
+        </p>
+      </div>
+
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div class="space-y-1.5 sm:col-span-2">
+          <Label for="nama-toko">Nama Toko</Label>
+          <Input id="nama-toko" v-model="tokoForm.namaToko" placeholder="Popside Cafe" maxlength="100" />
+        </div>
+        <div class="space-y-1.5 sm:col-span-2">
+          <Label for="alamat-toko">Alamat</Label>
+          <Input id="alamat-toko" v-model="tokoForm.alamat" placeholder="Jl. Contoh No. 1, Jakarta" maxlength="300" />
+        </div>
+        <div class="space-y-1.5">
+          <Label for="telepon-toko">No. Telepon</Label>
+          <Input id="telepon-toko" v-model="tokoForm.telepon" placeholder="08123456789" maxlength="30" />
+        </div>
+        <div></div>
+        <div class="space-y-1.5">
+          <Label for="pajak-persen">Pajak (%)</Label>
+          <Input id="pajak-persen" v-model.number="tokoForm.pajakPersen" type="number" min="0" max="100" step="0.5" />
+        </div>
+        <div class="space-y-1.5">
+          <Label for="service-persen">Service Charge (%)</Label>
+          <Input id="service-persen" v-model.number="tokoForm.serviceChargePersen" type="number" min="0" max="100" step="0.5" />
+        </div>
+      </div>
+
+      <Button :disabled="savingToko" class="gap-1.5" @click="saveTokoInfo">
+        <LoaderCircleIcon v-if="savingToko" class="size-4 animate-spin" />
+        Simpan Informasi Toko
+      </Button>
+    </div>
+
+    <div class="space-y-4 rounded-lg border bg-card p-6">
+      <div>
+        <h2 class="text-sm font-semibold">Gambar QRIS</h2>
+        <p class="mt-1 text-xs text-muted-foreground">
+          Ditampilkan ke customer saat checkout QRIS.
+        </p>
+      </div>
       <div class="flex items-center justify-center">
         <img
           v-if="previewUrl"

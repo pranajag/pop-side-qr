@@ -1,10 +1,11 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useOrdersStore } from '@/stores/orders'
 import { useStaffCallsStore } from '@/stores/staffCalls'
 import { useProductsStore } from '@/stores/products'
+import { useSettingsStore } from '@/stores/settings'
 import { formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah, formatDateTime } from '@/lib/format'
 import { STATUS_LABEL, STATUS_BADGE_CLASS } from '@/lib/orderStatus'
@@ -58,14 +59,32 @@ import {
 const POLL_MS = 8000
 
 const router = useRouter()
+const route = useRoute()
 const store = useOrdersStore()
 const calls = useStaffCallsStore()
 const products = useProductsStore()
+const settings = useSettingsStore()
 const lowStockProducts = computed(() =>
   products.items.filter((p) => stockStatus(p) !== null)
 )
 
 const searchQuery = ref('')
+// Kitchen queue position — "buat ini duluan, lalu ini". store.items is
+// already sorted confirmed/cooking-first then oldest-first (server's
+// list(), orderManagement.service.js), so position is just this order's
+// index within that existing order — no separate sequence field needed.
+// It's naturally live: when #1 finishes (moves to 'ready'), it drops out
+// of this filter and #2 becomes #1 on the very next poll, no renumbering
+// logic required anywhere.
+const KITCHEN_QUEUE_STATUSES = new Set(['confirmed', 'cooking'])
+const kitchenQueue = computed(() =>
+  store.items.filter((o) => KITCHEN_QUEUE_STATUSES.has(o.status))
+)
+function queuePosition(order) {
+  if (!KITCHEN_QUEUE_STATUSES.has(order.status)) return null
+  return kitchenQueue.value.findIndex((o) => o.id === order.id) + 1
+}
+
 const filteredItems = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return store.items
@@ -90,6 +109,18 @@ const cancelling = ref(false)
 const resolvingCallId = ref(null)
 const buktiOrderId = ref(null)
 const receiptOrder = ref(null)
+// totalHarga already has discount subtracted and tax/service added
+// (order.service.js's computeTaxAndService) — subtotal for the receipt's
+// own breakdown line has to walk that back out.
+const receiptSubtotal = computed(() => {
+  if (!receiptOrder.value) return 0
+  return (
+    receiptOrder.value.totalHarga -
+    receiptOrder.value.taxAmount -
+    receiptOrder.value.serviceChargeAmount +
+    receiptOrder.value.discountAmount
+  )
+})
 const kitchenTicketOrder = ref(null)
 
 function printReceipt() {
@@ -164,9 +195,19 @@ function isUrgent(order) {
 let pollTimer = null
 let clockTimer = null
 onMounted(() => {
-  store.fetchAll()
+  // DashboardView.vue's "Cek Sekarang" link deep-links here with
+  // ?status=waiting_verif — only ever applied when it's one of this page's
+  // own known filter values, so a stray/malformed query param can't set
+  // statusFilter to something the tab bar itself has no button for.
+  const queryStatus = route.query.status
+  if (queryStatus && FILTERS.some((f) => f.value === queryStatus)) {
+    store.setFilter(queryStatus)
+  } else {
+    store.fetchAll()
+  }
   calls.fetchPending()
   products.fetchAll()
+  settings.fetchSettings()
   pollTimer = setInterval(() => {
     store.fetchAll()
     calls.fetchPending()
@@ -428,7 +469,16 @@ async function onCancelConfirm() {
       >
         <div class="flex items-start justify-between gap-2">
           <div>
-            <p class="font-mono text-sm font-semibold">{{ order.kodeOrder }}</p>
+            <div class="flex items-center gap-1.5">
+              <span
+                v-if="queuePosition(order)"
+                class="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground"
+                :title="`Antrian dapur ke-${queuePosition(order)}`"
+              >
+                {{ queuePosition(order) }}
+              </span>
+              <p class="font-mono text-sm font-semibold">{{ order.kodeOrder }}</p>
+            </div>
             <p class="text-xs text-muted-foreground">
               {{
                 order.nomorMeja
@@ -743,7 +793,9 @@ async function onCancelConfirm() {
             class="flex flex-col items-center gap-1.5 border-b border-dashed pb-3 text-center"
           >
             <img :src="logoUrl" alt="Popside" class="size-10 rounded-md" />
-            <p class="text-sm font-bold">POPSIDE</p>
+            <p class="text-sm font-bold">{{ settings.namaToko || 'POPSIDE' }}</p>
+            <p v-if="settings.alamat" class="text-muted-foreground">{{ settings.alamat }}</p>
+            <p v-if="settings.telepon" class="text-muted-foreground">{{ settings.telepon }}</p>
             <p class="text-muted-foreground">
               {{ formatDateTime(receiptOrder.createdAt) }}
             </p>
@@ -785,14 +837,25 @@ async function onCancelConfirm() {
               </p>
             </div>
           </div>
-          <div v-if="receiptOrder.discountAmount > 0" class="space-y-0.5 border-b border-dashed pb-3">
+          <div
+            v-if="receiptOrder.discountAmount > 0 || receiptOrder.taxAmount > 0 || receiptOrder.serviceChargeAmount > 0"
+            class="space-y-0.5 border-b border-dashed pb-3"
+          >
             <div class="flex justify-between text-muted-foreground">
               <span>Subtotal</span>
-              <span>{{ formatRupiah(receiptOrder.totalHarga + receiptOrder.discountAmount) }}</span>
+              <span>{{ formatRupiah(receiptSubtotal) }}</span>
             </div>
-            <div class="flex justify-between">
+            <div v-if="receiptOrder.discountAmount > 0" class="flex justify-between">
               <span>Diskon{{ receiptOrder.discountReason ? ` (${receiptOrder.discountReason})` : '' }}</span>
               <span>-{{ formatRupiah(receiptOrder.discountAmount) }}</span>
+            </div>
+            <div v-if="receiptOrder.taxAmount > 0" class="flex justify-between text-muted-foreground">
+              <span>Pajak</span>
+              <span>{{ formatRupiah(receiptOrder.taxAmount) }}</span>
+            </div>
+            <div v-if="receiptOrder.serviceChargeAmount > 0" class="flex justify-between text-muted-foreground">
+              <span>Service Charge</span>
+              <span>{{ formatRupiah(receiptOrder.serviceChargeAmount) }}</span>
             </div>
           </div>
           <div class="flex justify-between text-sm font-bold">

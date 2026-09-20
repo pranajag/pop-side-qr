@@ -6,6 +6,8 @@ import { api, formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { STATUS_LABEL_KEY, STATUS_COLOR } from '@/lib/orderStatus'
 import { useLocaleStore } from '@/stores/locale'
+import { playReadySound } from '@/lib/notifySound'
+import logoUrl from '@/assets/pop-side-logo.jpg'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -27,11 +29,52 @@ import {
   UtensilsIcon,
   PackageCheckIcon,
   XCircleIcon,
+  BellIcon,
 } from '@lucide/vue'
 
 const route = useRoute()
 const router = useRouter()
 const locale = useLocaleStore()
+
+// Opt-in browser push for "pesanan siap" — never requested automatically
+// (an unprompted permission dialog on page load is exactly the pattern
+// browsers now auto-deny/flag as spammy); only offered once via a small
+// dismissible banner, and only while there's still something to wait for.
+const notificationSupported = typeof window !== 'undefined' && 'Notification' in window
+const notificationPermission = ref(notificationSupported ? Notification.permission : 'unsupported')
+const notificationBannerDismissed = ref(false)
+const showNotificationBanner = computed(
+  () =>
+    notificationSupported &&
+    notificationPermission.value === 'default' &&
+    !notificationBannerDismissed.value &&
+    !isTerminal.value
+)
+
+async function enableNotifications() {
+  if (!notificationSupported) return
+  try {
+    notificationPermission.value = await Notification.requestPermission()
+  } catch {
+    // Ignored — the in-page sound/toast below still fires regardless.
+  }
+}
+
+function notifyReady() {
+  playReadySound()
+  toast.success(locale.t('pesananSiapDiambil'), { description: locale.t('pesananSiapDiambilDesc') })
+  if (notificationSupported && Notification.permission === 'granted') {
+    try {
+      new Notification(locale.t('pesananSiapDiambil'), {
+        body: locale.t('pesananSiapDiambilDesc'),
+        icon: logoUrl,
+      })
+    } catch {
+      // Construction can throw in some contexts (e.g. iOS Safari PWA) —
+      // the sound/toast above already covered notifying the customer.
+    }
+  }
+}
 
 const order = ref(null)
 const notFound = ref(false)
@@ -58,6 +101,23 @@ const needsQrisPayment = computed(
 // alone. Falls back to the plain total for every non-QRIS order.
 const totalBayar = computed(
   () => (order.value?.totalHarga ?? 0) + (order.value?.uniqueCode ?? 0)
+)
+// totalHarga already has discount subtracted and tax/service added
+// (api's order.service.js computeTaxAndService) — the receipt-style
+// breakdown below has to walk that back out to show a real subtotal.
+const subtotal = computed(() => {
+  if (!order.value) return 0
+  return (
+    order.value.totalHarga -
+    order.value.taxAmount -
+    order.value.serviceChargeAmount +
+    order.value.discountAmount
+  )
+})
+const hasBreakdown = computed(
+  () =>
+    order.value &&
+    (order.value.discountAmount > 0 || order.value.taxAmount > 0 || order.value.serviceChargeAmount > 0)
 )
 const isWaitingKasir = computed(
   () => order.value?.status === 'pending' && order.value?.metode !== 'qris'
@@ -115,9 +175,16 @@ const elapsedMinutes = computed(() => {
 async function load({ silent = false } = {}) {
   if (!silent) loading.value = true
   try {
+    const previousStatus = order.value?.status
     const data = await api.get(`/public/orders/${route.params.kodeOrder}`)
     order.value = data.order
     notFound.value = false
+    // Fires on the TRANSITION into ready, not just "is ready" — loading a
+    // page that's already ready (e.g. a fresh tab reopened later) shouldn't
+    // replay the alert; only the moment it actually changes should.
+    if (previousStatus && previousStatus !== 'ready' && data.order.status === 'ready') {
+      notifyReady()
+    }
   } catch (err) {
     // Silent (polling) failures — a rate limit hit, a network blip — just
     // retry next tick and keep showing whatever order data is already on
@@ -281,6 +348,26 @@ async function copyKode() {
               : locale.t('bawaPulang')
           }}
         </p>
+      </div>
+
+      <div
+        v-if="showNotificationBanner"
+        class="flex items-center gap-3 rounded-lg border p-3 text-sm"
+      >
+        <BellIcon class="size-4 shrink-0 text-muted-foreground" />
+        <p class="min-w-0 flex-1 text-xs text-muted-foreground">
+          {{ locale.t('aktifkanNotifikasiDesc') }}
+        </p>
+        <Button size="sm" variant="outline" class="shrink-0" @click="enableNotifications">
+          {{ locale.t('aktifkanNotifikasi') }}
+        </Button>
+        <button
+          type="button"
+          class="shrink-0 text-xs text-muted-foreground underline"
+          @click="notificationBannerDismissed = true"
+        >
+          {{ locale.t('nanti') }}
+        </button>
       </div>
 
       <div v-if="showStepper" class="space-y-3 rounded-lg border p-4">
@@ -519,21 +606,35 @@ async function copyKode() {
             formatRupiah(item.harga * item.qty)
           }}</span>
         </div>
-        <div v-if="order.discountAmount > 0" class="flex justify-between border-t pt-2 text-sm text-muted-foreground">
+        <div v-if="hasBreakdown" class="flex justify-between border-t pt-2 text-sm text-muted-foreground">
           <span>Subtotal</span>
-          <span>{{ formatRupiah(order.totalHarga + order.discountAmount) }}</span>
+          <span>{{ formatRupiah(subtotal) }}</span>
         </div>
         <div v-if="order.discountAmount > 0" class="flex justify-between text-sm text-status-completed">
           <span>{{ locale.t('diskon') }}{{ order.discountReason ? ` (${order.discountReason})` : '' }}</span>
           <span>-{{ formatRupiah(order.discountAmount) }}</span>
         </div>
+        <div v-if="order.taxAmount > 0" class="flex justify-between text-sm text-muted-foreground">
+          <span>Pajak</span>
+          <span>{{ formatRupiah(order.taxAmount) }}</span>
+        </div>
+        <div v-if="order.serviceChargeAmount > 0" class="flex justify-between text-sm text-muted-foreground">
+          <span>Service Charge</span>
+          <span>{{ formatRupiah(order.serviceChargeAmount) }}</span>
+        </div>
         <div
           class="flex justify-between text-sm font-semibold"
-          :class="order.discountAmount > 0 ? '' : 'border-t pt-2'"
+          :class="hasBreakdown ? '' : 'border-t pt-2'"
         >
           <span>{{ locale.t('total') }}</span>
           <span>{{ formatRupiah(order.totalHarga) }}</span>
         </div>
+        <p
+          v-if="order.pointsEarned > 0 && !['pending', 'waiting_verif', 'cancelled'].includes(order.status)"
+          class="border-t pt-2 text-xs text-status-completed"
+        >
+          {{ locale.t('poinDidapat', { n: order.pointsEarned }) }}
+        </p>
         <p
           v-if="order.catatan"
           class="border-t pt-2 text-xs text-muted-foreground"
