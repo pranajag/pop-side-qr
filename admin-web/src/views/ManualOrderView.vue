@@ -34,6 +34,7 @@ const productsStore = useProductsStore()
 const categoriesStore = useCategoriesStore()
 
 const customerName = ref('')
+const customerPhone = ref('')
 const metode = ref('tunai')
 const catatan = ref('')
 const submitting = ref(false)
@@ -78,11 +79,12 @@ function toggleSplitMode() {
   if (!splitMode.value) {
     for (const line of lines.value) line.group = 0
   } else {
-    // Mutually exclusive with discount (see discountAmount's own comment) —
-    // turning split mode on clears any discount already entered rather
-    // than silently ignoring it at submit time.
+    // Mutually exclusive with discount and loyalty (see their own fields'
+    // comments) — turning split mode on clears both rather than silently
+    // ignoring whatever was already entered at submit time.
     discountAmount.value = ''
     discountReason.value = ''
+    customerPhone.value = ''
   }
 }
 
@@ -236,13 +238,18 @@ async function onSubmit() {
   try {
     const order = await store.createManual({
       customerName: customerName.value || undefined,
+      customerPhone: customerPhone.value.trim() || undefined,
       metode: metode.value,
       catatan: catatan.value || undefined,
       items: itemsFor(lines.value),
       discountAmount: discountNumber.value || undefined,
       discountReason: discountNumber.value > 0 ? discountReason.value.trim() : undefined,
     })
-    toast.success(`Pesanan ${order.kodeOrder} dibuat`)
+    toast.success(
+      order.pointsEarned > 0
+        ? `Pesanan ${order.kodeOrder} dibuat — +${order.pointsEarned} poin`
+        : `Pesanan ${order.kodeOrder} dibuat`
+    )
     router.push({ name: 'pesanan' })
   } catch (err) {
     toast.error(formatApiError(err))
@@ -293,6 +300,21 @@ async function onSubmit() {
           </SelectContent>
         </Select>
       </div>
+    </div>
+
+    <div v-if="!splitMode" class="space-y-2">
+      <Label for="customerPhone"
+        >No. HP Member (opsional) <span class="font-normal text-muted-foreground">— untuk poin loyalitas</span></Label
+      >
+      <Input
+        id="customerPhone"
+        v-model="customerPhone"
+        maxlength="20"
+        placeholder="Mis. 08123456789"
+      />
+      <p v-if="customerPhone.trim()" class="text-xs text-muted-foreground">
+        Member baru otomatis terdaftar kalau nomor ini belum ada. +{{ Math.floor(total / 1000) }} poin dari pesanan ini.
+      </p>
     </div>
 
     <div class="space-y-2">

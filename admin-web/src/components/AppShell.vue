@@ -28,6 +28,7 @@ import {
   SunIcon,
   MoonIcon,
   WifiOffIcon,
+  StarIcon,
 } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 
@@ -50,6 +51,7 @@ const nav = computed(() => {
     },
     { to: { name: 'shift' }, label: 'Shift', icon: TimerIcon },
     { to: { name: 'reservasi' }, label: 'Reservasi', icon: CalendarClockIcon },
+    { to: { name: 'member' }, label: 'Member', icon: StarIcon },
   ]
   if (auth.isAdmin) {
     items.push(

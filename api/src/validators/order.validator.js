@@ -36,6 +36,8 @@ const createManualOrderSchema = z
     // discount always has an audited reason attached, never a bare number.
     discountAmount: z.coerce.number().int().min(0).max(999999999).optional(),
     discountReason: z.string().trim().max(200).optional(),
+    // Loyalty — optional, staff-entered here only (see customer.service.js).
+    customerPhone: z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(20).optional()),
   })
   .refine((data) => !data.discountAmount || data.discountReason, {
     message: 'Alasan diskon wajib diisi kalau ada potongan',

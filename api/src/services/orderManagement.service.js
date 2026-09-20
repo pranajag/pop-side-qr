@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const paymentProof = require('./paymentProof.service');
 const userService = require('./user.service');
+const customerService = require('./customer.service');
 
 const STATUS_PRIORITY = {
   waiting_verif: 0,
@@ -48,6 +49,7 @@ function shapeOrder(order) {
     updatedAt: order.updatedAt,
     nomorMeja: order.table?.nomorMeja ?? null,
     customerName: order.customerName,
+    pointsEarned: order.pointsEarned ?? 0,
     // Never the filename itself — that's only ever resolved server-side
     // by serveBuktiBayar, keyed off this order's own id, never handed to
     // the client to construct a URL from directly.
@@ -162,6 +164,12 @@ async function updateStatus(orderId, newStatus, userId, catatan, refundAmount, p
             tx.product.update({ where: { id: item.productId }, data: { stok: { increment: item.qty } } })
           )
         );
+      }
+      // Symmetric with awarding them at creation (order.service.js) — a
+      // voided order never happened, so the loyalty points it credited
+      // shouldn't still be sitting in the member's balance either.
+      if (order.customerId && order.pointsEarned > 0) {
+        await customerService.reversePoints(tx, order.customerId, order.pointsEarned);
       }
     }
 

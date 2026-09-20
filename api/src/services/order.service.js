@@ -6,6 +6,7 @@ const { resolveProductVariants } = require('../utils/productVariants');
 const { jakartaDayBoundsUTC } = require('../utils/jakartaTime');
 const tableService = require('./table.service');
 const paymentProof = require('./paymentProof.service');
+const customerService = require('./customer.service');
 
 const MAX_CODE_ATTEMPTS = 5;
 const KODE_ORDER_PATTERN = /^ORD-\d{8}-[A-Z0-9]{4}$/;
@@ -162,7 +163,16 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey }) {
 // the one both taking payment and entering the order in the same moment,
 // so there's nothing to wait on. The status_log entry still records the
 // jump for the same audit-trail reason every other transition is logged.
-async function createManualOrder({ customerName, metode, catatan, items, userId, discountAmount, discountReason }) {
+async function createManualOrder({
+  customerName,
+  metode,
+  catatan,
+  items,
+  userId,
+  discountAmount,
+  discountReason,
+  customerPhone,
+}) {
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
     const kodeOrder = generateOrderCode();
     try {
@@ -176,11 +186,25 @@ async function createManualOrder({ customerName, metode, catatan, items, userId,
         // unexplained deduction.
         const discount = Math.min(discountAmount ?? 0, subtotal);
         const totalHarga = subtotal - discount;
+
+        // Loyalty: optional, staff-entered here only (same reasoning as
+        // discount above — the public QR flow doesn't collect a phone
+        // number). Earns points on what was actually paid, post-discount.
+        let customer = null;
+        let pointsEarned = 0;
+        if (customerPhone) {
+          customer = await customerService.findOrCreateByPhone(tx, customerPhone, customerName);
+          pointsEarned = customerService.pointsFor(totalHarga);
+          await customerService.awardPoints(tx, customer.id, pointsEarned);
+        }
+
         const order = await tx.order.create({
           data: {
             kodeOrder,
             tableId: null,
             customerName: customerName || null,
+            customerId: customer?.id ?? null,
+            pointsEarned,
             status: 'confirmed',
             metode,
             totalHarga,

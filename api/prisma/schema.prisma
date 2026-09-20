@@ -207,6 +207,19 @@ model Order {
   // making past dine-in orders look like manual/takeaway ones in reports.
   table          Table?           @relation(fields: [tableId], references: [id], onDelete: Restrict)
   customerName   String?          @map("customer_name")
+  // Loyalty program, staff-entered orders only (order.service.js's
+  // createManualOrder — the public QR flow has no phone-collection step
+  // yet, so this stays null for dine-in self-orders for now). Restrict, not
+  // SetNull: a member's real purchase history must block deleting them,
+  // never silently orphan the order onto no one.
+  customerId     Int?             @map("customer_id")
+  customer       Customer?        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  // Snapshot of points actually credited for this order, not recomputed
+  // live from totalHarga — if the points-per-rupiah rate ever changes
+  // later, a past order's own history must still say what it really
+  // earned, and voiding it (orderManagement.service.js's updateStatus)
+  // needs the exact amount to claw back, not a rate that may have moved on.
+  pointsEarned   Int              @default(0) @map("points_earned")
   // Client-generated UUID, one per checkout attempt (order.service.js's
   // createOrder) — a retry after a dropped/timed-out response resends the
   // same key, so a second real HTTP request for the same tap resolves to
@@ -239,6 +252,7 @@ model Order {
   @@index([status])
   @@index([createdAt])
   @@index([tableId])
+  @@index([customerId])
   @@map("orders")
 }
 
@@ -314,6 +328,26 @@ model User {
   shifts       Shift[]
 
   @@map("users")
+}
+
+// Loyalty member, identified by phone number (matches how Moka POS's own
+// membership works) — created on the fly the first time a manual order
+// gives a phone number that isn't already a member, never through a
+// separate signup step. points is a running balance credited at order
+// creation and clawed back on a later void (order.service.js /
+// orderManagement.service.js); redeeming them is a manual discount at
+// checkout (ManualOrderView's existing diskon field with a "redeem N poin"
+// reason) rather than a separate automated mechanism, at least for now.
+model Customer {
+  id        Int      @id @default(autoincrement())
+  telepon   String   @unique
+  nama      String?
+  points    Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  orders    Order[]
+
+  @@map("customers")
 }
 
 // Clock-in/clock-out log for admin+kasir. Deliberately not linked to
