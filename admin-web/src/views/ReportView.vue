@@ -7,7 +7,7 @@ import { useNotificationsStore } from '@/stores/notifications'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { LoaderCircleIcon, WalletIcon, DownloadIcon, TrendingUpIcon } from '@lucide/vue'
+import { LoaderCircleIcon, WalletIcon, DownloadIcon, TrendingUpIcon, BookTextIcon } from '@lucide/vue'
 
 // Asia/Jakarta (WIB) is a fixed UTC+7 offset, no DST — computed directly
 // rather than via the browser's local-timezone Date getters, which would
@@ -75,6 +75,20 @@ function csvRow(fields) {
   return fields.map(csvField).join(',')
 }
 
+// Leading BOM so Excel (which guesses ANSI otherwise) reads the UTF-8
+// rupiah/product-name text correctly instead of mangling it.
+function downloadCsv(lines, filename) {
+  const blob = new Blob(['﻿' + lines.join('\r\n')], {
+    type: 'text/csv;charset=utf-8;',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 function exportCsv() {
   if (!report.value) return
   const r = report.value
@@ -94,17 +108,50 @@ function exportCsv() {
       csvRow([p.nama, p.qty, p.revenue, p.margin === null ? 'HPP belum diisi' : p.margin])
     ),
   ]
-  // Leading BOM so Excel (which guesses ANSI otherwise) reads the UTF-8
-  // rupiah/product-name text correctly instead of mangling it.
-  const blob = new Blob(['﻿' + lines.join('\r\n')], {
-    type: 'text/csv;charset=utf-8;',
-  })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `laporan-popside_${r.from}_${r.to}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadCsv(lines, `laporan-popside_${r.from}_${r.to}.csv`)
+}
+
+// A simplified double-entry jurnal umum (general journal) — cash-basis,
+// net-of-discount revenue per payment method, the convention many small
+// businesses' own bookkeepers already use rather than a full contra-
+// revenue discount account. QRIS/Debit post to a receivable account
+// (settles to the bank a day or two later, not same-day cash-in-hand like
+// Tunai does) rather than straight to Kas. Meant as a starting point for
+// manual import into Jurnal.id/Accurate/etc — account names and the exact
+// column layout almost certainly need adjusting to match whichever
+// software and chart of accounts is actually in use; this is not a
+// certified template for any specific one.
+const AKUN_DEBIT = { tunai: 'Kas', qris: 'Piutang QRIS', debit: 'Piutang Bank (Debit)' }
+
+function exportAccounting() {
+  if (!report.value) return
+  const r = report.value
+  const lines = [
+    csvRow(['Tanggal', 'Keterangan', 'Akun Debit', 'Akun Kredit', 'Jumlah']),
+    ...Object.entries(r.byMetode)
+      .filter(([, amount]) => amount > 0)
+      .map(([metode, amount]) =>
+        csvRow([
+          r.to,
+          `Penjualan ${METODE_LABEL[metode]} ${r.from} s/d ${r.to}`,
+          AKUN_DEBIT[metode],
+          'Pendapatan Penjualan',
+          amount,
+        ])
+      ),
+  ]
+  if (r.totalDiscount > 0) {
+    lines.push(
+      csvRow([
+        r.to,
+        `Catatan: total diskon periode ini Rp ${r.totalDiscount} sudah dikurangkan langsung dari Pendapatan Penjualan di atas (net), belum dipisah ke akun Diskon Penjualan tersendiri — sesuaikan manual kalau chart of account Anda memisahkannya.`,
+        '',
+        '',
+        '',
+      ])
+    )
+  }
+  downloadCsv(lines, `jurnal-popside_${r.from}_${r.to}.csv`)
 }
 
 onMounted(load)
@@ -163,15 +210,26 @@ onMounted(() => useNotificationsStore().markLaporanSeen())
             <WalletIcon class="size-4" />
             Total Pendapatan
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            class="gap-1.5"
-            @click="exportCsv"
-          >
-            <DownloadIcon class="size-3.5" />
-            Export CSV
-          </Button>
+          <div class="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              class="gap-1.5"
+              @click="exportCsv"
+            >
+              <DownloadIcon class="size-3.5" />
+              Export CSV
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              class="gap-1.5"
+              @click="exportAccounting"
+            >
+              <BookTextIcon class="size-3.5" />
+              Export Jurnal
+            </Button>
+          </div>
         </div>
         <p class="mt-1 text-3xl font-bold tracking-tight">
           {{ formatRupiah(report.total) }}

@@ -33,8 +33,15 @@ async function getReport(fromStr, toStr) {
     status: { in: REVENUE_STATUSES },
   };
 
-  const orders = await prisma.order.findMany({ where, select: { metode: true, totalHarga: true } });
+  const orders = await prisma.order.findMany({
+    where,
+    select: { metode: true, totalHarga: true, discountAmount: true },
+  });
   const { byMetode, total } = sumByMetode(orders);
+  // Informational only, for the accounting export below — totalHarga above
+  // is already net of any discount, so this is never subtracted from
+  // `total` again (that would double-count it).
+  const totalDiscount = orders.reduce((sum, o) => sum + (o.discountAmount === null ? 0 : Number(o.discountAmount)), 0);
 
   // Grouped by productId (stable), displayed with the product's *current*
   // name — same convention every other order-shaping function in this
@@ -95,6 +102,7 @@ async function getReport(fromStr, toStr) {
     total,
     orderCount: orders.length,
     byMetode,
+    totalDiscount,
     topProducts,
     totalMargin,
     knownMarginRevenue,
