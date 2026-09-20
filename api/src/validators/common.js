@@ -19,4 +19,9 @@ const usernameSchema = z
 // accepts a password whose tail bcrypt would just discard.
 const passwordSchema = z.string().min(8).max(72);
 
-module.exports = { zBooleanish, usernameSchema, passwordSchema };
+// Numeric only, 4-6 digits — short enough to type quickly under pressure
+// (voiding a paid order mid-rush), never meant to carry password-grade
+// entropy on its own; pinAttempts.js's lockout is what actually protects it.
+const pinSchema = z.string().regex(/^\d{4,6}$/, 'PIN harus 4-6 digit angka');
+
+module.exports = { zBooleanish, usernameSchema, passwordSchema, pinSchema };

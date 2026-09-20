@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const paymentProof = require('./paymentProof.service');
+const userService = require('./user.service');
 
 const STATUS_PRIORITY = {
   waiting_verif: 0,
@@ -20,6 +21,11 @@ const NEXT_STATUS = {
   ready: 'completed',
 };
 const CANCELLABLE_FROM = new Set(['pending', 'waiting_verif', 'confirmed', 'cooking', 'ready']);
+// Past the payment gate — cancelling one of these is a "void" (money
+// already changed hands), same distinction admin-web's OrdersView.vue
+// already draws in its own copy/dialog. A void requires the acting staff's
+// own PIN; a plain pre-payment cancel doesn't.
+const PAID_STATUSES = new Set(['confirmed', 'cooking', 'ready']);
 
 const ORDER_INCLUDE = {
   table: { select: { nomorMeja: true } },
@@ -110,7 +116,7 @@ async function confirmPayment(orderId, userId) {
   });
 }
 
-async function updateStatus(orderId, newStatus, userId, catatan, refundAmount) {
+async function updateStatus(orderId, newStatus, userId, catatan, refundAmount, pin) {
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
   if (!order) {
     throw new AppError(404, 'Order tidak ditemukan');
@@ -120,6 +126,9 @@ async function updateStatus(orderId, newStatus, userId, catatan, refundAmount) {
   if (newStatus === 'cancelled') {
     if (!CANCELLABLE_FROM.has(currentStatus)) {
       throw new AppError(409, `Order berstatus "${currentStatus}" tidak bisa dibatalkan.`);
+    }
+    if (PAID_STATUSES.has(currentStatus)) {
+      await userService.verifyPin(userId, pin);
     }
   } else if (NEXT_STATUS[currentStatus] !== newStatus) {
     throw new AppError(400, `Tidak bisa mengubah status dari "${currentStatus}" ke "${newStatus}".`);

@@ -22,7 +22,8 @@ async function updateStatus(req, res) {
     req.body.status,
     req.session.user.id,
     req.body.catatan,
-    req.body.refundAmount
+    req.body.refundAmount,
+    req.body.pin
   );
   res.json({ order });
 }

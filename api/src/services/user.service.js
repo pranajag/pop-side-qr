@@ -2,13 +2,55 @@ const bcrypt = require('bcrypt');
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const { isForeignKeyError, isUniqueConstraintError } = require('../utils/prismaErrors');
+const pinAttempts = require('../utils/pinAttempts');
 
 const BCRYPT_COST = 12;
+// Same rationale as auth.service.js's DUMMY_HASH — pays the same bcrypt
+// cost for a user with no PIN set (or a nonexistent id) as for a real
+// mismatch, so response timing can't be used to tell the two apart.
+const DUMMY_PIN_HASH = bcrypt.hashSync('0000', BCRYPT_COST);
 
-// Explicit allowlist, not a spread — user rows carry passwordHash, which
-// must never leave the server.
+// Thrown by orderManagement.service.js's updateStatus when a paid-order
+// void is attempted — a distinct type (not a bare AppError) so the caller
+// can tell "wrong/missing PIN" apart from every other failure reason
+// without string-matching an error message.
+class PinRequiredError extends AppError {
+  constructor(message) {
+    super(403, message);
+    this.name = 'PinRequiredError';
+  }
+}
+
+// userId === null covers "no session user id was available" callers should
+// never hit in practice, but keeps this safe to call defensively.
+async function verifyPin(userId, pin) {
+  if (pinAttempts.isLocked(userId)) {
+    throw new PinRequiredError('Terlalu banyak percobaan PIN salah. Coba lagi beberapa menit lagi.');
+  }
+  const user = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { pinHash: true } }) : null;
+  if (!user || !user.pinHash) {
+    await bcrypt.compare(pin ?? '', DUMMY_PIN_HASH);
+    throw new PinRequiredError('PIN belum diset untuk akun ini — minta admin set PIN dulu lewat Akun Staff.');
+  }
+  const matches = await bcrypt.compare(pin ?? '', user.pinHash);
+  if (!matches) {
+    pinAttempts.recordFailure(userId);
+    throw new PinRequiredError('PIN salah.');
+  }
+  pinAttempts.recordSuccess(userId);
+}
+
+// Explicit allowlist, not a spread — user rows carry passwordHash/pinHash,
+// which must never leave the server. hasPin (not the hash) lets the
+// frontend show "PIN belum diset" without exposing anything guessable.
 function toSafeUser(user) {
-  return { id: user.id, username: user.username, role: user.role, isActive: user.isActive };
+  return {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    isActive: user.isActive,
+    hasPin: user.pinHash !== null,
+  };
 }
 
 async function list() {
@@ -18,9 +60,10 @@ async function list() {
 
 async function create(data) {
   const passwordHash = await bcrypt.hash(data.password, BCRYPT_COST);
+  const pinHash = data.pin ? await bcrypt.hash(data.pin, BCRYPT_COST) : undefined;
   try {
     const user = await prisma.user.create({
-      data: { username: data.username, passwordHash, role: data.role, isActive: data.isActive },
+      data: { username: data.username, passwordHash, pinHash, role: data.role, isActive: data.isActive },
     });
     return toSafeUser(user);
   } catch (err) {
@@ -47,6 +90,9 @@ async function update(id, actorId, data) {
   const updateData = { username: data.username, role: data.role, isActive: data.isActive };
   if (data.password) {
     updateData.passwordHash = await bcrypt.hash(data.password, BCRYPT_COST);
+  }
+  if (data.pin) {
+    updateData.pinHash = await bcrypt.hash(data.pin, BCRYPT_COST);
   }
 
   try {
@@ -78,4 +124,4 @@ async function remove(id, actorId) {
   }
 }
 
-module.exports = { list, create, update, remove };
+module.exports = { list, create, update, remove, verifyPin, PinRequiredError };

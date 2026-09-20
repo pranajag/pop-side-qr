@@ -247,6 +247,7 @@ async function onAdvance(order) {
 // submit time, since nothing but this file's own code ever touches it.
 let pendingCancel = null
 const cancelRefundInput = ref('')
+const cancelPin = ref('')
 
 // Cash only actually changed hands once a tunai order passed `pending` —
 // before that, the customer hadn't paid yet, so there's nothing to give
@@ -273,6 +274,7 @@ function openCancel(order) {
   cancelOpen.value = true
   pendingCancel = order
   cancelReason.value = ''
+  cancelPin.value = ''
   // Voiding a paid tunai order is almost always a full refund — prefilled
   // so the common case takes zero typing, still editable for a partial one.
   cancelRefundInput.value =
@@ -294,7 +296,8 @@ async function onCancelConfirm() {
       target.id,
       'cancelled',
       cancelReason.value || undefined,
-      refund
+      refund,
+      isVoidCase(target) ? cancelPin.value : undefined
     )
     toast.success(
       isVoidCase(target)
@@ -632,9 +635,30 @@ async function onCancelConfirm() {
           Pembayaran {{ cancelTarget.metode.toUpperCase() }} tidak lewat kas —
           proses refund-nya di luar sistem ini.
         </div>
+        <div v-if="cancelTarget && isVoidCase(cancelTarget)" class="space-y-2">
+          <Label for="cancel-pin">PIN Kamu</Label>
+          <Input
+            id="cancel-pin"
+            v-model="cancelPin"
+            type="password"
+            inputmode="numeric"
+            placeholder="4-6 digit"
+            maxlength="6"
+            autocomplete="off"
+          />
+          <p class="text-xs text-muted-foreground">
+            Void order yang sudah dibayar perlu konfirmasi PIN kamu sendiri — set/ubah PIN di Akun Staff.
+          </p>
+        </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
-          <AlertDialogAction :disabled="cancelling" @click="onCancelConfirm">
+          <AlertDialogAction
+            :disabled="
+              cancelling ||
+              (cancelTarget && isVoidCase(cancelTarget) && !cancelPin)
+            "
+            @click="onCancelConfirm"
+          >
             {{
               cancelTarget && isVoidCase(cancelTarget)
                 ? 'Ya, Void Pesanan'

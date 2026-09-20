@@ -286,6 +286,13 @@ model User {
   id           Int              @id @default(autoincrement())
   username     String           @unique
   passwordHash String           @map("password_hash")
+  // Separate from passwordHash, same hashing scheme (bcrypt) — a short PIN
+  // re-confirms "this is really you, right now" for one specific high-stakes
+  // action (voiding an already-paid order) without making the whole staff
+  // re-login. Null means no PIN set yet: orderManagement.service.js's
+  // updateStatus refuses to void a paid order until one exists, rather than
+  // silently skipping the check.
+  pinHash      String?          @map("pin_hash")
   role         UserRole
   isActive     Boolean          @default(true) @map("is_active")
   statusLogs   OrderStatusLog[]

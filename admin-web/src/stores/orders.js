@@ -54,11 +54,12 @@ export const useOrdersStore = defineStore('orders', {
       const data = await api.post(`/admin/orders/${id}/konfirmasi`)
       this.replaceOrUpdate(data.order)
     },
-    async updateStatus(id, status, catatan, refundAmount) {
+    async updateStatus(id, status, catatan, refundAmount, pin) {
       const data = await api.patch(`/admin/orders/${id}/status`, {
         status,
         catatan,
         refundAmount,
+        pin,
       })
       this.replaceOrUpdate(data.order)
     },

@@ -52,10 +52,12 @@ const editingId = ref(null)
 const submitting = ref(false)
 const deleteTarget = ref(null)
 const deleting = ref(false)
+const editingHasPin = ref(false)
 
 const form = reactive({
   username: '',
   password: '',
+  pin: '',
   role: 'kasir',
   isActive: true,
 })
@@ -73,8 +75,10 @@ function openCreate() {
   editingId.value = null
   form.username = ''
   form.password = ''
+  form.pin = ''
   form.role = 'kasir'
   form.isActive = true
+  editingHasPin.value = false
   formOpen.value = true
 }
 
@@ -82,8 +86,10 @@ function openEdit(user) {
   editingId.value = user.id
   form.username = user.username
   form.password = ''
+  form.pin = ''
   form.role = user.role
   form.isActive = user.isActive
+  editingHasPin.value = user.hasPin
   formOpen.value = true
 }
 
@@ -97,10 +103,18 @@ async function onSubmit() {
         isActive: form.isActive,
       }
       if (form.password) payload.password = form.password
+      if (form.pin) payload.pin = form.pin
       await store.update(editingId.value, payload)
       toast.success('Akun diperbarui')
     } else {
-      await store.create({ ...form })
+      const payload = {
+        username: form.username,
+        password: form.password,
+        role: form.role,
+        isActive: form.isActive,
+      }
+      if (form.pin) payload.pin = form.pin
+      await store.create(payload)
       toast.success('Akun ditambahkan')
     }
     formOpen.value = false
@@ -160,13 +174,14 @@ async function onDeleteConfirm() {
             <TableHead>Username</TableHead>
             <TableHead class="w-28">Role</TableHead>
             <TableHead class="w-28">Status</TableHead>
+            <TableHead class="w-24">PIN</TableHead>
             <TableHead class="w-28 text-right">Aksi</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           <TableEmpty
             v-if="!store.loading && store.items.length === 0"
-            :colspan="4"
+            :colspan="5"
           >
             Belum ada akun.
           </TableEmpty>
@@ -188,6 +203,10 @@ async function onDeleteConfirm() {
               <Badge :variant="user.isActive ? 'default' : 'secondary'">
                 {{ user.isActive ? 'Aktif' : 'Nonaktif' }}
               </Badge>
+            </TableCell>
+            <TableCell>
+              <span v-if="user.hasPin" class="text-xs text-status-completed">Sudah diset</span>
+              <span v-else class="text-xs text-muted-foreground">Belum diset</span>
             </TableCell>
             <TableCell class="text-right">
               <Button variant="ghost" size="icon" @click="openEdit(user)">
@@ -234,6 +253,21 @@ async function onDeleteConfirm() {
               :placeholder="editingId ? 'Kosongkan jika tidak diubah' : ''"
               minlength="8"
               maxlength="72"
+            />
+          </div>
+          <div class="space-y-2">
+            <Label for="pin"
+              >PIN (opsional) <span class="font-normal text-muted-foreground">— untuk konfirmasi void order yang sudah dibayar</span></Label
+            >
+            <Input
+              id="pin"
+              v-model="form.pin"
+              type="password"
+              inputmode="numeric"
+              pattern="\d{4,6}"
+              :placeholder="editingId && editingHasPin ? 'Kosongkan jika tidak diubah' : '4-6 digit angka'"
+              minlength="4"
+              maxlength="6"
             />
           </div>
           <div class="space-y-2">
