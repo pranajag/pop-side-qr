@@ -69,7 +69,10 @@ function safeRedirectTarget() {
   ) {
     return target
   }
-  return { name: 'pesanan' }
+  // Same role-based landing page as router/index.js's beforeEach — kept in
+  // sync manually since this fallback (no explicit ?redirect=) is reached
+  // via router.replace() below, not the guard's own root-path check.
+  return { name: auth.user?.role === 'admin' ? 'dashboard' : 'pesanan' }
 }
 
 async function onSubmit() {

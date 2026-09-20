@@ -22,6 +22,7 @@ import {
   HistoryIcon,
   UsersIcon,
   SettingsIcon,
+  LayoutDashboardIcon,
   LogOutIcon,
   MenuIcon,
   XIcon,
@@ -54,6 +55,10 @@ const nav = computed(() => {
     { to: { name: 'member' }, label: 'Member', icon: StarIcon },
   ]
   if (auth.isAdmin) {
+    // Unshift, not push — admin's landing page (router's beforeEach sends
+    // '/' here for the admin role), so it belongs first in the list, ahead
+    // of even the shared Pesanan item above.
+    items.unshift({ to: { name: 'dashboard' }, label: 'Dashboard', icon: LayoutDashboardIcon })
     items.push(
       { to: { name: 'kategori' }, label: 'Kategori', icon: LayoutGridIcon },
       { to: { name: 'produk' }, label: 'Produk', icon: UtensilsIcon },

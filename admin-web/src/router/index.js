@@ -13,6 +13,12 @@ const routes = [
     component: () => import('@/components/AppShell.vue'),
     children: [
       { path: '', redirect: { name: 'pesanan' } },
+      {
+        path: 'dashboard',
+        name: 'dashboard',
+        component: () => import('@/views/DashboardView.vue'),
+        meta: { roles: ['admin'] },
+      },
       // Order handling is core kasir work, not admin-only (MEMORY.md).
       {
         path: 'pesanan',
@@ -105,7 +111,15 @@ router.beforeEach(async (to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (to.name === 'login' && auth.isAuthenticated) {
-    return { name: 'pesanan' }
+    return { name: auth.user?.role === 'admin' ? 'dashboard' : 'pesanan' }
+  }
+  // Root path lands admins on the overview dashboard instead of the raw
+  // order queue — kasir keeps the existing static redirect above (a kasir
+  // dashboard would just be a smaller Pesanan, so it isn't worth a second
+  // page). Checked here, not as the static child redirect, since that
+  // config has no access to the logged-in user's role.
+  if (to.path === '/' && auth.user?.role === 'admin') {
+    return { name: 'dashboard' }
   }
   // Route declares which roles may see it (undefined = any authenticated
   // role) — send anyone else to the one page every role can reach.
