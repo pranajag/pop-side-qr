@@ -9,7 +9,9 @@ const { createOrderSchema } = require('../validators/order.validator');
 const {
   createOrderLimiter,
   orderStatusLimiter,
+  orderStatusIpLimiter,
   confirmPaymentLimiter,
+  confirmPaymentIpLimiter,
   staffCallLimiter,
   tableVerifyLimiter,
   publicReadLimiter,
@@ -40,8 +42,14 @@ router.get('/tables/:token/bill', tableVerifyLimiter, orderController.bill);
 router.post('/cart/total', publicReadLimiter, validate(cartTotalSchema), cartController.total);
 
 router.post('/orders', createOrderLimiter, validate(createOrderSchema), orderController.create);
-router.post('/orders/:kodeOrder/bayar', confirmPaymentLimiter, upload.single('bukti'), orderController.confirmPayment);
-router.get('/orders/:kodeOrder', orderStatusLimiter, orderController.track);
+router.post(
+  '/orders/:kodeOrder/bayar',
+  confirmPaymentIpLimiter,
+  confirmPaymentLimiter,
+  upload.single('bukti'),
+  orderController.confirmPayment
+);
+router.get('/orders/:kodeOrder', orderStatusIpLimiter, orderStatusLimiter, orderController.track);
 router.post('/call-staff', staffCallLimiter, validate(createStaffCallSchema), staffCallController.create);
 
 module.exports = router;

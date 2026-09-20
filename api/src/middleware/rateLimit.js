@@ -45,6 +45,13 @@ const createOrderLimiter = rateLimit({
 
 // AGENTS.md rate limit rule: 5/menit/(IP+kode order) untuk cek status order
 // — scoped per order, not just per IP (see scopedKey above).
+//
+// SECURITY: this alone does NOT bound guessing. kodeOrder is the attacker's
+// own input, and it's part of the key — so every distinct guess lands in a
+// brand-new bucket and this limiter never fires no matter how fast someone
+// enumerates codes (confirmed live: 30 distinct-code requests from one IP,
+// zero 429s). orderStatusIpLimiter below is the actual anti-enumeration
+// control; this one only stops hammering of one already-known code.
 const orderStatusLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 5,
@@ -56,17 +63,57 @@ const orderStatusLimiter = rateLimit({
   },
 });
 
+// Plain per-IP, deliberately NOT scoped by kodeOrder — this is what actually
+// caps enumeration speed, since the key here doesn't depend on the guess
+// itself. kodeOrder's random suffix is only 4 chars over a 32-char alphabet
+// (~1.05M combinations/day, see utils/orderCode.js) — small enough that an
+// unthrottled GET could walk the whole day's keyspace in minutes and read
+// back every order's customer name, items, and total. 30/min still gives a
+// busy cafe's shared WiFi IP headroom for ~10 tables each polling their own
+// order every 20s (OrderView.vue), while capping a single-IP attacker to
+// ~43k guesses/day — full enumeration now needs many source IPs, not one.
+const orderStatusIpLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi sebentar.' });
+  },
+});
+
 // Not separately enumerated in AGENTS.md's rate-limit rule, but this is a
 // mutating action gated by nothing but the same guessable kode_order space
 // as the (5/min) status-check endpoint — arguably higher-stakes, since a
 // hit here flips a real order to "waiting_verif" without any payment
 // having happened. Matches orderStatusLimiter's bound for consistency.
+// Same enumeration gap as orderStatusLimiter above, closed the same way by
+// confirmPaymentIpLimiter below — see that comment for why keying by
+// kodeOrder alone never throttles a guessing attacker.
 const confirmPaymentLimiter = rateLimit({
   windowMs: 60 * 1000,
   limit: 5,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => scopedKey(req, req.params?.kodeOrder),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi sebentar.' });
+  },
+});
+
+// Plain per-IP anti-enumeration backstop, same reasoning as
+// orderStatusIpLimiter — tighter (10/min) since a real customer only ever
+// submits "sudah bayar" for their own order once or twice, never on a
+// polling interval. Bounds how fast a stranger can spray fake payment
+// proofs across other customers' orders (each hit flips a real order to
+// "waiting_verif" and drops junk into the kasir's verification queue).
+const confirmPaymentIpLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   handler: (req, res) => {
     res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi sebentar.' });
   },
@@ -170,15 +217,39 @@ const externalApiLimiter = rateLimit({
   },
 });
 
+// Mounted ahead of requireApiKey (external.routes.js), unlike
+// externalApiLimiter above — a request with a missing/invalid/revoked key
+// never reaches requireApiKey's req.apiKey assignment, so a limiter keyed
+// off req.apiKey.id would never even apply to exactly the requests (key
+// guessing, a revoked key retried in a loop) it most needs to bound. Plain
+// per-IP here means every hit counts against the same budget regardless of
+// which (or whether any) key was tried. 256-bit key entropy already makes
+// guessing computationally infeasible — this is defense in depth against
+// that plus cheap request-flooding/DB-load from garbage Bearer tokens, not
+// the primary control.
+const externalAuthLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak permintaan.' });
+  },
+});
+
 module.exports = {
   loginLimiter,
   createOrderLimiter,
   orderStatusLimiter,
+  orderStatusIpLimiter,
   confirmPaymentLimiter,
+  confirmPaymentIpLimiter,
   staffCallLimiter,
   tableVerifyLimiter,
   publicReadLimiter,
   publicImageLimiter,
   csrfTokenLimiter,
   externalApiLimiter,
+  externalAuthLimiter,
 };

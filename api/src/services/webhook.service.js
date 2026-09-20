@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
+const { isUrlSafe } = require('../utils/ssrfGuard');
 
 const VALID_EVENTS = ['order.created', 'order.status_changed'];
 
@@ -28,6 +29,13 @@ async function create(url, events) {
   const invalid = events.filter((e) => !VALID_EVENTS.includes(e));
   if (invalid.length > 0) {
     throw new AppError(400, `Event tidak dikenal: ${invalid.join(', ')}`);
+  }
+  // https:// (webhook.validator.js) blocks the obvious plain-http
+  // localhost/metadata targets, but a public hostname can still resolve to
+  // a private IP — reject at registration time so this only ever bites an
+  // admin setting the URL up, not a customer waiting on an order.
+  if (!(await isUrlSafe(url))) {
+    throw new AppError(400, 'URL webhook tidak valid atau mengarah ke alamat internal/private');
   }
   const secret = crypto.randomBytes(24).toString('hex');
   const webhook = await prisma.webhook.create({
@@ -67,14 +75,38 @@ async function dispatch(event, payload) {
   const body = JSON.stringify({ event, data: payload, sentAt: new Date().toISOString() });
 
   for (const webhook of targets) {
-    const signature = crypto.createHmac('sha256', webhook.secret).update(body).digest('hex');
-    fetch(webhook.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Popside-Signature': signature },
-      body,
-      signal: AbortSignal.timeout(5000),
-    }).catch((err) => {
-      logger.warn({ webhookId: webhook.id, event, err: err.message }, 'webhook delivery failed');
+    // Re-checked here, not just at create() — a hostname that resolved to
+    // a public IP when the webhook was registered can be repointed at a
+    // private one at any time afterward (DNS rebinding, or just the
+    // admin's own domain changing later); dispatch happens on an
+    // unpredictable future schedule, so this is the check that actually
+    // matters. Async, so it can't live in the synchronous filter above.
+    isUrlSafe(webhook.url).then((safe) => {
+      if (!safe) {
+        logger.warn({ webhookId: webhook.id, event }, 'webhook delivery blocked: URL resolves to a private/internal address');
+        return;
+      }
+      const signature = crypto.createHmac('sha256', webhook.secret).update(body).digest('hex');
+      fetch(webhook.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Popside-Signature': signature },
+        body,
+        signal: AbortSignal.timeout(5000),
+        // Manual, not the default 'follow' — a redirect response could
+        // silently retarget an already-validated public URL at a private
+        // one (the fetch itself would then reach it directly, bypassing
+        // both isUrlSafe checks entirely). A redirect target is never
+        // trusted automatically; treated as a failed delivery instead.
+        redirect: 'manual',
+      })
+        .then((res) => {
+          if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+            logger.warn({ webhookId: webhook.id, event }, 'webhook delivery blocked: endpoint returned a redirect');
+          }
+        })
+        .catch((err) => {
+          logger.warn({ webhookId: webhook.id, event, err: err.message }, 'webhook delivery failed');
+        });
     });
   }
 }
