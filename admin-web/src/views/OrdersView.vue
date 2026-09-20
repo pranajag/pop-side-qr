@@ -52,6 +52,7 @@ import {
   PrinterIcon,
   EllipsisVerticalIcon,
   ClockIcon,
+  ChefHatIcon,
 } from '@lucide/vue'
 
 const POLL_MS = 8000
@@ -89,6 +90,7 @@ const cancelling = ref(false)
 const resolvingCallId = ref(null)
 const buktiOrderId = ref(null)
 const receiptOrder = ref(null)
+const kitchenTicketOrder = ref(null)
 
 function printReceipt() {
   window.print()
@@ -525,6 +527,10 @@ async function onCancelConfirm() {
                 <ReceiptIcon class="size-3.5" />
                 Cetak Struk
               </DropdownMenuItem>
+              <DropdownMenuItem class="gap-2" @click="kitchenTicketOrder = order">
+                <ChefHatIcon class="size-3.5" />
+                Cetak Tiket Dapur
+              </DropdownMenuItem>
               <DropdownMenuItem
                 v-if="order.hasBuktiBayar"
                 class="gap-2"
@@ -746,6 +752,69 @@ async function onCancelConfirm() {
             <span>{{ formatRupiah(receiptOrder.totalHarga) }}</span>
           </div>
           <p class="pt-2 text-center text-muted-foreground">Terima kasih!</p>
+        </div>
+        <DialogFooter class="print:hidden">
+          <Button class="gap-2" @click="printReceipt">
+            <PrinterIcon class="size-4" />
+            Cetak
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog
+      :open="!!kitchenTicketOrder"
+      @update:open="(v) => !v && (kitchenTicketOrder = null)"
+    >
+      <DialogContent class="print:border-0 print:shadow-none sm:max-w-sm">
+        <DialogHeader class="print:hidden">
+          <DialogTitle>Tiket Dapur {{ kitchenTicketOrder?.kodeOrder }}</DialogTitle>
+        </DialogHeader>
+        <!-- No prices anywhere on purpose — dapur cuma perlu tahu apa yang
+        harus dibuat, bukan berapa harganya. Font jauh lebih besar dari
+        struk customer: ini dibaca sambil masak dari jarak, bukan
+        dipegang dari dekat. -->
+        <div v-if="kitchenTicketOrder" class="space-y-3">
+          <div class="border-b border-dashed pb-2 text-center">
+            <p class="text-xl font-bold">{{ kitchenTicketOrder.kodeOrder }}</p>
+            <p class="text-base font-semibold">
+              {{
+                kitchenTicketOrder.nomorMeja
+                  ? `Meja ${kitchenTicketOrder.nomorMeja}`
+                  : `Bawa Pulang${kitchenTicketOrder.customerName ? ` (${kitchenTicketOrder.customerName})` : ''}`
+              }}
+            </p>
+            <p class="text-xs text-muted-foreground">
+              {{ formatDateTime(kitchenTicketOrder.createdAt) }}
+            </p>
+          </div>
+          <ul class="space-y-2.5">
+            <li
+              v-for="(item, idx) in kitchenTicketOrder.items"
+              :key="idx"
+              class="text-lg font-semibold leading-tight"
+            >
+              {{ item.qty }}x {{ item.nama }}
+              <p
+                v-if="item.variants?.length"
+                class="text-sm font-normal text-muted-foreground"
+              >
+                {{ item.variants.map((v) => v.namaOption).join(', ') }}
+              </p>
+              <p
+                v-if="item.catatan"
+                class="text-sm font-normal italic text-muted-foreground"
+              >
+                "{{ item.catatan }}"
+              </p>
+            </li>
+          </ul>
+          <p
+            v-if="kitchenTicketOrder.catatan"
+            class="border-t border-dashed pt-2 text-sm italic text-muted-foreground"
+          >
+            Catatan: {{ kitchenTicketOrder.catatan }}
+          </p>
         </div>
         <DialogFooter class="print:hidden">
           <Button class="gap-2" @click="printReceipt">
