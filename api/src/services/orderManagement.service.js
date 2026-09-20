@@ -42,6 +42,11 @@ function shapeOrder(order) {
     status: order.status,
     metode: order.metode,
     totalHarga: Number(order.totalHarga),
+    // QRIS-only reconciliation code (order.service.js's pickUniqueCode) —
+    // OrdersView.vue shows totalHarga + uniqueCode next to the uploaded
+    // bukti bayar so kasir can match that exact figure against their real
+    // bank/e-wallet mutation instead of trusting the screenshot alone.
+    uniqueCode: order.uniqueCode,
     discountAmount: order.discountAmount === null ? 0 : Number(order.discountAmount),
     discountReason: order.discountReason,
     catatan: order.catatan,

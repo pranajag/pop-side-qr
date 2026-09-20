@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const { generateOrderCode } = require('../utils/orderCode');
@@ -10,6 +11,11 @@ const customerService = require('./customer.service');
 const webhookService = require('./webhook.service');
 
 const MAX_CODE_ATTEMPTS = 5;
+// Adds Rp1-499 on top of totalHarga for QRIS orders — small enough to still
+// visually read as "the same total", large enough that two unrelated
+// pending orders landing on the exact same final rupiah by chance is rare
+// (and pickUniqueCode below actively avoids it anyway).
+const UNIQUE_CODE_MAX = 500;
 const KODE_ORDER_PATTERN = /^ORD-\d{8}-[A-Z0-9]{4}$/;
 // Anything not yet completed/cancelled — used to decide whether a table is
 // still "occupied" by whoever placed its most recent order (see
@@ -98,6 +104,33 @@ async function buildOrderItems(tx, items) {
   return { orderItemsData, totalHarga };
 }
 
+// QRIS-only reconciliation trick (see schema.prisma's uniqueCode comment) —
+// picks a code such that totalHarga + code doesn't collide with any OTHER
+// order a kasir might currently be trying to match against a real bank/
+// e-wallet mutation. That's every QRIS order not yet kasir-confirmed
+// (pending: customer hasn't paid yet but might any second; waiting_verif:
+// customer claims they paid, kasir hasn't confirmed yet) — once an order
+// leaves that window its nominal is no longer "live" and the code is free
+// to be reused by a later order.
+async function pickUniqueCode(tx, totalHarga) {
+  const live = await tx.order.findMany({
+    where: { metode: 'qris', status: { in: ['pending', 'waiting_verif'] }, uniqueCode: { not: null } },
+    select: { totalHarga: true, uniqueCode: true },
+  });
+  const taken = new Set(live.map((o) => Number(o.totalHarga) + o.uniqueCode));
+
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const code = crypto.randomInt(1, UNIQUE_CODE_MAX);
+    if (!taken.has(totalHarga + code)) {
+      return code;
+    }
+  }
+  // Would need ~30 simultaneous pending QRIS orders that all happen to
+  // collide on this specific total — vanishingly unlikely for a single
+  // cafe. Widened range as a last resort rather than failing the order.
+  return UNIQUE_CODE_MAX + crypto.randomInt(1, UNIQUE_CODE_MAX);
+}
+
 async function createOrder({ token, metode, catatan, items, idempotencyKey }) {
   const table = await tableService.verifyToken(token);
   if (!table) {
@@ -122,6 +155,7 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey }) {
       const created = await prisma.$transaction(async (tx) => {
         await bumpVisitIfTableIsFree(tx, table.id);
         const { orderItemsData, totalHarga } = await buildOrderItems(tx, items);
+        const uniqueCode = metode === 'qris' ? await pickUniqueCode(tx, totalHarga) : null;
         return tx.order.create({
           data: {
             kodeOrder,
@@ -129,6 +163,7 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey }) {
             status: 'pending',
             metode,
             totalHarga,
+            uniqueCode,
             catatan,
             idempotencyKey: idempotencyKey ?? undefined,
             items: { create: orderItemsData },
@@ -329,6 +364,11 @@ async function getByCode(kodeOrder) {
     totalHarga: Number(order.totalHarga),
     discountAmount: order.discountAmount === null ? 0 : Number(order.discountAmount),
     discountReason: order.discountReason,
+    // Only ever set for QRIS — the exact rupiah the customer must transfer
+    // is totalHarga + uniqueCode (frontend's job to add them; kept separate
+    // here since totalHarga alone is still the real menu total everywhere
+    // else — receipts, reports, tracking-page order summary).
+    uniqueCode: order.uniqueCode,
     catatan: order.catatan,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,

@@ -276,6 +276,15 @@ model Order {
   status         OrderStatus      @default(pending)
   metode         PaymentMethod
   totalHarga     Decimal          @map("total_harga")
+  // QRIS-only anti-fraud/reconciliation trick (no payment gateway — QRIS
+  // is a static admin-uploaded image, customer self-reports "sudah bayar").
+  // A small extra amount (Rp1-499, order.service.js's pickUniqueCode) on
+  // top of totalHarga that the customer is asked to transfer exactly —
+  // kasir then matches that oddly-specific total against their real bank/
+  // e-wallet mutation instead of trusting an uploaded screenshot alone.
+  // Null for cash/debit (kasir handles those in person, no reconciliation
+  // gap to close) and for every order before this feature existed.
+  uniqueCode     Int?             @map("unique_code")
   // Manual discount, staff-entered orders only (order.service.js's
   // createManualOrder — never accepted from the public checkout, which
   // would let a customer set their own price). totalHarga above is already
