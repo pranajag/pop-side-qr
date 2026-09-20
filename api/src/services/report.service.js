@@ -42,16 +42,52 @@ async function getReport(fromStr, toStr) {
   // is ever snapshotted onto the order row).
   const items = await prisma.orderItem.findMany({
     where: { order: where },
-    select: { qty: true, hargaSaatOrder: true, productId: true, product: { select: { nama: true } } },
+    select: {
+      qty: true,
+      hargaSaatOrder: true,
+      productId: true,
+      product: { select: { nama: true, hargaModal: true } },
+    },
   });
   const byProduct = new Map();
   for (const item of items) {
-    const entry = byProduct.get(item.productId) ?? { nama: item.product.nama, qty: 0, revenue: 0 };
+    const entry = byProduct.get(item.productId) ?? {
+      nama: item.product.nama,
+      qty: 0,
+      revenue: 0,
+      // null = this product has no hargaModal set — margin for it (and
+      // therefore for any total that includes it) is genuinely unknown,
+      // not zero. Sticks at null the moment one line hits it, since a
+      // product's cost price can't retroactively un-become "unset" partway
+      // through summing its own lines.
+      margin: item.product.hargaModal === null ? null : 0,
+    };
     entry.qty += item.qty;
     entry.revenue += Number(item.hargaSaatOrder) * item.qty;
+    if (entry.margin !== null && item.product.hargaModal !== null) {
+      entry.margin += (Number(item.hargaSaatOrder) - Number(item.product.hargaModal)) * item.qty;
+    } else {
+      entry.margin = null;
+    }
     byProduct.set(item.productId, entry);
   }
   const topProducts = [...byProduct.values()].sort((a, b) => b.qty - a.qty).slice(0, 10);
+
+  // Store-wide margin is only meaningful as "total across products that
+  // actually have a cost price set" — silently treating an unset
+  // hargaModal as 0 would inflate margin (100% profit on that product),
+  // silently treating it as equal to the sale price would hide real
+  // profit. knownMarginRevenue lets the UI show what fraction of revenue
+  // the margin figure actually covers, instead of presenting a number that
+  // looks complete but isn't.
+  let totalMargin = 0;
+  let knownMarginRevenue = 0;
+  for (const entry of byProduct.values()) {
+    if (entry.margin !== null) {
+      totalMargin += entry.margin;
+      knownMarginRevenue += entry.revenue;
+    }
+  }
 
   return {
     from: fromStr || jakartaDateISO(),
@@ -60,6 +96,8 @@ async function getReport(fromStr, toStr) {
     orderCount: orders.length,
     byMetode,
     topProducts,
+    totalMargin,
+    knownMarginRevenue,
   };
 }
 

@@ -7,7 +7,7 @@ import { useNotificationsStore } from '@/stores/notifications'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { LoaderCircleIcon, WalletIcon, DownloadIcon } from '@lucide/vue'
+import { LoaderCircleIcon, WalletIcon, DownloadIcon, TrendingUpIcon } from '@lucide/vue'
 
 // Asia/Jakarta (WIB) is a fixed UTC+7 offset, no DST — computed directly
 // rather than via the browser's local-timezone Date getters, which would
@@ -82,14 +82,17 @@ function exportCsv() {
     csvRow(['Laporan Pendapatan', r.from, r.to]),
     csvRow(['Total Pendapatan', r.total]),
     csvRow(['Jumlah Pesanan', r.orderCount]),
+    csvRow(['Margin Kotor (produk dengan HPP terisi)', r.totalMargin]),
     '',
     csvRow(['Metode Bayar', 'Jumlah']),
     ...Object.entries(r.byMetode).map(([metode, amount]) =>
       csvRow([METODE_LABEL[metode], amount])
     ),
     '',
-    csvRow(['Produk Terlaris', 'Qty', 'Pendapatan']),
-    ...r.topProducts.map((p) => csvRow([p.nama, p.qty, p.revenue])),
+    csvRow(['Produk Terlaris', 'Qty', 'Pendapatan', 'Margin']),
+    ...r.topProducts.map((p) =>
+      csvRow([p.nama, p.qty, p.revenue, p.margin === null ? 'HPP belum diisi' : p.margin])
+    ),
   ]
   // Leading BOM so Excel (which guesses ANSI otherwise) reads the UTF-8
   // rupiah/product-name text correctly instead of mangling it.
@@ -178,6 +181,24 @@ onMounted(() => useNotificationsStore().markLaporanSeen())
         </p>
       </div>
 
+      <div class="rounded-lg border bg-card p-6">
+        <div class="flex items-center gap-2 text-sm text-muted-foreground">
+          <TrendingUpIcon class="size-4" />
+          Margin Kotor
+        </div>
+        <p class="mt-1 text-3xl font-bold tracking-tight text-status-completed">
+          {{ formatRupiah(report.totalMargin) }}
+        </p>
+        <p class="mt-1 text-sm text-muted-foreground">
+          <template v-if="report.knownMarginRevenue < report.total">
+            Dihitung dari {{ formatRupiah(report.knownMarginRevenue) }} pendapatan yang produknya sudah punya Harga
+            Modal — isi HPP produk lain di Produk untuk cakupan penuh.
+          </template>
+          <template v-else-if="report.total > 0"> Mencakup seluruh pendapatan periode ini. </template>
+          <template v-else> Belum ada penjualan. </template>
+        </p>
+      </div>
+
       <div class="rounded-lg border bg-card p-4">
         <h2 class="mb-3 text-sm font-semibold text-muted-foreground">
           Breakdown Metode Bayar
@@ -223,6 +244,12 @@ onMounted(() => useNotificationsStore().markLaporanSeen())
               <span class="font-medium text-foreground">{{
                 formatRupiah(p.revenue)
               }}</span>
+              <span
+                class="w-20 shrink-0 text-right text-xs"
+                :class="p.margin === null ? 'italic text-muted-foreground/70' : 'text-status-completed'"
+              >
+                {{ p.margin === null ? 'HPP kosong' : formatRupiah(p.margin) }}
+              </span>
             </span>
           </li>
         </ol>

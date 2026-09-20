@@ -145,6 +145,11 @@ model Product {
   category      Category       @relation(fields: [categoryId], references: [id])
   nama          String
   harga         Decimal
+  // Cost price (HPP) — optional, purely for report.service.js's margin
+  // calculation. Null (not 0) for a product nobody's entered this for yet,
+  // so its margin reads as "unknown" on reports rather than silently
+  // implying 100% profit.
+  hargaModal    Decimal?       @map("harga_modal")
   stok          Int            @default(0)
   trackStock    Boolean        @default(false) @map("track_stock")
   foto          String?

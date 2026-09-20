@@ -34,6 +34,13 @@ const productBase = {
   categoryId: z.coerce.number().int().positive(),
   nama: z.string().trim().min(1).max(150),
   harga: z.coerce.number().int().nonnegative(),
+  // Optional cost price (HPP), report.service.js's margin calc — blank form
+  // field arrives as '', mapped to undefined (leaves it unset) rather than
+  // failing z.coerce.number() on NaN.
+  hargaModal: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.coerce.number().int().nonnegative().optional()
+  ),
   stok: z.coerce.number().int().nonnegative().default(0),
   trackStock: zBooleanish.default(false),
   isAvailable: zBooleanish.default(true),

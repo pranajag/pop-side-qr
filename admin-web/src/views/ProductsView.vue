@@ -79,6 +79,7 @@ const form = reactive({
   categoryId: null,
   nama: '',
   harga: 0,
+  hargaModal: null,
   stok: 0,
   trackStock: false,
   isAvailable: true,
@@ -153,6 +154,7 @@ function resetForm() {
   form.categoryId = categoriesStore.items[0]?.id ?? null
   form.nama = ''
   form.harga = 0
+  form.hargaModal = null
   form.stok = 0
   form.trackStock = false
   form.isAvailable = true
@@ -173,6 +175,7 @@ function openEdit(product) {
   form.categoryId = product.categoryId
   form.nama = product.nama
   form.harga = Number(product.harga)
+  form.hargaModal = product.hargaModal === null || product.hargaModal === undefined ? null : Number(product.hargaModal)
   form.stok = product.stok
   form.trackStock = product.trackStock
   form.isAvailable = product.isAvailable
@@ -284,6 +287,7 @@ async function onDeleteConfirm() {
             <TableHead>Nama</TableHead>
             <TableHead>Kategori</TableHead>
             <TableHead>Harga</TableHead>
+            <TableHead>Modal</TableHead>
             <TableHead>Stok</TableHead>
             <TableHead class="w-28">Status</TableHead>
             <TableHead class="w-28 text-right">Aksi</TableHead>
@@ -292,7 +296,7 @@ async function onDeleteConfirm() {
         <TableBody>
           <TableEmpty
             v-if="!store.loading && filteredItems.length === 0"
-            :colspan="7"
+            :colspan="8"
           >
             {{
               searchQuery ? 'Tidak ada produk yang cocok.' : 'Belum ada produk.'
@@ -318,6 +322,9 @@ async function onDeleteConfirm() {
               categoryName(p.categoryId)
             }}</TableCell>
             <TableCell>{{ formatRupiah(p.harga) }}</TableCell>
+            <TableCell class="text-muted-foreground">
+              {{ p.hargaModal !== null && p.hargaModal !== undefined ? formatRupiah(p.hargaModal) : '—' }}
+            </TableCell>
             <TableCell>
               <span
                 :class="{
@@ -413,6 +420,23 @@ async function onDeleteConfirm() {
                 :disabled="!form.trackStock"
               />
             </div>
+          </div>
+
+          <div class="space-y-2">
+            <Label for="hargaModal"
+              >Harga Modal / HPP (Rp) <span class="font-normal text-muted-foreground">— opsional</span></Label
+            >
+            <Input
+              id="hargaModal"
+              v-model.number="form.hargaModal"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="Kosongkan jika belum tahu"
+            />
+            <p class="text-xs text-muted-foreground">
+              Dipakai untuk menghitung margin di Laporan — tidak pernah tampil ke kasir/customer.
+            </p>
           </div>
 
           <div

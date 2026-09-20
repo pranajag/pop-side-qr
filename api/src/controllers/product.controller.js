@@ -1,8 +1,17 @@
 const productService = require('../services/product.service');
 
+// hargaModal (cost price/HPP) is business-confidential the same way
+// shift.controller.js treats cash-reconciliation accuracy — a kasir needs
+// this list for stock/availability, not profit margin.
+function redactCost(product) {
+  const { hargaModal, ...rest } = product;
+  return rest;
+}
+
 async function list(req, res) {
   const products = await productService.list();
-  res.json({ products });
+  const isAdmin = req.session.user.role === 'admin';
+  res.json({ products: isAdmin ? products : products.map(redactCost) });
 }
 
 async function create(req, res) {
