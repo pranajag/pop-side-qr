@@ -11,7 +11,7 @@ function redactCash(shift) {
 }
 
 async function start(req, res) {
-  const shift = await shiftService.startShift(req.session.user.id, req.body.cashStart);
+  const shift = await shiftService.startShift(req.session.user.id, req.body.cashStart, req.body.namaStaff);
   res.status(201).json({ shift });
 }
 

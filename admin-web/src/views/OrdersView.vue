@@ -6,6 +6,7 @@ import { useOrdersStore } from '@/stores/orders'
 import { useStaffCallsStore } from '@/stores/staffCalls'
 import { useProductsStore } from '@/stores/products'
 import { useSettingsStore } from '@/stores/settings'
+import { useActiveShiftStore } from '@/stores/activeShift'
 import { formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah, formatDateTime } from '@/lib/format'
 import { STATUS_LABEL, STATUS_BADGE_CLASS } from '@/lib/orderStatus'
@@ -64,6 +65,7 @@ const store = useOrdersStore()
 const calls = useStaffCallsStore()
 const products = useProductsStore()
 const settings = useSettingsStore()
+const activeShiftStore = useActiveShiftStore()
 const lowStockProducts = computed(() =>
   products.items.filter((p) => stockStatus(p) !== null)
 )
@@ -208,6 +210,7 @@ onMounted(() => {
   calls.fetchPending()
   products.fetchAll()
   settings.fetchSettings()
+  activeShiftStore.fetch()
   pollTimer = setInterval(() => {
     store.fetchAll()
     calls.fetchPending()
@@ -408,6 +411,18 @@ async function onCancelConfirm() {
     </div>
 
     <div
+      v-if="activeShiftStore.loaded && !activeShiftStore.hasActiveShift"
+      class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm"
+    >
+      <span class="text-destructive">
+        Kamu belum mulai shift — konfirmasi bayar & proses pesanan tidak bisa dilakukan dulu.
+      </span>
+      <Button size="sm" variant="outline" @click="router.push({ name: 'shift' })">
+        Mulai Shift
+      </Button>
+    </div>
+
+    <div
       v-if="lowStockProducts.length > 0"
       class="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950"
     >
@@ -540,7 +555,7 @@ async function onCancelConfirm() {
             v-if="needsPaymentConfirm(order)"
             size="sm"
             class="flex-1 gap-1.5"
-            :disabled="busyId === order.id"
+            :disabled="busyId === order.id || (activeShiftStore.loaded && !activeShiftStore.hasActiveShift)"
             @click="openConfirm(order)"
           >
             <LoaderCircleIcon
@@ -554,7 +569,7 @@ async function onCancelConfirm() {
             v-else-if="NEXT_ACTION[order.status]"
             size="sm"
             class="flex-1 gap-1.5"
-            :disabled="busyId === order.id"
+            :disabled="busyId === order.id || (activeShiftStore.loaded && !activeShiftStore.hasActiveShift)"
             @click="onAdvance(order)"
           >
             <LoaderCircleIcon

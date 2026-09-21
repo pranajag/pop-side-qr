@@ -4,6 +4,7 @@ import { toast } from 'vue-sonner'
 import { api, formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah, formatDateTime } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth'
+import { useActiveShiftStore } from '@/stores/activeShift'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -36,6 +37,7 @@ import {
 } from '@lucide/vue'
 
 const auth = useAuthStore()
+const activeShiftStore = useActiveShiftStore()
 const active = ref(null)
 const shifts = ref([])
 const loading = ref(false)
@@ -75,9 +77,14 @@ onUnmounted(() => clearInterval(clockTimer))
 // meaningless without knowing what the drawer started with.
 const startDialogOpen = ref(false)
 const cashStartInput = ref('')
+// Who's actually on shift, separate from which login account is doing the
+// clicking — a shared kasir/admin login otherwise leaves no record of
+// which real person was working (schema.prisma's Shift.namaStaff comment).
+const namaStaffInput = ref('')
 
 function openStartDialog() {
   cashStartInput.value = ''
+  namaStaffInput.value = ''
   startDialogOpen.value = true
 }
 
@@ -93,12 +100,20 @@ async function onStartConfirm() {
     toast.error('Masukkan jumlah kas awal yang valid')
     return
   }
+  if (!namaStaffInput.value.trim()) {
+    toast.error('Masukkan nama staff yang sedang shift')
+    return
+  }
   busy.value = true
   try {
-    await api.post('/admin/shifts/start', { cashStart: cashStartNumber.value })
+    await api.post('/admin/shifts/start', {
+      cashStart: cashStartNumber.value,
+      namaStaff: namaStaffInput.value.trim(),
+    })
     startDialogOpen.value = false
     toast.success('Shift dimulai')
     await load()
+    activeShiftStore.fetch()
   } catch (err) {
     toast.error(formatApiError(err))
   } finally {
@@ -146,18 +161,18 @@ async function onEndConfirm() {
     toast.error('Masukkan jumlah uang tunai yang valid')
     return
   }
-  if (gojekNumber.value === null || grabfoodNumber.value === null) {
-    toast.error('Masukkan jumlah uang Gojek & GrabFood (isi 0 kalau tidak ada)')
-    return
-  }
   busy.value = true
   try {
     const { shift } = await api.post('/admin/shifts/end', {
       cashCounted: cashCountedNumber.value,
-      gojekAmount: gojekNumber.value,
-      grabfoodAmount: grabfoodNumber.value,
+      // Optional — omitted entirely (not sent as 0) when left blank, so a
+      // shift with genuinely no Gojek/GrabFood orders doesn't need the
+      // kasir to type a 0 they're not actually sure about.
+      gojekAmount: gojekNumber.value ?? undefined,
+      grabfoodAmount: grabfoodNumber.value ?? undefined,
     })
     endDialogOpen.value = false
+    activeShiftStore.fetch()
     if (shift.isMinus) {
       toast.error(
         `Shift diakhiri — kas MINUS ${formatRupiah(Math.abs(shift.cashDifference))}`
@@ -263,7 +278,7 @@ const staleOtherShifts = computed(() =>
       <AlertTitle>Ada shift yang mungkin lupa diakhiri</AlertTitle>
       <AlertDescription>
         <span v-for="(s, i) in staleOtherShifts" :key="s.id">
-          {{ s.username }} sejak {{ formatDateTime(s.startedAt)
+          {{ s.namaStaff || s.username }} sejak {{ formatDateTime(s.startedAt)
           }}{{ i < staleOtherShifts.length - 1 ? ', ' : '' }}
         </span>
         — order baru masih ikut terhitung ke shift ini selama belum diakhiri.
@@ -352,7 +367,12 @@ const staleOtherShifts = computed(() =>
             >Belum ada shift.</TableEmpty
           >
           <TableRow v-for="s in shifts" :key="s.id">
-            <TableCell class="font-medium">{{ s.username }}</TableCell>
+            <TableCell class="font-medium">
+              {{ s.namaStaff || s.username }}
+              <span v-if="s.namaStaff" class="block text-xs font-normal text-muted-foreground"
+                >akun {{ s.username }}</span
+              >
+            </TableCell>
             <TableCell class="text-sm text-muted-foreground">{{
               formatDateTime(s.startedAt)
             }}</TableCell>
@@ -401,6 +421,15 @@ const staleOtherShifts = computed(() =>
             rekonsiliasi kas di akhir shift nanti.
           </p>
           <div class="space-y-2">
+            <Label for="nama-staff">Nama Staff yang Shift</Label>
+            <Input
+              id="nama-staff"
+              v-model="namaStaffInput"
+              placeholder="Mis. Budi"
+              autofocus
+            />
+          </div>
+          <div class="space-y-2">
             <Label for="cash-start">Uang Kas Awal</Label>
             <Input
               id="cash-start"
@@ -409,7 +438,6 @@ const staleOtherShifts = computed(() =>
               min="0"
               step="500"
               placeholder="0"
-              autofocus
             />
           </div>
         </div>
@@ -421,7 +449,7 @@ const staleOtherShifts = computed(() =>
             >Batal</Button
           >
           <Button
-            :disabled="busy || cashStartNumber === null"
+            :disabled="busy || cashStartNumber === null || !namaStaffInput.trim()"
             @click="onStartConfirm"
           >
             <LoaderCircleIcon v-if="busy" class="size-4 animate-spin" />
@@ -461,25 +489,25 @@ const staleOtherShifts = computed(() =>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div class="space-y-2">
-              <Label for="gojek-amount">Uang Gojek</Label>
+              <Label for="gojek-amount">Uang Gojek (opsional)</Label>
               <Input
                 id="gojek-amount"
                 v-model="gojekInput"
                 type="number"
                 min="0"
                 step="500"
-                placeholder="0"
+                placeholder="Kosongkan kalau tidak ada"
               />
             </div>
             <div class="space-y-2">
-              <Label for="grabfood-amount">Uang GrabFood</Label>
+              <Label for="grabfood-amount">Uang GrabFood (opsional)</Label>
               <Input
                 id="grabfood-amount"
                 v-model="grabfoodInput"
                 type="number"
                 min="0"
                 step="500"
-                placeholder="0"
+                placeholder="Kosongkan kalau tidak ada"
               />
             </div>
           </div>
@@ -514,12 +542,7 @@ const staleOtherShifts = computed(() =>
           >
           <Button
             variant="destructive"
-            :disabled="
-              busy ||
-              cashCountedNumber === null ||
-              gojekNumber === null ||
-              grabfoodNumber === null
-            "
+            :disabled="busy || cashCountedNumber === null"
             @click="onEndConfirm"
           >
             <LoaderCircleIcon v-if="busy" class="size-4 animate-spin" />
@@ -535,7 +558,7 @@ const staleOtherShifts = computed(() =>
     >
       <DialogContent class="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Detail Shift {{ detailData?.username }}</DialogTitle>
+          <DialogTitle>Detail Shift {{ detailData?.namaStaff || detailData?.username }}</DialogTitle>
         </DialogHeader>
         <div v-if="detailLoading" class="flex justify-center py-8">
           <LoaderCircleIcon class="size-6 animate-spin text-muted-foreground" />

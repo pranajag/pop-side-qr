@@ -41,13 +41,14 @@ async function generateExcel(shiftId) {
   const sheet = workbook.addWorksheet('Laporan Shift');
   sheet.columns = [{ width: 32 }, { width: 24 }];
 
-  const titleRow = sheet.addRow([`Laporan Shift — ${shift.username}`]);
+  const titleRow = sheet.addRow([`Laporan Shift — ${shift.namaStaff || shift.username}`]);
   titleRow.font = { bold: true, size: 14 };
   sheet.mergeCells(1, 1, 1, 2);
   sheet.addRow([]);
 
   const infoRows = [
-    ['Staff', shift.username],
+    ['Staff', shift.namaStaff || shift.username],
+    ['Akun Login', shift.username],
     ['Mulai', dateTime(shift.startedAt)],
     ['Selesai', dateTime(shift.endedAt)],
     ['Jumlah Order', shift.orderCount],
@@ -106,10 +107,11 @@ function generatePdf(shiftId) {
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
 
-        doc.fontSize(18).text(`Laporan Shift — ${shift.username}`, { underline: true });
+        doc.fontSize(18).text(`Laporan Shift — ${shift.namaStaff || shift.username}`, { underline: true });
         doc.moveDown();
 
         doc.fontSize(11);
+        doc.text(`Akun Login: ${shift.username}`);
         doc.text(`Mulai: ${dateTime(shift.startedAt)}`);
         doc.text(`Selesai: ${dateTime(shift.endedAt)}`);
         doc.text(`Jumlah Order: ${shift.orderCount}`);

@@ -23,6 +23,7 @@ const userRoutes = require('./routes/user.routes');
 const staffCallRoutes = require('./routes/staffCall.routes');
 const reservationRoutes = require('./routes/reservation.routes');
 const customerRoutes = require('./routes/customer.routes');
+const loyaltyTierRoutes = require('./routes/loyaltyTier.routes');
 const apiKeyRoutes = require('./routes/apiKey.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const publicRoutes = require('./routes/public.routes');
@@ -160,6 +161,7 @@ app.use('/api/admin/users', userRoutes);
 app.use('/api/admin/staff-calls', staffCallRoutes);
 app.use('/api/admin/reservations', reservationRoutes);
 app.use('/api/admin/customers', customerRoutes);
+app.use('/api/admin/loyalty-tiers', loyaltyTierRoutes);
 app.use('/api/admin/api-keys', apiKeyRoutes);
 app.use('/api/admin/webhooks', webhookRoutes);
 

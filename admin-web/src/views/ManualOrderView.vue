@@ -5,7 +5,9 @@ import { toast } from 'vue-sonner'
 import { useOrdersStore } from '@/stores/orders'
 import { useProductsStore } from '@/stores/products'
 import { useCategoriesStore } from '@/stores/categories'
-import { formatApiError } from '@/lib/api'
+import { useActiveShiftStore } from '@/stores/activeShift'
+import { useLoyaltyTiersStore } from '@/stores/loyaltyTiers'
+import { api, formatApiError } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { stockStatus } from '@/lib/stock'
 import { Button } from '@/components/ui/button'
@@ -32,6 +34,8 @@ const router = useRouter()
 const store = useOrdersStore()
 const productsStore = useProductsStore()
 const categoriesStore = useCategoriesStore()
+const activeShiftStore = useActiveShiftStore()
+const tiersStore = useLoyaltyTiersStore()
 
 const customerName = ref('')
 const customerPhone = ref('')
@@ -61,6 +65,43 @@ const discountPercentNumber = computed(() => {
 const discountNumber = computed(() =>
   Math.round(subtotal.value * (discountPercentNumber.value / 100))
 )
+
+// Tier-discount suggestion: looks up the typed phone against existing
+// members and, if their points clear a configured tier, offers a one-click
+// discount fill-in. Deliberately never auto-applies — staff clicks the
+// button, same "opsional" requirement as the discount field itself. Reuses
+// the same customer-search endpoint MembersView.vue's table uses (`contains`
+// match), then narrows to an exact phone match client-side rather than
+// trusting the first partial hit.
+const memberLookup = ref(null)
+let memberLookupDebounce = null
+watch(customerPhone, (phone) => {
+  clearTimeout(memberLookupDebounce)
+  const trimmed = phone.trim()
+  if (!trimmed) {
+    memberLookup.value = null
+    return
+  }
+  memberLookupDebounce = setTimeout(async () => {
+    try {
+      const data = await api.get(`/admin/customers?search=${encodeURIComponent(trimmed)}`)
+      memberLookup.value = data.customers.find((c) => c.telepon === trimmed) || null
+    } catch {
+      memberLookup.value = null
+    }
+  }, 350)
+})
+
+const suggestedTier = computed(() =>
+  memberLookup.value ? tiersStore.applicableTier(memberLookup.value.points) : null
+)
+
+function applyTierDiscount() {
+  if (!suggestedTier.value) return
+  discountPercent.value = suggestedTier.value.discountPercent
+  discountReason.value = `Tukar poin member (≥ ${suggestedTier.value.minPoints} poin)`
+  toast.success(`Diskon ${suggestedTier.value.discountPercent}% dari poin member diterapkan`)
+}
 
 // { productId, nama, unitPrice, variantOptionIds, variantLabel, qty, group }
 // `group` is only meaningful once splitMode is on — every line starts in
@@ -179,6 +220,8 @@ watch(
 onMounted(() => {
   if (productsStore.items.length === 0) productsStore.fetchAll()
   if (categoriesStore.items.length === 0) categoriesStore.fetchAll()
+  activeShiftStore.fetch()
+  tiersStore.fetchAll()
 
   const draft = loadDraft()
   if (draft && (draft.lines?.length > 0 || draft.customerName || draft.catatan)) {
@@ -357,6 +400,14 @@ async function onSubmit() {
       </div>
     </div>
 
+    <div
+      v-if="activeShiftStore.loaded && !activeShiftStore.hasActiveShift"
+      class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm"
+    >
+      <span class="text-destructive">Kamu belum mulai shift — belum bisa buat pesanan.</span>
+      <Button size="sm" variant="outline" @click="router.push({ name: 'shift' })">Mulai Shift</Button>
+    </div>
+
     <div class="grid gap-6 sm:grid-cols-2">
       <div class="space-y-2">
         <Label for="customerName">Nama Customer (opsional)</Label>
@@ -395,6 +446,18 @@ async function onSubmit() {
       <p v-if="customerPhone.trim()" class="text-xs text-muted-foreground">
         Member baru otomatis terdaftar kalau nomor ini belum ada. +{{ Math.floor(total / 1000) }} poin dari pesanan ini.
       </p>
+      <div
+        v-if="suggestedTier"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/25 bg-primary/5 p-2.5 text-sm"
+      >
+        <span>
+          Member ini punya <strong>{{ memberLookup.points }} poin</strong> — berhak diskon tier
+          <strong>{{ suggestedTier.discountPercent }}%</strong>.
+        </span>
+        <Button type="button" size="sm" variant="outline" @click="applyTierDiscount">
+          Pakai Diskon Ini
+        </Button>
+      </div>
     </div>
 
     <div class="space-y-2">
@@ -609,7 +672,11 @@ async function onSubmit() {
     <Button
       size="lg"
       class="h-12 w-full"
-      :disabled="submitting || lines.length === 0"
+      :disabled="
+        submitting ||
+        lines.length === 0 ||
+        (activeShiftStore.loaded && !activeShiftStore.hasActiveShift)
+      "
       @click="onSubmit"
     >
       <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />

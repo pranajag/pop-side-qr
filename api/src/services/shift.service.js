@@ -9,13 +9,16 @@ async function getActiveShift(userId) {
 // cashStart: cash float the kasir put in the drawer to start the shift,
 // required so expectedCash at endShift can be "what it started with, plus
 // today's tunai sales" instead of assuming every drawer starts at zero.
-async function startShift(userId, cashStart) {
+// namaStaff: the actual person on shift, separate from the login account
+// (see schema.prisma's own comment) — required for the same "who's really
+// accountable for this drawer" reason cashStart is.
+async function startShift(userId, cashStart, namaStaff) {
   const existing = await getActiveShift(userId);
   if (existing) {
     throw new AppError(409, 'Shift kamu masih berjalan. Akhiri dulu sebelum mulai yang baru.');
   }
   const shift = await prisma.shift.create({
-    data: { userId, cashStart },
+    data: { userId, cashStart, namaStaff },
     include: { user: { select: { username: true } } },
   });
   return shapeShift(shift);
@@ -78,6 +81,7 @@ async function shapeShift(shift) {
   return {
     id: shift.id,
     username: shift.user.username,
+    namaStaff: shift.namaStaff,
     startedAt: shift.startedAt,
     endedAt: shift.endedAt,
     isActive: shift.endedAt === null,
@@ -168,4 +172,12 @@ async function getShiftDetail(shiftId) {
   return { ...summary, cancelledAfterConfirm };
 }
 
-module.exports = { startShift, endShift, getMyActiveShift, listActiveShifts, listShifts, getShiftDetail };
+module.exports = {
+  getActiveShift,
+  startShift,
+  endShift,
+  getMyActiveShift,
+  listActiveShifts,
+  listShifts,
+  getShiftDetail,
+};

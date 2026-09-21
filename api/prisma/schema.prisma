@@ -449,6 +449,26 @@ model Customer {
   @@map("customers")
 }
 
+// Staff-configurable tiers for converting a member's accumulated points
+// into an optional discount (staff-mediated redemption in Pesanan Manual —
+// never self-service on public checkout, same reasoning as manual discount
+// itself: customer.service.js's points are earned automatically, but
+// spending them stays a staff decision). minPoints is the threshold a
+// customer's balance must reach or exceed; the highest tier they qualify
+// for wins (loyaltyTier.service.js's getApplicableTier). discountPercent is
+// capped at 25 (validators/loyaltyTier.validator.js) — a safety ceiling on
+// any single tier, not itself something this table stores or lets staff
+// raise.
+model LoyaltyTier {
+  id              Int      @id @default(autoincrement())
+  minPoints       Int      @unique @map("min_points")
+  discountPercent Decimal  @map("discount_percent")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("loyalty_tiers")
+}
+
 // Clock-in/clock-out log for admin+kasir. Deliberately not linked to
 // Order — shift "results" are computed on read by windowing Order.createdAt
 // against [startedAt, endedAt ?? now()], the same REVENUE_STATUSES rule
@@ -460,6 +480,13 @@ model Shift {
   id             Int       @id @default(autoincrement())
   userId         Int       @map("user_id")
   user           User      @relation(fields: [userId], references: [id])
+  // Free-text, separate from the login account (User.username) — this cafe
+  // can have several people rotating through one shared kasir/admin login,
+  // so "who was actually on shift" needs its own answer distinct from
+  // "which account confirmed the orders". Required going forward
+  // (startShift, validators/shift.validator.js); null only for shifts
+  // started before this field existed.
+  namaStaff      String?   @map("nama_staff")
   startedAt      DateTime  @default(now()) @map("started_at")
   endedAt        DateTime? @map("ended_at")
   // Cash float the kasir puts in the drawer to start the shift (for making

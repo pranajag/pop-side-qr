@@ -4,6 +4,24 @@ const paymentProof = require('./paymentProof.service');
 const userService = require('./user.service');
 const customerService = require('./customer.service');
 const webhookService = require('./webhook.service');
+const shiftService = require('./shift.service');
+
+// Store owner's explicit request — cash/order handling only happens inside
+// an accounted-for shift, never off the books. Without this, a kasir could
+// confirm payments and progress orders all day without ever starting a
+// shift, and that revenue would never show up in any shift's cash
+// reconciliation at all (report.service.js's REVENUE_STATUSES rule counts
+// it fine for the STORE-WIDE report, but shift.service.js's own window is
+// [startedAt, endedAt] — no shift means no window, means it's invisible to
+// per-shift accountability entirely). Checked per-action, not once at
+// login, so a shift that ends mid-shift-swap immediately blocks the next
+// action rather than trusting a stale "I had a shift when I logged in".
+async function assertActiveShift(userId) {
+  const active = await shiftService.getActiveShift(userId);
+  if (!active) {
+    throw new AppError(403, 'Mulai shift dulu sebelum bisa proses pesanan.');
+  }
+}
 
 const STATUS_PRIORITY = {
   waiting_verif: 0,
@@ -108,6 +126,7 @@ async function findFull(tx, id) {
 // "sudah bayar"); tunai/debit are confirmed straight from pending (no
 // customer-side step for those methods) — see MEMORY.md's status table.
 async function confirmPayment(orderId, userId) {
+  await assertActiveShift(userId);
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) {
     throw new AppError(404, 'Order tidak ditemukan');
@@ -154,6 +173,7 @@ async function confirmPayment(orderId, userId) {
 }
 
 async function updateStatus(orderId, newStatus, userId, catatan, refundAmount, pin) {
+  await assertActiveShift(userId);
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
   if (!order) {
     throw new AppError(404, 'Order tidak ditemukan');

@@ -8,6 +8,7 @@ const tableService = require('./table.service');
 const paymentProof = require('./paymentProof.service');
 const customerService = require('./customer.service');
 const webhookService = require('./webhook.service');
+const shiftService = require('./shift.service');
 
 const MAX_CODE_ATTEMPTS = 5;
 const KODE_ORDER_PATTERN = /^ORD-\d{8}-[A-Z0-9]{4}$/;
@@ -225,6 +226,16 @@ async function createManualOrder({
   discountReason,
   customerPhone,
 }) {
+  // Same shift-accountability gate as orderManagement.service.js's
+  // confirmPayment/updateStatus — a manual counter sale is cash-handling
+  // too (money changes hands the instant this is created, unlike a public
+  // dine-in order which starts unpaid), so it's just as much off-the-books
+  // as confirming a QRIS payment with no shift open would be.
+  const activeShift = await shiftService.getActiveShift(userId);
+  if (!activeShift) {
+    throw new AppError(403, 'Mulai shift dulu sebelum bisa proses pesanan.');
+  }
+
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
     const kodeOrder = generateOrderCode();
     try {
