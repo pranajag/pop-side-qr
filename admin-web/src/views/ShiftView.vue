@@ -301,7 +301,7 @@ const staleOtherShifts = computed(() =>
           </span>
           <div>
             <p class="text-sm font-semibold">
-              Shift {{ auth.user?.username }} sedang berjalan
+              Shift {{ active?.namaStaff || auth.user?.username }} sedang berjalan
               <span class="font-normal text-muted-foreground"
                 >· {{ activeDuration }}</span
               >

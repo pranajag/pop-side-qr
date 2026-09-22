@@ -7,6 +7,7 @@ import { useCartStore } from '@/stores/cart'
 import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { useLocaleStore } from '@/stores/locale'
 import { useThemeStore } from '@/stores/theme'
+import { useCafeStatusStore } from '@/stores/cafeStatus'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -36,6 +37,7 @@ const cart = useCartStore()
 const recentOrders = useRecentOrdersStore()
 const locale = useLocaleStore()
 const theme = useThemeStore()
+const cafeStatus = useCafeStatusStore()
 const router = useRouter()
 
 const pickerOpen = ref(false)
@@ -76,6 +78,7 @@ onMounted(() => {
   if (table.isVerified && !menu.loaded) {
     menu.fetchMenu()
   }
+  cafeStatus.fetch()
 })
 
 function photoUrl(filename) {
@@ -212,6 +215,18 @@ const estimatedTotal = computed(() =>
 
     <main class="px-4 py-4">
       <div
+        v-if="cafeStatus.loaded && !cafeStatus.sedangBuka"
+        class="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5"
+      >
+        <p class="text-sm font-semibold text-destructive">
+          {{ locale.t('kafeTutup') }}
+        </p>
+        <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {{ locale.t('kafeTutupDesc') }}
+        </p>
+      </div>
+
+      <div
         v-if="!menu.loading && menu.categories.length > 0"
         class="relative mb-4"
       >
@@ -339,7 +354,8 @@ const estimatedTotal = computed(() =>
     >
       <button
         type="button"
-        class="flex w-full items-center gap-3 rounded-2xl bg-brand-cta p-3 pr-4 shadow-lg shadow-black/15 transition-transform active:scale-[0.99]"
+        :disabled="cafeStatus.loaded && !cafeStatus.sedangBuka"
+        class="flex w-full items-center gap-3 rounded-2xl bg-brand-cta p-3 pr-4 shadow-lg shadow-black/15 transition-transform active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
         @click="router.push({ name: 'cart' })"
       >
         <span
@@ -358,8 +374,13 @@ const estimatedTotal = computed(() =>
         <span
           class="flex shrink-0 items-center gap-0.5 text-sm font-semibold text-heading"
         >
-          {{ locale.t('checkout') }}
-          <ChevronRightIcon class="size-4" />
+          <template v-if="cafeStatus.loaded && !cafeStatus.sedangBuka">
+            {{ locale.t('kafeTutupTombol') }}
+          </template>
+          <template v-else>
+            {{ locale.t('checkout') }}
+            <ChevronRightIcon class="size-4" />
+          </template>
         </span>
       </button>
     </div>

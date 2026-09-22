@@ -6,6 +6,15 @@ async function getActiveShift(userId) {
   return prisma.shift.findFirst({ where: { userId, endedAt: null } });
 }
 
+// "Is anyone on duty right now" — any staff, not a specific one. The public
+// checkout uses this as its open/closed signal: an order placed while the
+// cafe is closed has nobody to confirm it, pay for it, or cook it, so it
+// just sits pending until someone finds it the next morning. Counted rather
+// than fetched because this runs on every public order and every menu load.
+async function isAnyShiftActive() {
+  return (await prisma.shift.count({ where: { endedAt: null } })) > 0;
+}
+
 // cashStart: cash float the kasir put in the drawer to start the shift,
 // required so expectedCash at endShift can be "what it started with, plus
 // today's tunai sales" instead of assuming every drawer starts at zero.
@@ -174,6 +183,7 @@ async function getShiftDetail(shiftId) {
 
 module.exports = {
   getActiveShift,
+  isAnyShiftActive,
   startShift,
   endShift,
   getMyActiveShift,

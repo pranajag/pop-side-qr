@@ -7,6 +7,7 @@ import { useCartStore } from '@/stores/cart'
 import { useMenuStore } from '@/stores/menu'
 import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { useLocaleStore } from '@/stores/locale'
+import { useCafeStatusStore } from '@/stores/cafeStatus'
 import { api, formatApiError } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { savePendingOrder } from '@/lib/offlineQueue'
@@ -39,6 +40,7 @@ const cart = useCartStore()
 const menu = useMenuStore()
 const recentOrders = useRecentOrdersStore()
 const locale = useLocaleStore()
+const cafeStatus = useCafeStatusStore()
 const router = useRouter()
 
 const METHODS = computed(() => [
@@ -103,6 +105,11 @@ function clearCheckoutDraft() {
   }
 }
 
+// Cafe closed = no staff on shift. Server refuses the order either way
+// (order.service.js); this just stops the customer filling in a whole
+// checkout before finding out.
+const tutup = computed(() => cafeStatus.loaded && !cafeStatus.sedangBuka)
+
 const summary = ref(null)
 const loadingSummary = ref(false)
 // null whenever the number is blank, unknown, or the server hasn't answered
@@ -133,6 +140,7 @@ onMounted(async () => {
     catatan.value = draft.catatan ?? ''
     customerPhone.value = draft.customerPhone ?? ''
   }
+  cafeStatus.fetch()
   await refreshSummary()
 })
 
@@ -469,14 +477,20 @@ async function onSubmit() {
     <div
       class="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md border-t bg-background p-3 sm:max-w-lg md:max-w-xl"
     >
+      <p
+        v-if="tutup"
+        class="mb-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive"
+      >
+        {{ locale.t('kafeTutup') }} — {{ locale.t('kafeTutupDesc') }}
+      </p>
       <Button
         size="lg"
         class="h-12 w-full"
-        :disabled="submitting || hasIssues || loadingSummary"
+        :disabled="submitting || hasIssues || loadingSummary || tutup"
         @click="confirmOpen = true"
       >
         <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
-        {{ locale.t('pesanSekarang') }}
+        {{ tutup ? locale.t('kafeTutupTombol') : locale.t('pesanSekarang') }}
       </Button>
     </div>
 

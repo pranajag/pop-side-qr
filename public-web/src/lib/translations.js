@@ -29,6 +29,10 @@ export const translations = {
     cariMenu: 'Cari menu...',
     belumAdaProduk: 'Belum ada produk.',
     menuBelumTersedia: 'Menu belum tersedia.',
+    kafeTutup: 'Kafe sedang tutup',
+    kafeTutupDesc:
+      'Belum ada staff yang bertugas, jadi pesanan belum bisa dikirim. Menu tetap bisa dilihat-lihat dulu — coba lagi sebentar, atau panggil staff kalau kamu sudah di tempat.',
+    kafeTutupTombol: 'Tutup — belum bisa pesan',
     tidakAdaMenuCocok: 'Tidak ada menu yang cocok dengan "{q}".',
     habis: 'Habis',
     pilih: 'Pilih',
@@ -193,6 +197,10 @@ export const translations = {
     cariMenu: 'Search menu...',
     belumAdaProduk: 'No items yet.',
     menuBelumTersedia: 'Menu not available yet.',
+    kafeTutup: 'The cafe is closed',
+    kafeTutupDesc:
+      'No staff is on duty yet, so orders cannot be sent. Feel free to browse the menu — try again shortly, or call a staff member if you are already here.',
+    kafeTutupTombol: 'Closed — ordering unavailable',
     tidakAdaMenuCocok: 'No menu items match "{q}".',
     habis: 'Sold Out',
     pilih: 'Choose',

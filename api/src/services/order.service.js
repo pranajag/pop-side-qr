@@ -117,6 +117,20 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
     throw new AppError(404, 'Meja tidak valid. Coba scan ulang QR.');
   }
 
+  // Nobody clocked in means nobody can confirm the payment, cook the food,
+  // or hand it over — the order would just sit pending until someone finds
+  // it hours later, with the customer sitting at a table expecting it. The
+  // same gate the staff side already has (assertActiveShift in
+  // orderManagement.service.js), applied to the entrance instead of only
+  // the counter. public-web shows a closed state from GET /public/settings
+  // so it rarely gets this far; this is the boundary that actually holds.
+  if (!(await shiftService.isAnyShiftActive())) {
+    throw new AppError(
+      409,
+      'Kafe sedang tutup — belum ada staff yang mulai shift. Pesanan belum bisa dibuat.'
+    );
+  }
+
   // A retry (dropped connection, timeout, double-tap) resends the same
   // idempotencyKey — if the first attempt actually made it through, return
   // that order as-is instead of taking payment/stock twice for one tap.

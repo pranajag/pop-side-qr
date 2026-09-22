@@ -37,7 +37,7 @@ router.get('/products/photo/:filename', publicImageLimiter, productPhoto.serve);
 router.get('/settings/qris-photo/:filename', publicImageLimiter, settingsImage.serve);
 
 router.get('/menu', publicReadLimiter, menuController.getMenu);
-router.get('/settings', publicReadLimiter, settingsController.get);
+router.get('/settings', publicReadLimiter, settingsController.getPublic);
 router.get('/tables/:token', tableVerifyLimiter, tableController.verifyToken);
 router.get('/tables/:token/bill', tableVerifyLimiter, orderController.bill);
 // memberLookupLimiter only bites when the body carries a phone number —
