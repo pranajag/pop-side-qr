@@ -3,7 +3,7 @@
 ## Prinsip Umum
 
 - Mobile-first mutlak untuk public web — desain dari lebar 375px dulu, baru scale up. Target: pesan penuh cukup pakai satu tangan/jempol.
-- Referensi rasa: GoFood / ShopeeFood untuk public web (padat informasi tapi rapi, CTA jelas, minim dekorasi). Tabler / contoh dashboard shadcn untuk admin web (clean, data-dense, bukan template admin generik warna-warni).
+- Referensi rasa: GoFood / ShopeeFood untuk public web (padat informasi tapi rapi, CTA jelas, minim dekorasi). Admin web mengikuti gaya dashboard POS "BrightPOS": backdrop sage, kartu konten putih membulat, sidebar menyatu dengan backdrop, satu warna aksen lime untuk state aktif & CTA.
 - Font: **Inter** atau **Plus Jakarta Sans** — jangan pakai font default browser, jangan pakai lebih dari 2 font family dalam satu web.
 
 ## Yang DILARANG (ciri "AI slop")
@@ -16,11 +16,12 @@
 
 ## Design Tokens (didefinisikan sekali di `tailwind.config`, jangan hardcode hex di komponen)
 
-- **Warna primer**: satu warna brand utama (isi sesuai brand Popside sebenarnya — placeholder: teks gelap `#0F172A`, satu accent color untuk CTA/status).
-- **Warna status order** (dipakai badge di admin & halaman tracking) — konsisten di semua tempat status ditampilkan:
-  - `pending` = abu
+- **Warna primer**: lime Popside `#C8F050` (diambil dari logo) dengan teks near-black `#16180F` di atasnya. Lime ini **warna permukaan** — dipakai untuk isi tombol/pill/state aktif, BUKAN untuk teks di atas kartu putih. Untuk link/ikon brand di atas permukaan terang pakai `--primary-strong` (lime yang digelapkan), bukan `--primary`. Sudah diterapkan penuh di admin-web; public-web masih memakai biru placeholder di slot shadcn (`--primary` dst.) dan menunggu pass tersendiri — brand lime-nya baru dipakai lewat `--brand-primary`.
+- **Backdrop vs surface**: halaman memakai sage `#E8F0E8`, kartu konten putih di atasnya. Sidebar berbagi warna backdrop (tanpa panel sendiri) supaya kolom konten terbaca sebagai permukaan terpisah.
+- **Warna status order** (dipakai badge di admin & halaman tracking) — konsisten di semua tempat status ditampilkan. Setiap status punya pasangan `--status-<x>` (background) **dan** `--status-<x>-foreground` (teks); jangan pernah hardcode `text-white` di atas background status, karena chip terang (amber/oranye/lime) dan seluruh chip di dark mode butuh teks near-black:
+  - `pending` = abu kebiruan
   - `waiting_verif` = kuning/amber
-  - `confirmed` = biru
+  - `confirmed` = teal
   - `cooking` = oranye
   - `ready` = hijau muda
   - `completed` = hijau tua

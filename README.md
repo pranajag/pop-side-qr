@@ -17,7 +17,7 @@ Monorepo ini terdiri dari 3 bagian yang saling terhubung ke satu database:
 - Bayar QRIS (statis, tanpa payment gateway berbayar), tunai, atau debit
 - Tracking status pesanan real-time + notifikasi saat makanan siap diambil
 - Reservasi meja dengan deposit/DP
-- Poin member otomatis dari nomor HP yang dipakai saat pesan
+- Poin member otomatis dari nomor HP yang dipakai saat pesan, plus diskon tier yang langsung terpakai (dan rinciannya terlihat) di checkout begitu nomornya diisi
 
 **Kasir & Admin (Admin Web)**
 - Dashboard: omzet, jumlah order, void, toggle open bill per meja
@@ -87,11 +87,11 @@ Isi minimal di `api/.env`:
   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   ```
 
-Lalu jalankan migrasi, seed akun awal, dan start server:
+Lalu jalankan migrasi, buat akun admin pertama, dan start server:
 
 ```bash
 npx prisma migrate deploy
-npm run db:seed
+npm run create-admin
 npm run dev
 ```
 
@@ -105,7 +105,7 @@ npm install
 npm run dev
 ```
 
-Buka **http://localhost:5173**, login pakai akun hasil seed (lihat di bawah).
+Buka **http://localhost:5173**, login pakai akun hasil `npm run create-admin` (lihat di bawah).
 
 ### 5. Jalankan Public Web
 
@@ -119,14 +119,18 @@ Buka **http://localhost:5174**.
 
 > Ketiga bagian (`api`, `admin-web`, `public-web`) harus jalan bersamaan (3 terminal terpisah) supaya sistem berfungsi penuh.
 
-### Akun default (hasil `npm run db:seed`)
+> **Buka lewat alamat Vite di atas, jangan lewat Live Server (VS Code) atau membuka `index.html` langsung.** Kedua frontend ini file `.vue`-nya perlu dikompilasi Vite; server statis cuma mengirim filenya mentah, jadi halamannya tidak akan jalan — dan Live Server menyuntikkan script auto-reload sendiri yang lalu error mencari WebSocket di port 5500 setelah servernya dimatikan.
 
-| Username | Password | Role |
-|---|---|---|
-| `admin` | `ChangeMe123!` | admin |
-| `kasir1` | `ChangeMe123!` | kasir |
+### Akun awal
 
-⚠️ Ganti password ini (lewat halaman Akun Staff di Admin Web, atau set `SEED_ADMIN_PASSWORD`/`SEED_KASIR_PASSWORD` di `.env` sebelum seed) sebelum dipakai di luar lingkungan development.
+Sistem ini **tidak punya akun bawaan** — tidak ada username default, tidak ada password default, dan tidak ada kredensial apa pun yang tersimpan di repo ini. Akun admin pertama kamu buat sendiri:
+
+```bash
+cd api
+npm run create-admin
+```
+
+Perintah itu menanyakan username dan password langsung di terminal. Passwordnya tidak ditampilkan saat diketik dan tidak pernah ditulis ke file mana pun — yang masuk ke database hanya hash bcrypt-nya. Akun staff berikutnya (kasir, admin tambahan) dibuat dari halaman **Akun Staff** di Admin Web.
 
 ## Dokumentasi Lengkap
 
@@ -136,4 +140,8 @@ Buka **http://localhost:5174**.
 
 ## Lisensi
 
-Proyek privat milik Pranaja. Tidak untuk didistribusikan ulang tanpa izin.
+[GNU Affero General Public License v3.0](LICENSE) — © 2026 Pranaja.
+
+Siapa pun boleh memakai, mempelajari, dan memodifikasi kode ini. Syaratnya: kalau kamu menjalankan versi modifikasinya sebagai layanan yang diakses orang lain lewat jaringan — bukan cuma mendistribusikan filenya — source code modifikasi itu wajib ikut dibuka ke penggunanya (AGPL pasal 13). Ketentuan "network use" inilah yang membedakan AGPL dari GPL biasa, dan yang bikin dia cocok untuk aplikasi web seperti ini.
+
+Ketentuan di atas mengikat pihak lain, bukan pemegang hak ciptanya. Kalau kamu butuh memakai sistem ini secara tertutup (tanpa kewajiban membuka source), hubungi pemilik repo untuk lisensi komersial terpisah.
