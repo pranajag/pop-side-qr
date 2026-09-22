@@ -14,6 +14,7 @@ const router = Router();
 // and would silently rot if ever edited expecting it to apply.
 router.post('/login', loginLimiter, validate(loginSchema), authController.login);
 router.post('/logout', requireAuth, authController.logout);
-router.get('/me', requireAuth, authController.me);
+// Deliberately not requireAuth — see the comment on authController.me.
+router.get('/me', authController.me);
 
 module.exports = router;
