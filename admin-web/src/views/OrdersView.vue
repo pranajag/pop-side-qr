@@ -28,6 +28,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -249,19 +250,63 @@ async function onResolveCall(call) {
 // @click handler's own turn, so the handler needs its own copy to read.
 let pendingConfirm = null
 
+// Cash handed over on a tunai order. Blank is allowed — a kasir who
+// already knows the change isn't forced through an extra field — and the
+// server recomputes the change from this anyway, so what shows here is
+// only ever a preview of what it will say.
+const cashReceivedInput = ref('')
+const cashReceivedNumber = computed(() => {
+  const raw = cashReceivedInput.value
+  if (raw === '' || raw === null) return null
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : null
+})
+// Back out the pre-discount subtotal: tax and service were charged on the
+// amount left AFTER the discount, so they have to come off before the
+// discount goes back on. Both are 0 unless the store configured a rate.
+const confirmSubtotal = computed(() => {
+  const o = confirmTarget.value
+  if (!o) return 0
+  return o.totalHarga - o.taxAmount - o.serviceChargeAmount + o.discountAmount
+})
+const changePreview = computed(() => {
+  if (cashReceivedNumber.value === null || !confirmTarget.value) return null
+  return cashReceivedNumber.value - confirmTarget.value.totalHarga
+})
+// Quick-tap amounts: the exact total, then the round numbers a customer
+// actually hands over for a bill of this size.
+const cashSuggestions = computed(() => {
+  const total = confirmTarget.value?.totalHarga
+  if (!total) return []
+  const rounded = [20000, 50000, 100000, 150000, 200000].filter((v) => v > total)
+  const ceil = Math.ceil(total / 10000) * 10000
+  return [...new Set([total, ceil, ...rounded])].slice(0, 4)
+})
+
 function openConfirm(order) {
   confirmTarget.value = order
   confirmOpen.value = true
   pendingConfirm = order
+  cashReceivedInput.value = ''
 }
 
 async function onConfirm() {
   const target = pendingConfirm
   if (!target) return
+  // Only ever sent for cash — the server rejects it on any other method
+  // rather than silently recording something meaningless.
+  const cash = target.metode === 'tunai' ? cashReceivedNumber.value : null
   busyId.value = target.id
   try {
-    await store.confirmPayment(target.id)
-    toast.success(`${target.kodeOrder} dikonfirmasi`)
+    const order = await store.confirmPayment(target.id, cash)
+    if (order?.changeAmount !== null && order?.changeAmount !== undefined) {
+      toast.success(`${target.kodeOrder} dikonfirmasi`, {
+        description: `Kembalian untuk customer: ${formatRupiah(order.changeAmount)}`,
+        duration: 10000,
+      })
+    } else {
+      toast.success(`${target.kodeOrder} dikonfirmasi`)
+    }
   } catch (err) {
     toast.error(formatApiError(err))
     store.fetchAll()
@@ -641,6 +686,30 @@ async function onCancelConfirm() {
           </AlertDialogDescription>
         </AlertDialogHeader>
 
+        <!-- Shown before anything else: without it a kasir is asked to
+        collect less than the menu prices add up to, with no visible reason
+        — which reads as a bug, and hides the one case worth questioning
+        (a discount claimed on someone else's member number). -->
+        <div
+          v-if="confirmTarget?.discountAmount > 0"
+          class="space-y-1 rounded-lg border border-primary-strong/30 bg-primary/10 px-3 py-2.5 text-sm"
+        >
+          <p class="font-medium">
+            Pesanan ini dapat diskon
+            <span v-if="confirmTarget?.discountReason" class="font-normal text-muted-foreground">
+              — {{ confirmTarget.discountReason }}
+            </span>
+          </p>
+          <div class="flex justify-between text-muted-foreground">
+            <span>Sebelum diskon</span>
+            <span>{{ formatRupiah(confirmSubtotal) }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span>Ditagih ke customer</span>
+            <span class="font-semibold">{{ formatRupiah(confirmTarget.totalHarga) }}</span>
+          </div>
+        </div>
+
         <div v-if="confirmTarget?.metode === 'qris'" class="space-y-3">
           <img
             v-if="confirmTarget?.hasBuktiBayar"
@@ -650,10 +719,59 @@ async function onCancelConfirm() {
           />
         </div>
 
+        <div v-else-if="confirmTarget?.metode === 'tunai'" class="space-y-3">
+          <div class="space-y-2">
+            <Label for="cash-received">Uang Diterima (opsional)</Label>
+            <Input
+              id="cash-received"
+              v-model="cashReceivedInput"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              :placeholder="String(confirmTarget?.totalHarga ?? 0)"
+            />
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="amount in cashSuggestions"
+                :key="amount"
+                type="button"
+                class="rounded-full border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                @click="cashReceivedInput = String(amount)"
+              >
+                {{ formatRupiah(amount) }}
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="changePreview !== null"
+            class="rounded-lg border px-3 py-2.5 text-sm"
+            :class="
+              changePreview < 0
+                ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                : 'border-primary-strong/30 bg-primary/10'
+            "
+          >
+            <template v-if="changePreview < 0">
+              Uang diterima kurang {{ formatRupiah(Math.abs(changePreview)) }}
+              dari total.
+            </template>
+            <template v-else>
+              <span class="text-muted-foreground">Kembalian ke customer</span>
+              <span class="ml-2 text-base font-semibold">{{
+                formatRupiah(changePreview)
+              }}</span>
+            </template>
+          </div>
+        </div>
+
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
           <AlertDialogAction
-            :disabled="busyId === confirmTarget?.id"
+            :disabled="
+              busyId === confirmTarget?.id ||
+              (changePreview !== null && changePreview < 0)
+            "
             @click="onConfirm"
             >Ya, Konfirmasi</AlertDialogAction
           >
@@ -761,6 +879,9 @@ async function onCancelConfirm() {
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Bukti Pembayaran</DialogTitle>
+          <DialogDescription class="sr-only">
+            Foto bukti transfer yang diunggah customer untuk pesanan ini.
+          </DialogDescription>
         </DialogHeader>
         <img
           v-if="buktiOrderId"
@@ -778,6 +899,9 @@ async function onCancelConfirm() {
       <DialogContent class="print:border-0 print:shadow-none sm:max-w-sm">
         <DialogHeader class="print:hidden">
           <DialogTitle>Struk {{ receiptOrder?.kodeOrder }}</DialogTitle>
+          <DialogDescription class="sr-only">
+            Pratinjau struk customer, siap dicetak.
+          </DialogDescription>
         </DialogHeader>
         <div v-if="receiptOrder" class="space-y-3 font-mono text-xs">
           <div
@@ -853,6 +977,21 @@ async function onCancelConfirm() {
             <span>TOTAL</span>
             <span>{{ formatRupiah(receiptOrder.totalHarga) }}</span>
           </div>
+          <!-- Cash only, and only when the kasir recorded what was handed
+          over — this is the line a customer checks their change against. -->
+          <div
+            v-if="receiptOrder.cashReceived !== null"
+            class="space-y-0.5 border-t border-dashed pt-1.5"
+          >
+            <div class="flex justify-between">
+              <span>Tunai</span>
+              <span>{{ formatRupiah(receiptOrder.cashReceived) }}</span>
+            </div>
+            <div class="flex justify-between font-semibold">
+              <span>Kembalian</span>
+              <span>{{ formatRupiah(receiptOrder.changeAmount) }}</span>
+            </div>
+          </div>
           <p class="pt-2 text-center text-muted-foreground">Terima kasih!</p>
         </div>
         <DialogFooter class="print:hidden">
@@ -871,6 +1010,9 @@ async function onCancelConfirm() {
       <DialogContent class="print:border-0 print:shadow-none sm:max-w-sm">
         <DialogHeader class="print:hidden">
           <DialogTitle>Tiket Dapur {{ kitchenTicketOrder?.kodeOrder }}</DialogTitle>
+          <DialogDescription class="sr-only">
+            Daftar item pesanan tanpa harga, siap dicetak untuk dapur.
+          </DialogDescription>
         </DialogHeader>
         <!-- No prices anywhere on purpose — dapur cuma perlu tahu apa yang
         harus dibuat, bukan berapa harganya. Font jauh lebih besar dari

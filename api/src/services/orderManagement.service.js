@@ -50,16 +50,25 @@ const PAID_STATUSES = new Set(['confirmed', 'cooking', 'ready']);
 const ORDER_INCLUDE = {
   table: { select: { nomorMeja: true } },
   items: { include: { product: { select: { nama: true } }, variants: true } },
-  payment: { select: { buktiFile: true, verifiedAt: true } },
+  payment: { select: { buktiFile: true, verifiedAt: true, cashReceived: true } },
 };
 
 function shapeOrder(order) {
+  // Change owed back, derived rather than stored: it is always exactly
+  // "what was handed over minus what was owed", so persisting it too would
+  // just create a second number that could disagree with the first.
+  const cashReceived =
+    order.payment?.cashReceived === null || order.payment?.cashReceived === undefined
+      ? null
+      : Number(order.payment.cashReceived);
   return {
     id: order.id,
     kodeOrder: order.kodeOrder,
     status: order.status,
     metode: order.metode,
     totalHarga: Number(order.totalHarga),
+    cashReceived,
+    changeAmount: cashReceived === null ? null : cashReceived - Number(order.totalHarga),
     discountAmount: order.discountAmount === null ? 0 : Number(order.discountAmount),
     discountReason: order.discountReason,
     taxAmount: Number(order.taxAmount),
@@ -125,7 +134,13 @@ async function findFull(tx, id) {
 // QRIS orders are confirmed from waiting_verif (customer already clicked
 // "sudah bayar"); tunai/debit are confirmed straight from pending (no
 // customer-side step for those methods) — see MEMORY.md's status table.
-async function confirmPayment(orderId, userId) {
+//
+// cashReceived is the note(s) a customer physically handed over on a tunai
+// order. Optional — a kasir who already counted the change in their head
+// isn't blocked — but when given it's validated against the order total
+// here rather than trusted from the form, and the change is derived
+// server-side so the number on screen and the number recorded can't drift.
+async function confirmPayment(orderId, userId, cashReceived) {
   await assertActiveShift(userId);
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) {
@@ -137,6 +152,21 @@ async function confirmPayment(orderId, userId) {
     throw new AppError(409, `Order berstatus "${order.status}", tidak bisa dikonfirmasi dari sini.`);
   }
 
+  const total = Number(order.totalHarga);
+  let cash = null;
+  if (cashReceived !== undefined && cashReceived !== null) {
+    if (order.metode !== 'tunai') {
+      throw new AppError(400, 'Uang diterima hanya berlaku untuk pembayaran tunai.');
+    }
+    if (cashReceived < total) {
+      throw new AppError(
+        400,
+        `Uang diterima (${cashReceived}) kurang dari total pesanan (${total}).`
+      );
+    }
+    cash = cashReceived;
+  }
+
   const shaped = await prisma.$transaction(async (tx) => {
     // Optimistic lock — two kasir confirming the same order at once only
     // lets one UPDATE actually match a row.
@@ -146,6 +176,10 @@ async function confirmPayment(orderId, userId) {
     });
     if (result.count === 0) {
       throw new AppError(409, 'Order ini sudah diproses staff lain.');
+    }
+
+    if (cash !== null) {
+      await tx.payment.update({ where: { orderId }, data: { cashReceived: cash } });
     }
 
     // Member points (public checkout's own phone opt-in — order.service.js's

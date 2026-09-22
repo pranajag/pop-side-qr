@@ -20,6 +20,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -150,17 +151,17 @@ async function onDeleteConfirm() {
             Belum ada kategori.
           </TableEmpty>
           <TableRow v-for="cat in store.items" :key="cat.id">
-            <TableCell class="font-medium">{{ cat.nama }}</TableCell>
-            <TableCell>{{ cat.urutan }}</TableCell>
-            <TableCell class="text-muted-foreground">{{
+            <TableCell class="font-medium" data-label="Nama">{{ cat.nama }}</TableCell>
+            <TableCell data-label="Urutan">{{ cat.urutan }}</TableCell>
+            <TableCell class="text-muted-foreground" data-label="Estimasi">{{
               cat.estimasiMenit ? `~${cat.estimasiMenit} menit` : '—'
             }}</TableCell>
-            <TableCell>
+            <TableCell data-label="Status">
               <Badge :variant="cat.isActive ? 'default' : 'secondary'">
                 {{ cat.isActive ? 'Aktif' : 'Nonaktif' }}
               </Badge>
             </TableCell>
-            <TableCell class="text-right">
+            <TableCell class="text-right" data-label="Aksi">
               <Button variant="ghost" size="icon" @click="openEdit(cat)">
                 <PencilIcon class="size-4" />
               </Button>
@@ -179,6 +180,9 @@ async function onDeleteConfirm() {
           <DialogTitle>{{
             editingId ? 'Ubah Kategori' : 'Tambah Kategori'
           }}</DialogTitle>
+          <DialogDescription>
+            Kategori mengelompokkan produk di menu yang dilihat customer.
+          </DialogDescription>
         </DialogHeader>
         <form id="category-form" class="space-y-4" @submit.prevent="onSubmit">
           <div class="space-y-2">

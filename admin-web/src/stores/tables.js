@@ -36,5 +36,10 @@ export const useTablesStore = defineStore('tables', {
       const idx = this.items.findIndex((t) => t.id === id)
       if (idx !== -1) this.items[idx] = data.table
     },
+    async clearVisit(id) {
+      const data = await api.post(`/admin/tables/${id}/clear-visit`)
+      const idx = this.items.findIndex((t) => t.id === id)
+      if (idx !== -1) this.items[idx] = data.table
+    },
   },
 })

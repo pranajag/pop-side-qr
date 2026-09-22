@@ -30,6 +30,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -303,7 +304,7 @@ async function onDeleteConfirm() {
             }}
           </TableEmpty>
           <TableRow v-for="p in filteredItems" :key="p.id">
-            <TableCell>
+            <TableCell data-label="Foto">
               <img
                 v-if="p.foto"
                 :src="photoUrl(p.foto)"
@@ -317,15 +318,15 @@ async function onDeleteConfirm() {
                 <ImageOffIcon class="size-4 text-muted-foreground" />
               </div>
             </TableCell>
-            <TableCell class="font-medium">{{ p.nama }}</TableCell>
-            <TableCell class="text-muted-foreground">{{
+            <TableCell class="font-medium" data-label="Nama">{{ p.nama }}</TableCell>
+            <TableCell class="text-muted-foreground" data-label="Kategori">{{
               categoryName(p.categoryId)
             }}</TableCell>
-            <TableCell>{{ formatRupiah(p.harga) }}</TableCell>
-            <TableCell class="text-muted-foreground">
+            <TableCell data-label="Harga">{{ formatRupiah(p.harga) }}</TableCell>
+            <TableCell class="text-muted-foreground" data-label="Modal">
               {{ p.hargaModal !== null && p.hargaModal !== undefined ? formatRupiah(p.hargaModal) : '—' }}
             </TableCell>
-            <TableCell>
+            <TableCell data-label="Stok">
               <span
                 :class="{
                   'font-semibold text-destructive': stockStatus(p) === 'habis',
@@ -348,12 +349,12 @@ async function onDeleteConfirm() {
                 Menipis
               </Badge>
             </TableCell>
-            <TableCell>
+            <TableCell data-label="Status">
               <Badge :variant="p.isAvailable ? 'default' : 'secondary'">
                 {{ p.isAvailable ? 'Tersedia' : 'Nonaktif' }}
               </Badge>
             </TableCell>
-            <TableCell class="text-right">
+            <TableCell class="text-right" data-label="Aksi">
               <Button variant="ghost" size="icon" @click="openEdit(p)">
                 <PencilIcon class="size-4" />
               </Button>
@@ -372,6 +373,10 @@ async function onDeleteConfirm() {
           <DialogTitle>{{
             editingId ? 'Ubah Produk' : 'Tambah Produk'
           }}</DialogTitle>
+          <DialogDescription>
+            Stok hanya dipakai untuk produk berjumlah terbatas; minuman yang
+            dibuat on-demand tidak perlu dilacak stoknya.
+          </DialogDescription>
         </DialogHeader>
         <form id="product-form" class="space-y-4" @submit.prevent="onSubmit">
           <div class="space-y-2">

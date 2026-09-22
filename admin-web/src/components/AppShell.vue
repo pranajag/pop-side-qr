@@ -8,7 +8,16 @@ import { useStaffCallsStore } from '@/stores/staffCalls'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useThemeStore } from '@/stores/theme'
 import { useNetworkStore } from '@/stores/network'
-import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 import { playNotifySound } from '@/lib/notifySound'
 import { formatRupiah } from '@/lib/format'
@@ -31,6 +40,7 @@ import {
   MoonIcon,
   WifiOffIcon,
   StarIcon,
+  ChevronRightIcon,
 } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 
@@ -43,8 +53,11 @@ const notifications = useNotificationsStore()
 const theme = useThemeStore()
 const network = useNetworkStore()
 
-const nav = computed(() => {
-  const items = [
+// Two groups rather than one long list: day-to-day shift work on top,
+// admin-only configuration below, so a kasir's four items don't read as a
+// truncated version of the admin's twelve.
+const navGroups = computed(() => {
+  const operasional = [
     {
       to: { name: 'pesanan' },
       label: 'Pesanan',
@@ -55,44 +68,78 @@ const nav = computed(() => {
     { to: { name: 'reservasi' }, label: 'Reservasi', icon: CalendarClockIcon },
     { to: { name: 'member' }, label: 'Member', icon: StarIcon },
   ]
-  if (auth.isAdmin) {
-    // Unshift, not push — admin's landing page (router's beforeEach sends
-    // '/' here for the admin role), so it belongs first in the list, ahead
-    // of even the shared Pesanan item above.
-    items.unshift({ to: { name: 'dashboard' }, label: 'Dashboard', icon: LayoutDashboardIcon })
-    items.push(
-      { to: { name: 'kategori' }, label: 'Kategori', icon: LayoutGridIcon },
-      { to: { name: 'produk' }, label: 'Produk', icon: UtensilsIcon },
-      { to: { name: 'meja' }, label: 'Meja', icon: QrCodeIcon },
-      {
-        to: { name: 'laporan' },
-        label: 'Laporan',
-        icon: BarChart3Icon,
-        badge: notifications.laporanCount,
-      },
-      {
-        to: { name: 'riwayat' },
-        label: 'Riwayat Aktivitas',
-        icon: HistoryIcon,
-        badge: notifications.riwayatCount,
-      },
-      { to: { name: 'akun' }, label: 'Akun Staff', icon: UsersIcon },
-      { to: { name: 'pengaturan' }, label: 'Pengaturan', icon: SettingsIcon }
-    )
-  }
-  return items
+  if (!auth.isAdmin) return [{ label: 'Operasional', items: operasional }]
+
+  // Unshift, not push — admin's landing page (router's beforeEach sends
+  // '/' here for the admin role), so it belongs first in the list.
+  operasional.unshift({
+    to: { name: 'dashboard' },
+    label: 'Dashboard',
+    icon: LayoutDashboardIcon,
+  })
+  return [
+    { label: 'Operasional', items: operasional },
+    {
+      label: 'Kelola',
+      items: [
+        { to: { name: 'kategori' }, label: 'Kategori', icon: LayoutGridIcon },
+        { to: { name: 'produk' }, label: 'Produk', icon: UtensilsIcon },
+        { to: { name: 'meja' }, label: 'Meja', icon: QrCodeIcon },
+        {
+          to: { name: 'laporan' },
+          label: 'Laporan',
+          icon: BarChart3Icon,
+          badge: notifications.laporanCount,
+        },
+        {
+          to: { name: 'riwayat' },
+          label: 'Riwayat Aktivitas',
+          icon: HistoryIcon,
+          badge: notifications.riwayatCount,
+        },
+        { to: { name: 'akun' }, label: 'Akun Staff', icon: UsersIcon },
+        { to: { name: 'pengaturan' }, label: 'Pengaturan', icon: SettingsIcon },
+      ],
+    },
+  ]
 })
 
-async function onLogout() {
+// Breadcrumb label for routes the sidebar can't supply one for (sub-pages
+// like Pesanan Manual have no nav entry of their own).
+const EXTRA_TITLES = { 'pesanan-manual': 'Pesanan Manual' }
+const pageTitle = computed(() => {
+  for (const group of navGroups.value) {
+    const hit = group.items.find((item) => item.to.name === route.name)
+    if (hit) return hit.label
+  }
+  return EXTRA_TITLES[route.name] ?? 'Popside Admin'
+})
+
+const todayLabel = computed(() =>
+  new Intl.DateTimeFormat('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Asia/Jakarta',
+  }).format(new Date())
+)
+
+const userInitial = computed(() =>
+  (auth.user?.username ?? '?').charAt(0).toUpperCase()
+)
+
+const logoutOpen = ref(false)
+async function onLogoutConfirm() {
   await auth.logout()
   clearAllDrafts()
   router.replace({ name: 'login' })
   toast('Berhasil keluar')
 }
 
-// Off-canvas below lg (tablet/phone) — static/always-visible at lg+
-// (laptop/TV). Closes itself on navigation so tapping a nav link doesn't
-// leave the drawer covering the page it just opened.
+// Off-canvas below lg (tablet/phone), fixed and always visible at lg+ so a
+// long page never scrolls the menu out of reach. Closes itself on
+// navigation so tapping a nav link doesn't leave the drawer covering the
+// page it just opened.
 const mobileNavOpen = ref(false)
 watch(
   () => route.path,
@@ -164,33 +211,31 @@ onUnmounted(() => clearInterval(newOrderTimer))
 <template>
   <div
     v-if="!network.isOnline"
-    class="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-destructive px-4 py-1.5 text-xs font-medium text-white"
+    class="fixed inset-x-0 top-0 z-60 flex items-center justify-center gap-2 bg-destructive px-4 py-1.5 text-xs font-medium text-destructive-foreground"
   >
     <WifiOffIcon class="size-3.5" />
     Tidak ada koneksi internet — perubahan (konfirmasi, ubah status, dll) tidak akan tersimpan sampai online lagi.
   </div>
-  <div class="flex min-h-svh flex-col lg:flex-row">
-    <!-- Mobile/tablet top bar (lg:hidden) — the sidebar below is off-canvas
-    at these widths, this is the only way to reach it. Sticky rather than
-    fixed so it just pushes <main> down in normal flow, no padding math. -->
+
+  <div class="min-h-svh bg-background">
+    <!-- Mobile/tablet top bar (lg:hidden) — the sidebar is off-canvas at
+    these widths, this is the only way to reach it. -->
     <header
-      class="sticky top-0 z-30 flex items-center gap-3 border-b bg-card px-4 py-3 lg:hidden"
+      class="sticky top-0 z-30 flex items-center gap-3 border-b border-border/70 bg-background/85 px-4 py-3 backdrop-blur lg:hidden"
     >
-      <Button
-        variant="ghost"
-        size="icon"
-        class="shrink-0"
+      <button
+        type="button"
+        class="flex size-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
         aria-label="Buka menu"
         @click="mobileNavOpen = true"
       >
         <MenuIcon class="size-5" />
-      </Button>
+      </button>
       <img :src="logoUrl" alt="Popside" class="size-8 shrink-0 rounded-lg" />
       <p class="truncate text-sm font-semibold tracking-tight">Popside Admin</p>
-      <Button
-        variant="ghost"
-        size="icon"
-        class="ml-auto shrink-0"
+      <button
+        type="button"
+        class="ml-auto flex size-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
         :aria-label="
           theme.isDark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'
         "
@@ -198,91 +243,169 @@ onUnmounted(() => clearInterval(newOrderTimer))
       >
         <SunIcon v-if="theme.isDark" class="size-4" />
         <MoonIcon v-else class="size-4" />
-      </Button>
+      </button>
     </header>
 
     <div
       v-if="mobileNavOpen"
-      class="fixed inset-0 z-40 bg-black/40 lg:hidden"
+      class="fixed inset-0 z-40 bg-foreground/40 backdrop-blur-sm lg:hidden"
       aria-hidden="true"
       @click="mobileNavOpen = false"
     />
 
+    <!-- Fixed at every width so the menu never scrolls away; it shares the
+    page background (no panel of its own) which is what makes the white
+    content card to its right read as a separate surface. -->
     <aside
-      class="fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col border-r bg-card transition-transform duration-200 lg:static lg:z-auto lg:w-56 lg:translate-x-0"
+      class="fixed inset-y-0 left-0 z-50 flex w-68 -translate-x-full flex-col bg-sidebar transition-transform duration-200 lg:translate-x-0"
       :class="{ 'translate-x-0': mobileNavOpen }"
     >
-      <div class="flex items-center gap-2.5 px-4 py-4">
-        <img :src="logoUrl" alt="Popside" class="size-9 shrink-0 rounded-lg" />
+      <div class="flex items-center gap-3 px-5 py-4">
+        <img :src="logoUrl" alt="Popside" class="size-10 shrink-0 rounded-xl" />
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-semibold tracking-tight">Popside</p>
-          <p class="truncate text-xs text-muted-foreground">Admin Dashboard</p>
+          <p class="truncate text-sm font-bold tracking-tight">Popside</p>
+          <p class="truncate text-[11px] text-muted-foreground">
+            Admin Dashboard
+          </p>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          class="shrink-0 lg:hidden"
+        <button
+          type="button"
+          class="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground lg:hidden"
           aria-label="Tutup menu"
           @click="mobileNavOpen = false"
         >
           <XIcon class="size-4" />
-        </Button>
+        </button>
       </div>
-      <nav class="flex-1 space-y-1 overflow-y-auto px-2">
-        <router-link
-          v-for="item in nav"
-          :key="item.label"
-          :to="item.to"
-          class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-          active-class="bg-accent text-accent-foreground font-medium"
-        >
-          <component :is="item.icon" class="size-4" />
-          {{ item.label }}
-          <span
-            v-if="item.badge > 0"
-            class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold text-white"
+
+      <nav class="no-scrollbar flex-1 space-y-5 overflow-y-auto px-3 pb-4">
+        <div v-for="group in navGroups" :key="group.label">
+          <p
+            class="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
           >
-            {{ item.badge > 99 ? '99+' : item.badge }}
-          </span>
-        </router-link>
-      </nav>
-      <div class="border-t px-3 py-3">
-        <div class="flex items-center justify-between gap-2 px-1">
-          <p class="min-w-0 truncate text-xs text-muted-foreground">
-            Masuk sebagai
-            <span class="font-medium text-foreground">{{
-              auth.user?.username
-            }}</span>
-            <span class="text-muted-foreground/70"
-              >({{ auth.user?.role }})</span
-            >
+            {{ group.label }}
           </p>
+          <div class="space-y-0.5">
+            <router-link
+              v-for="item in group.items"
+              :key="item.label"
+              :to="item.to"
+              class="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+              active-class="bg-sidebar-primary! text-sidebar-primary-foreground! font-semibold"
+            >
+              <component :is="item.icon" class="size-4 shrink-0" />
+              <span class="truncate">{{ item.label }}</span>
+              <span
+                v-if="item.badge > 0"
+                class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold text-destructive-foreground"
+              >
+                {{ item.badge > 99 ? '99+' : item.badge }}
+              </span>
+            </router-link>
+          </div>
+        </div>
+      </nav>
+
+      <div class="border-t border-sidebar-border px-3 pb-4 pt-3">
+        <p
+          class="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+        >
+          Akun
+        </p>
+        <div
+          class="flex items-center gap-3 rounded-2xl border border-sidebar-border bg-card px-3 py-2.5"
+        >
+          <span
+            class="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
+          >
+            {{ userInitial }}
+          </span>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-semibold">
+              {{ auth.user?.username }}
+            </p>
+            <p class="truncate text-[11px] capitalize text-muted-foreground">
+              {{ auth.user?.role }}
+            </p>
+          </div>
           <button
             type="button"
             :aria-label="
               theme.isDark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'
             "
-            class="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            class="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
             @click="theme.toggle()"
           >
             <SunIcon v-if="theme.isDark" class="size-4" />
             <MoonIcon v-else class="size-4" />
           </button>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          class="mt-1 w-full justify-start gap-2"
-          @click="onLogout"
+        <button
+          type="button"
+          class="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          @click="logoutOpen = true"
         >
-          <LogOutIcon class="size-4" />
+          <LogOutIcon class="size-4 shrink-0" />
           Keluar
-        </Button>
+        </button>
       </div>
     </aside>
 
-    <main class="min-w-0 flex-1 overflow-y-auto p-4 lg:p-6">
-      <router-view />
-    </main>
+    <div class="lg:pl-68">
+      <div class="mx-auto w-full max-w-6xl px-4 pb-10 pt-5 lg:px-8 lg:pt-7">
+        <header class="mb-4 hidden items-center justify-between gap-4 lg:flex">
+          <p class="flex items-center gap-1.5 text-sm text-muted-foreground">
+            Popside Admin
+            <ChevronRightIcon class="size-3.5 text-primary-strong" />
+            <span class="font-medium text-foreground">{{ pageTitle }}</span>
+          </p>
+          <div class="flex items-center gap-2">
+            <span
+              class="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground"
+            >
+              {{ todayLabel }}
+            </span>
+            <span
+              class="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium capitalize"
+            >
+              Masuk sebagai {{ auth.user?.role }}
+            </span>
+            <button
+              type="button"
+              :aria-label="
+                theme.isDark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap'
+              "
+              class="flex size-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:text-foreground"
+              @click="theme.toggle()"
+            >
+              <SunIcon v-if="theme.isDark" class="size-4" />
+              <MoonIcon v-else class="size-4" />
+            </button>
+          </div>
+        </header>
+
+        <main
+          class="min-w-0 rounded-3xl border border-border/70 bg-card p-4 shadow-sm sm:p-6 lg:p-8"
+        >
+          <router-view />
+        </main>
+      </div>
+    </div>
   </div>
+
+  <AlertDialog v-model:open="logoutOpen">
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>Keluar dari dashboard?</AlertDialogTitle>
+        <AlertDialogDescription>
+          Sesi {{ auth.user?.username }} akan diakhiri dan draft form yang
+          belum disimpan akan dihapus dari perangkat ini.
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel>Batal</AlertDialogCancel>
+        <AlertDialogAction @click="onLogoutConfirm">Keluar</AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 </template>

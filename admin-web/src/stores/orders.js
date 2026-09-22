@@ -50,9 +50,13 @@ export const useOrdersStore = defineStore('orders', {
       this.replaceOrUpdate(data.order)
       return data.order
     },
-    async confirmPayment(id) {
-      const data = await api.post(`/admin/orders/${id}/konfirmasi`)
+    async confirmPayment(id, cashReceived = null) {
+      const data = await api.post(
+        `/admin/orders/${id}/konfirmasi`,
+        cashReceived === null ? {} : { cashReceived }
+      )
       this.replaceOrUpdate(data.order)
+      return data.order
     },
     async updateStatus(id, status, catatan, refundAmount, pin) {
       const data = await api.patch(`/admin/orders/${id}/status`, {

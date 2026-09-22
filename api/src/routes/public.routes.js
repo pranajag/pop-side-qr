@@ -15,6 +15,7 @@ const {
   staffCallLimiter,
   tableVerifyLimiter,
   publicReadLimiter,
+  memberLookupLimiter,
   publicImageLimiter,
 } = require('../middleware/rateLimit');
 const productPhoto = require('../services/productPhoto.service');
@@ -39,7 +40,16 @@ router.get('/menu', publicReadLimiter, menuController.getMenu);
 router.get('/settings', publicReadLimiter, settingsController.get);
 router.get('/tables/:token', tableVerifyLimiter, tableController.verifyToken);
 router.get('/tables/:token/bill', tableVerifyLimiter, orderController.bill);
-router.post('/cart/total', publicReadLimiter, validate(cartTotalSchema), cartController.total);
+// memberLookupLimiter only bites when the body carries a phone number —
+// see its comment in rateLimit.js. Both run: the generic public budget
+// still applies to the cart arithmetic itself.
+router.post(
+  '/cart/total',
+  publicReadLimiter,
+  memberLookupLimiter,
+  validate(cartTotalSchema),
+  cartController.total
+);
 
 router.post('/orders', createOrderLimiter, validate(createOrderSchema), orderController.create);
 router.post(

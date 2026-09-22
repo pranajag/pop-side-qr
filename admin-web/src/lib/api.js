@@ -7,6 +7,38 @@ function setCsrfToken(token) {
   csrfToken = token
 }
 
+// Called once on the first 401 from an already-open screen — see
+// handleSessionExpired below. Wired up in main.js, which owns the router.
+let onSessionExpired = null
+function setSessionExpiredHandler(fn) {
+  onSessionExpired = fn
+}
+
+// A 401 on a normal screen means the session is gone (expired, or the API
+// restarted and dropped its in-memory store), not that this one request was
+// malformed. Several views kick off store fetches on mount without awaiting
+// them, so before this the only visible result was an empty list plus an
+// "Uncaught (in promise)" in the console — staff had no idea they'd been
+// logged out. Bounced to login instead, once, no matter how many parallel
+// fetches fail together.
+//
+// The login request itself is excluded on purpose: a wrong password is also
+// a 401, and redirecting to login from login would swallow the error the
+// form needs to show.
+let sessionExpiredFired = false
+function handleSessionExpired(path) {
+  if (path.startsWith('/auth/login')) return false
+  if (sessionExpiredFired) return true
+  sessionExpiredFired = true
+  onSessionExpired?.()
+  // Released once the app has actually navigated, so a later expiry in the
+  // same tab still redirects.
+  setTimeout(() => {
+    sessionExpiredFired = false
+  }, 3000)
+  return true
+}
+
 async function request(
   path,
   { method = 'GET', body, isFormData = false } = {}
@@ -48,6 +80,12 @@ async function request(
   if (!res.ok) {
     const error = new Error(data?.error || `Request gagal (${res.status})`)
     error.status = res.status
+    // Marked so main.js can keep an already-dealt-with 401 out of the
+    // console. Several views start store fetches on mount without awaiting
+    // them; when a session dies, each of those rejects with nothing left to
+    // do about it — the redirect has already happened. Only this exact case
+    // is suppressed, so every other unhandled rejection still shows up.
+    if (res.status === 401) error.handled = handleSessionExpired(path)
     error.details = data?.details
     // Set by express-rate-limit (standardHeaders: true) on every response
     // from a rate-limited route, not just once it trips — harmless to read
@@ -70,6 +108,7 @@ export const api = {
     request(path, { method: 'PATCH', body, ...opts }),
   del: (path) => request(path, { method: 'DELETE' }),
   setCsrfToken,
+  setSessionExpiredHandler,
 }
 
 // Zod validation errors arrive as { error: 'Validation failed', details: [{ field, message }] }

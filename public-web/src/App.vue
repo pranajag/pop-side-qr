@@ -41,7 +41,7 @@ onMounted(() => {
 <template>
   <div
     v-if="!network.isOnline"
-    class="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-destructive px-4 py-1.5 text-xs font-medium text-white"
+    class="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-destructive px-4 py-1.5 text-xs font-medium text-destructive-foreground"
   >
     <WifiOffIcon class="size-3.5" />
     {{ locale.t('offlineBanner') }}

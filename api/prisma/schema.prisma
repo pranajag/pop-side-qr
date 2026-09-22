@@ -524,6 +524,15 @@ model Payment {
   order          Order         @relation(fields: [orderId], references: [id])
   metode         PaymentMethod
   amount         Decimal
+  // Cash handed over by the customer, recorded when a kasir confirms a
+  // tunai payment — the change owed is amount subtracted from this, which
+  // is the number staff actually needs at the counter. Null for every
+  // non-cash order and for any cash order confirmed without entering it
+  // (the field is optional, so a kasir in a hurry is never blocked).
+  // Deliberately NOT folded into any revenue or cash-reconciliation sum:
+  // the drawer still nets exactly `amount`, since the difference goes
+  // straight back to the customer.
+  cashReceived   Decimal?      @map("cash_received")
   buktiFile      String?       @map("bukti_file")
   verifiedBy     Int?          @map("verified_by")
   verifiedByUser User?         @relation(fields: [verifiedBy], references: [id])

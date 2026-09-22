@@ -28,6 +28,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -394,7 +395,7 @@ async function onDeleteConfirm() {
             Belum ada reservasi.
           </TableEmpty>
           <TableRow v-for="r in visibleItems" :key="r.id">
-            <TableCell class="font-medium">
+            <TableCell class="font-medium" data-label="Customer">
               {{ r.namaCustomer }}
               <span
                 v-if="r.telepon"
@@ -402,18 +403,18 @@ async function onDeleteConfirm() {
                 >{{ r.telepon }}</span
               >
             </TableCell>
-            <TableCell class="text-muted-foreground">{{
+            <TableCell class="text-muted-foreground" data-label="Acara">{{
               r.namaAcara || '—'
             }}</TableCell>
-            <TableCell class="text-muted-foreground">{{
+            <TableCell class="text-muted-foreground" data-label="Tanggal &amp; Jam">{{
               formatDateTime(r.tanggalReservasi)
             }}</TableCell>
-            <TableCell>{{ r.jumlahTamu }} orang</TableCell>
-            <TableCell class="text-muted-foreground">
+            <TableCell data-label="Tamu">{{ r.jumlahTamu }} orang</TableCell>
+            <TableCell class="text-muted-foreground" data-label="Meja">
               <span v-if="r.nomorMeja">Meja {{ r.nomorMeja }}</span>
               <span v-else>—</span>
             </TableCell>
-            <TableCell>
+            <TableCell data-label="Status">
               <Badge :variant="STATUS_VARIANT[r.status]">{{
                 STATUS_LABEL[r.status]
               }}</Badge>
@@ -425,7 +426,7 @@ async function onDeleteConfirm() {
                 DP {{ formatRupiah(r.depositAmount) }}{{ r.depositPaid ? ' — lunas' : ' — belum bayar' }}
               </span>
             </TableCell>
-            <TableCell class="text-right">
+            <TableCell class="text-right" data-label="Aksi">
               <Button
                 v-if="r.depositAmount > 0 && !r.depositPaid"
                 size="sm"
@@ -494,6 +495,10 @@ async function onDeleteConfirm() {
             <CalendarClockIcon class="size-4" />
             {{ editingId ? 'Ubah Reservasi' : 'Tambah Reservasi' }}
           </DialogTitle>
+          <DialogDescription>
+            Meja yang dipilih harus muat untuk jumlah tamu, dan deposit dicatat
+            sebagai pembayaran di muka.
+          </DialogDescription>
         </DialogHeader>
         <form
           id="reservation-form"
@@ -629,10 +634,10 @@ async function onDeleteConfirm() {
       <DialogContent class="sm:max-w-xs">
         <DialogHeader>
           <DialogTitle>Meja {{ qrReservation?.nomorMeja }} — {{ qrReservation?.namaCustomer }}</DialogTitle>
+          <DialogDescription class="text-xs">
+            Sama seperti QR yang tertempel di meja — tunjukkan ini ke tamu untuk mulai pesan, atau scan sendiri kalau mau bantu input.
+          </DialogDescription>
         </DialogHeader>
-        <p class="text-xs text-muted-foreground">
-          Sama seperti QR yang tertempel di meja — tunjukkan ini ke tamu untuk mulai pesan, atau scan sendiri kalau mau bantu input.
-        </p>
         <img
           v-if="qrReservation"
           :src="qrImageUrl(qrReservation.tableId)"

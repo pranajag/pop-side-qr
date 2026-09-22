@@ -23,6 +23,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -187,16 +188,16 @@ async function onTierDeleteConfirm() {
             {{ searchQuery ? 'Tidak ada member yang cocok.' : 'Belum ada member.' }}
           </TableEmpty>
           <TableRow v-for="c in store.items" :key="c.id">
-            <TableCell class="font-medium">{{ c.telepon }}</TableCell>
-            <TableCell class="text-muted-foreground">{{ c.nama || '—' }}</TableCell>
-            <TableCell>
+            <TableCell class="font-medium" data-label="No. HP">{{ c.telepon }}</TableCell>
+            <TableCell class="text-muted-foreground" data-label="Nama">{{ c.nama || '—' }}</TableCell>
+            <TableCell data-label="Poin">
               <span class="flex items-center gap-1 font-semibold text-accent-foreground">
                 <StarIcon class="size-3.5 fill-current text-amber-500" />
                 {{ c.points }}
               </span>
             </TableCell>
-            <TableCell class="text-sm text-muted-foreground">{{ formatDateTime(c.createdAt) }}</TableCell>
-            <TableCell class="text-right">
+            <TableCell class="text-sm text-muted-foreground" data-label="Member Sejak">{{ formatDateTime(c.createdAt) }}</TableCell>
+            <TableCell class="text-right" data-label="Aksi">
               <Button variant="ghost" size="sm" @click="openDetail(c)">Detail</Button>
             </TableCell>
           </TableRow>
@@ -208,6 +209,9 @@ async function onTierDeleteConfirm() {
       <DialogContent class="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Member {{ detailData?.telepon }}</DialogTitle>
+          <DialogDescription class="sr-only">
+            Rincian satu member: poin terkumpul dan riwayat transaksinya.
+          </DialogDescription>
         </DialogHeader>
         <div v-if="detailLoading" class="flex justify-center py-8">
           <LoaderCircleIcon class="size-6 animate-spin text-muted-foreground" />
@@ -281,9 +285,9 @@ async function onTierDeleteConfirm() {
             Belum ada tingkatan diskon.
           </TableEmpty>
           <TableRow v-for="t in tiersStore.items" :key="t.id">
-            <TableCell class="font-medium">≥ {{ t.minPoints }} poin</TableCell>
-            <TableCell class="text-accent-foreground font-semibold">{{ t.discountPercent }}%</TableCell>
-            <TableCell v-if="auth.isAdmin" class="text-right">
+            <TableCell class="font-medium" data-label="Minimal Poin">≥ {{ t.minPoints }} poin</TableCell>
+            <TableCell class="text-accent-foreground font-semibold" data-label="Diskon">{{ t.discountPercent }}%</TableCell>
+            <TableCell v-if="auth.isAdmin" class="text-right" data-label="Aksi">
               <Button variant="ghost" size="icon" @click="openEditTier(t)">
                 <PencilIcon class="size-4" />
               </Button>
@@ -300,6 +304,10 @@ async function onTierDeleteConfirm() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{{ editingTierId ? 'Ubah Tingkatan' : 'Tambah Tingkatan' }}</DialogTitle>
+          <DialogDescription>
+            Member yang poinnya mencapai batas ini otomatis dapat diskon
+            sebesar persentase yang kamu tentukan.
+          </DialogDescription>
         </DialogHeader>
         <form id="tier-form" class="space-y-4" @submit.prevent="onTierSubmit">
           <div class="space-y-2">

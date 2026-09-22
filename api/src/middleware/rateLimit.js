@@ -52,6 +52,33 @@ const createOrderLimiter = rateLimit({
   },
 });
 
+// Member lookup on the checkout preview. Unlike the rest of /cart/total
+// (pure price arithmetic on the customer's own cart), a request carrying
+// customerPhone asks the server a question about SOMEONE ELSE'S data: is
+// this number registered, and what is its balance. Left on the generic
+// 60/min publicReadLimiter, that answered ~3.600 membership probes an hour
+// from one IP (confirmed live).
+//
+// Scoped per (IP + table token) for the same NAT reason as
+// createOrderLimiter: a cafe's whole floor shares one public IP, so a flat
+// per-IP cap tight enough to stop probing would start rejecting real
+// customers at a busy table. An attacker only holds the tokens they can
+// physically scan, so scoping narrows their ceiling instead of widening it.
+//
+// Skipped entirely when there's no phone in the body, so an ordinary cart
+// total keeps the limit it always had.
+const memberLookupLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !req.body?.customerPhone,
+  keyGenerator: (req) => scopedKey(req, req.body?.token),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak pengecekan nomor member. Coba lagi sebentar.' });
+  },
+});
+
 // AGENTS.md rate limit rule: 5/menit/(IP+kode order) untuk cek status order
 // — scoped per order, not just per IP (see scopedKey above).
 //
@@ -257,6 +284,7 @@ module.exports = {
   staffCallLimiter,
   tableVerifyLimiter,
   publicReadLimiter,
+  memberLookupLimiter,
   publicImageLimiter,
   csrfTokenLimiter,
   externalApiLimiter,

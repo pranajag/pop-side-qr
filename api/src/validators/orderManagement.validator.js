@@ -11,4 +11,12 @@ const updateStatusSchema = z.object({
   pin: z.string().max(10).optional(),
 });
 
-module.exports = { updateStatusSchema };
+const confirmPaymentSchema = z.object({
+  // Cash the customer handed over, tunai orders only. Optional — confirming
+  // without it still works exactly as before. The service (not this schema)
+  // rejects an amount below the order total and an amount on a non-cash
+  // order, since only it knows what the order actually costs.
+  cashReceived: z.coerce.number().min(0).max(999999999).optional(),
+});
+
+module.exports = { updateStatusSchema, confirmPaymentSchema };

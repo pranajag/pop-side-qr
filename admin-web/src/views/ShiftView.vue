@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -233,9 +234,9 @@ function formatDuration(startedAt, endedAt) {
 }
 
 function reconBadgeClass(diff) {
-  if (diff < 0) return 'bg-destructive text-white'
-  if (diff > 0) return 'bg-status-ready text-white'
-  return 'bg-status-completed text-white'
+  if (diff < 0) return 'bg-destructive text-destructive-foreground'
+  if (diff > 0) return 'bg-status-ready text-status-ready-foreground'
+  return 'bg-status-completed text-status-completed-foreground'
 }
 
 function reconLabel(diff) {
@@ -367,26 +368,28 @@ const staleOtherShifts = computed(() =>
             >Belum ada shift.</TableEmpty
           >
           <TableRow v-for="s in shifts" :key="s.id">
-            <TableCell class="font-medium">
+            <TableCell class="font-medium" data-label="Staff">
               {{ s.namaStaff || s.username }}
               <span v-if="s.namaStaff" class="block text-xs font-normal text-muted-foreground"
                 >akun {{ s.username }}</span
               >
             </TableCell>
-            <TableCell class="text-sm text-muted-foreground">{{
+            <TableCell class="text-sm text-muted-foreground" data-label="Mulai">{{
               formatDateTime(s.startedAt)
             }}</TableCell>
-            <TableCell class="text-sm text-muted-foreground">
-              <Badge v-if="s.isActive" class="bg-status-confirmed text-white"
+            <TableCell class="text-sm text-muted-foreground" data-label="Selesai">
+              <Badge
+                v-if="s.isActive"
+                class="bg-status-confirmed text-status-confirmed-foreground"
                 >Sedang Berjalan</Badge
               >
               <span v-else>{{ formatDateTime(s.endedAt) }}</span>
             </TableCell>
-            <TableCell class="text-sm">{{ s.orderCount }}</TableCell>
-            <TableCell class="text-sm font-medium">{{
+            <TableCell class="text-sm" data-label="Order">{{ s.orderCount }}</TableCell>
+            <TableCell class="text-sm font-medium" data-label="Pendapatan">{{
               formatRupiah(s.revenue)
             }}</TableCell>
-            <TableCell v-if="auth.isAdmin" class="text-sm">
+            <TableCell v-if="auth.isAdmin" class="text-sm" data-label="Kas Tunai">
               <Badge
                 v-if="s.cashDifference !== null"
                 :class="reconBadgeClass(s.cashDifference)"
@@ -395,7 +398,7 @@ const staleOtherShifts = computed(() =>
               </Badge>
               <span v-else class="text-muted-foreground">&mdash;</span>
             </TableCell>
-            <TableCell v-if="auth.isAdmin" class="text-right">
+            <TableCell v-if="auth.isAdmin" class="text-right" data-label="Aksi">
               <Button
                 v-if="!s.isActive"
                 variant="ghost"
@@ -413,13 +416,13 @@ const staleOtherShifts = computed(() =>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Mulai Shift</DialogTitle>
-        </DialogHeader>
-        <div class="space-y-4">
-          <p class="text-sm text-muted-foreground">
+          <DialogDescription>
             Hitung uang kas yang ada di laci sekarang sebelum mulai jualan, lalu
             masukkan jumlahnya. Ini dipakai sebagai patokan awal saat
             rekonsiliasi kas di akhir shift nanti.
-          </p>
+          </DialogDescription>
+        </DialogHeader>
+        <div class="space-y-4">
           <div class="space-y-2">
             <Label for="nama-staff">Nama Staff yang Shift</Label>
             <Input
@@ -463,9 +466,7 @@ const staleOtherShifts = computed(() =>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Akhiri Shift</DialogTitle>
-        </DialogHeader>
-        <div class="space-y-4">
-          <p class="text-sm text-muted-foreground">
+          <DialogDescription>
             Hitung uang tunai fisik di laci sekarang, lalu masukkan jumlahnya.
             Kas awal
             <strong>{{ formatRupiah(active?.cashStart ?? 0) }}</strong> + tunai
@@ -474,7 +475,9 @@ const staleOtherShifts = computed(() =>
             sistem mencatat seharusnya ada
             <strong>{{ formatRupiah(active?.expectedCash ?? 0) }}</strong> di
             laci.
-          </p>
+          </DialogDescription>
+        </DialogHeader>
+        <div class="space-y-4">
           <div class="space-y-2">
             <Label for="cash-counted">Uang Tunai di Laci</Label>
             <Input
@@ -559,6 +562,10 @@ const staleOtherShifts = computed(() =>
       <DialogContent class="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Detail Shift {{ detailData?.namaStaff || detailData?.username }}</DialogTitle>
+          <DialogDescription class="sr-only">
+            Rincian satu shift: waktu mulai dan selesai, pendapatan per metode
+            bayar, dan hasil rekonsiliasi kasnya.
+          </DialogDescription>
         </DialogHeader>
         <div v-if="detailLoading" class="flex justify-center py-8">
           <LoaderCircleIcon class="size-6 animate-spin text-muted-foreground" />

@@ -86,7 +86,7 @@ watch(
                 order.kodeOrder
               }}</span>
               <span
-                class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
+                class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
                 :class="STATUS_COLOR[order.status]"
               >
                 {{ locale.t(STATUS_LABEL_KEY[order.status]) }}

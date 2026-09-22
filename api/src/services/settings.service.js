@@ -54,4 +54,22 @@ async function updateQrisImage(fileBuffer) {
   }
 }
 
-module.exports = { getSettings, updateStoreInfo, updateQrisImage };
+// Tax/service charge, both optional and 0 by default. Lives here rather
+// than in order.service.js because the checkout preview (cart.service.js)
+// has to arrive at exactly the same number the order will be created with
+// — two copies of this arithmetic would eventually quote a customer one
+// total and charge them another.
+//
+// baseAmount is the subtotal AFTER any discount: tax and service apply to
+// what is actually being charged, not to a price nobody pays. Takes a
+// client so it can run inside an order's transaction or on its own.
+async function computeTaxAndService(client, baseAmount) {
+  const settings = await client.storeSetting.findUnique({ where: { id: 1 } });
+  const pajakPersen = settings ? Number(settings.pajakPersen) : 0;
+  const serviceChargePersen = settings ? Number(settings.serviceChargePersen) : 0;
+  const taxAmount = Math.round(baseAmount * (pajakPersen / 100));
+  const serviceChargeAmount = Math.round(baseAmount * (serviceChargePersen / 100));
+  return { taxAmount, serviceChargeAmount, totalHarga: baseAmount + taxAmount + serviceChargeAmount };
+}
+
+module.exports = { getSettings, updateStoreInfo, updateQrisImage, computeTaxAndService };

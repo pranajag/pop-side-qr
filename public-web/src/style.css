@@ -18,6 +18,15 @@
   --color-status-cooking: var(--status-cooking);
   --color-status-ready: var(--status-ready);
   --color-status-completed: var(--status-completed);
+  /* Paired text color per status — white on the light chips (amber,
+     orange, lime) is unreadable, so each one carries its own. */
+  --color-status-pending-foreground: var(--status-pending-foreground);
+  --color-status-waiting-verif-foreground: var(--status-waiting-verif-foreground);
+  --color-status-confirmed-foreground: var(--status-confirmed-foreground);
+  --color-status-cooking-foreground: var(--status-cooking-foreground);
+  --color-status-ready-foreground: var(--status-ready-foreground);
+  --color-status-completed-foreground: var(--status-completed-foreground);
+  --color-status-cancelled-foreground: var(--status-cancelled-foreground);
   --color-status-cancelled: var(--status-cancelled);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -36,6 +45,9 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  /* Dark mode lightens --destructive enough that white text on it drops to
+     ~2.9:1; this flips to near-black there so the banner stays readable. */
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -84,6 +96,7 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.208 0.042 265.75);
   --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(1 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.546 0.215 262.1);
@@ -102,13 +115,20 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.546 0.215 262.1);
 
-  --status-pending: oklch(0.556 0 0);
-  --status-waiting-verif: oklch(0.769 0.188 70.08);
-  --status-confirmed: oklch(0.546 0.215 262.1);
-  --status-cooking: oklch(0.646 0.222 41.116);
-  --status-ready: oklch(0.768 0.169 145.53);
-  --status-completed: oklch(0.518 0.161 146.5);
+  --status-pending: oklch(0.554 0.041 257.4);
+  --status-pending-foreground: oklch(1 0 0);
+  --status-waiting-verif: oklch(0.769 0.165 70.1);
+  --status-waiting-verif-foreground: oklch(0.26 0.05 70);
+  --status-confirmed: oklch(0.52 0.09 205);
+  --status-confirmed-foreground: oklch(1 0 0);
+  --status-cooking: oklch(0.705 0.187 47.6);
+  --status-cooking-foreground: oklch(0.24 0.06 47);
+  --status-ready: oklch(0.87 0.17 128);
+  --status-ready-foreground: oklch(0.204 0.017 118.1);
+  --status-completed: oklch(0.527 0.137 150.1);
+  --status-completed-foreground: oklch(1 0 0);
   --status-cancelled: oklch(0.577 0.245 27.325);
+  --status-cancelled-foreground: oklch(1 0 0);
 
   /* Brand swatch given for the customer-facing menu. Currently only wired
        into the checkout card (MenuView) and the Lanjut ke Pembayaran button
@@ -138,6 +158,7 @@
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.2 0.06 25);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.623 0.188 262.1);
@@ -155,13 +176,22 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.623 0.188 262.1);
 
-  --status-pending: oklch(0.708 0 0);
-  --status-waiting-verif: oklch(0.769 0.188 70.08);
-  --status-confirmed: oklch(0.623 0.188 262.1);
-  --status-cooking: oklch(0.705 0.213 47.6);
-  --status-ready: oklch(0.792 0.209 151.71);
-  --status-completed: oklch(0.648 0.15 146.5);
-  --status-cancelled: oklch(0.704 0.191 22.216);
+  /* Dark mode lifts every chip well above the page background, so all of
+     them take near-black text. */
+  --status-pending: oklch(0.7 0.035 257);
+  --status-pending-foreground: oklch(0.2 0.012 257);
+  --status-waiting-verif: oklch(0.8 0.155 70);
+  --status-waiting-verif-foreground: oklch(0.24 0.05 70);
+  --status-confirmed: oklch(0.72 0.1 205);
+  --status-confirmed-foreground: oklch(0.2 0.04 205);
+  --status-cooking: oklch(0.75 0.17 50);
+  --status-cooking-foreground: oklch(0.23 0.06 47);
+  --status-ready: oklch(0.87 0.19 128);
+  --status-ready-foreground: oklch(0.204 0.017 118.1);
+  --status-completed: oklch(0.75 0.16 150);
+  --status-completed-foreground: oklch(0.2 0.05 150);
+  --status-cancelled: oklch(0.7 0.19 25);
+  --status-cancelled-foreground: oklch(0.2 0.06 25);
 }
 
 @layer base {

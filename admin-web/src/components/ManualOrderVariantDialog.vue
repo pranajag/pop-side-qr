@@ -6,6 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -96,6 +97,9 @@ function onConfirm() {
     <DialogContent v-if="product" class="max-h-[85vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>{{ product.nama }}</DialogTitle>
+        <DialogDescription>
+          Pilih varian produk ini sebelum ditambahkan ke pesanan.
+        </DialogDescription>
       </DialogHeader>
 
       <div class="space-y-4">

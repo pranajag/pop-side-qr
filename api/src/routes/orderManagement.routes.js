@@ -4,7 +4,7 @@ const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const validate = require('../middleware/validate');
 const { validateIdParam } = require('../middleware/validateParams');
-const { updateStatusSchema } = require('../validators/orderManagement.validator');
+const { updateStatusSchema, confirmPaymentSchema } = require('../validators/orderManagement.validator');
 const { createManualOrderSchema } = require('../validators/order.validator');
 
 const router = Router();
@@ -18,7 +18,7 @@ router.get('/', orderManagementController.list);
 // actions (who confirmed/cancelled what), not day-to-day order handling.
 router.get('/activity-log', requireRole('admin'), orderManagementController.activityLog);
 router.post('/manual', validate(createManualOrderSchema), orderManagementController.createManual);
-router.post('/:id/konfirmasi', validateIdParam, orderManagementController.confirmPayment);
+router.post('/:id/konfirmasi', validateIdParam, validate(confirmPaymentSchema), orderManagementController.confirmPayment);
 router.patch('/:id/status', validateIdParam, validate(updateStatusSchema), orderManagementController.updateStatus);
 router.get('/:id/bukti-bayar', validateIdParam, orderManagementController.buktiBayar);
 

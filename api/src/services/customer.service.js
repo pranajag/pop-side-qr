@@ -1,5 +1,6 @@
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
+const loyaltyTierService = require('./loyaltyTier.service');
 
 // 1 point per Rp 1.000 actually paid (post-discount) — simple, round number
 // a kasir can do in their head when telling a customer what they earned.
@@ -30,6 +31,37 @@ async function findOrCreateByPhone(tx, telepon, nama) {
   const existing = await tx.customer.findUnique({ where: { telepon } });
   if (existing) return existing;
   return tx.customer.create({ data: { telepon, nama: nama || null } });
+}
+
+// The member discount a phone number is entitled to on an order of this
+// size. Lookup only — never creates the customer, because this also runs
+// for the pre-order preview on the checkout screen, where nothing has been
+// ordered yet.
+//
+// The percentage comes from the admin-configured tier matching the
+// customer's stored points, never from anything the client sends: the
+// browser only ever supplies a phone number, so a customer still cannot set
+// their own price (AGENTS.md). Points are a *threshold* here, not a
+// currency — qualifying for a tier doesn't spend them, same as the
+// staff-applied discount in Pesanan Manual.
+async function resolveMemberDiscount(client, telepon, subtotal) {
+  const none = { customer: null, tier: null, discountAmount: 0 };
+  if (!telepon) return none;
+
+  const customer = await client.customer.findUnique({ where: { telepon } });
+  if (!customer) return none;
+
+  const tier = await loyaltyTierService.applicableTier(client, customer.points);
+  if (!tier) return { customer, tier: null, discountAmount: 0 };
+
+  // Capped at the subtotal so a misconfigured tier can never drive the
+  // total negative, even though the validator already caps the percentage
+  // far below 100.
+  const discountAmount = Math.min(
+    Math.round(subtotal * (tier.discountPercent / 100)),
+    subtotal
+  );
+  return { customer, tier, discountAmount };
 }
 
 async function awardPoints(tx, customerId, points) {
@@ -88,4 +120,12 @@ async function get(id) {
   };
 }
 
-module.exports = { pointsFor, findOrCreateByPhone, awardPoints, reversePoints, list, get };
+module.exports = {
+  pointsFor,
+  findOrCreateByPhone,
+  resolveMemberDiscount,
+  awardPoints,
+  reversePoints,
+  list,
+  get,
+};

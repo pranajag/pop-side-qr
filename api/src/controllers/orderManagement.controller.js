@@ -12,7 +12,11 @@ async function createManual(req, res) {
 }
 
 async function confirmPayment(req, res) {
-  const order = await orderManagementService.confirmPayment(req.params.id, req.session.user.id);
+  const order = await orderManagementService.confirmPayment(
+    req.params.id,
+    req.session.user.id,
+    req.body.cashReceived
+  );
   res.json({ order });
 }
 

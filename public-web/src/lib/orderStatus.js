@@ -12,12 +12,15 @@ export const STATUS_LABEL_KEY = {
   cancelled: 'statusCancelled',
 }
 
+// Background and its matching text color travel together: the light chips
+// (amber, orange, lime) need near-black text, not the white that used to be
+// hardcoded at each call site.
 export const STATUS_COLOR = {
-  pending: 'bg-status-pending',
-  waiting_verif: 'bg-status-waiting-verif',
-  confirmed: 'bg-status-confirmed',
-  cooking: 'bg-status-cooking',
-  ready: 'bg-status-ready',
-  completed: 'bg-status-completed',
-  cancelled: 'bg-status-cancelled',
+  pending: 'bg-status-pending text-status-pending-foreground',
+  waiting_verif: 'bg-status-waiting-verif text-status-waiting-verif-foreground',
+  confirmed: 'bg-status-confirmed text-status-confirmed-foreground',
+  cooking: 'bg-status-cooking text-status-cooking-foreground',
+  ready: 'bg-status-ready text-status-ready-foreground',
+  completed: 'bg-status-completed text-status-completed-foreground',
+  cancelled: 'bg-status-cancelled text-status-cancelled-foreground',
 }

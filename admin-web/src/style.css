@@ -19,6 +19,17 @@
   --color-status-ready: var(--status-ready);
   --color-status-completed: var(--status-completed);
   --color-status-cancelled: var(--status-cancelled);
+  /* Paired text color for each status chip. A status whose background is
+     light (amber, orange, lime) gets near-black text instead of white —
+     white on those failed WCAG AA and the label was effectively invisible
+     in both themes. */
+  --color-status-pending-foreground: var(--status-pending-foreground);
+  --color-status-waiting-verif-foreground: var(--status-waiting-verif-foreground);
+  --color-status-confirmed-foreground: var(--status-confirmed-foreground);
+  --color-status-cooking-foreground: var(--status-cooking-foreground);
+  --color-status-ready-foreground: var(--status-ready-foreground);
+  --color-status-completed-foreground: var(--status-completed-foreground);
+  --color-status-cancelled-foreground: var(--status-cancelled-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -36,6 +47,9 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  /* Dark mode lightens --destructive enough that white text on it drops to
+     ~2.9:1; this flips to near-black there so the badge stays readable. */
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -44,6 +58,10 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  /* The brand lime is a *surface* color — as text on a white card it is
+     unreadable. Anything that renders the brand as text or a standalone
+     icon (links, breadcrumb chevrons) uses this darkened pair instead. */
+  --color-primary-strong: var(--primary-strong);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -57,93 +75,122 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  /* #0F172A (slate-900) per docs/UI_GUIDELINES.md */
-  --foreground: oklch(0.208 0.042 265.75);
+  /* Sage-tinted backdrop (#E8F0E8), not white — the page behind the app.
+     Cards/panels sit on top of it in plain white, which is what makes the
+     content column read as a separate surface from the sidebar. */
+  --background: oklch(0.947 0.014 145.5);
+  /* #171A14 — near-black with a hint of the brand's green */
+  --foreground: oklch(0.212 0.012 129.1);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.208 0.042 265.75);
+  --card-foreground: oklch(0.212 0.012 129.1);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.208 0.042 265.75);
-  /* Single solid brand accent (#2563EB) — placeholder until Popside's
-       real brand color is known. Buttons/CTAs only; never a gradient. */
-  --primary: oklch(0.546 0.215 262.1);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.208 0.042 265.75);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.208 0.042 265.75);
+  --popover-foreground: oklch(0.212 0.012 129.1);
+  /* Popside's own lime (#C8F050, straight off the logo). Always paired
+     with near-black text — never white, which is unreadable on it. */
+  --primary: oklch(0.898 0.187 122.4);
+  --primary-foreground: oklch(0.204 0.017 118.1);
+  --primary-strong: oklch(0.55 0.13 130);
+  --secondary: oklch(0.968 0.006 145);
+  --secondary-foreground: oklch(0.212 0.012 129.1);
+  --muted: oklch(0.962 0.008 145);
+  --muted-foreground: oklch(0.508 0.015 140);
+  --accent: oklch(0.955 0.045 122);
+  --accent-foreground: oklch(0.212 0.012 129.1);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.546 0.215 262.1);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.208 0.042 265.75);
-  --sidebar-primary: oklch(0.546 0.215 262.1);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.75);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.546 0.215 262.1);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.923 0.014 145.5);
+  --input: oklch(0.923 0.014 145.5);
+  /* Darker than --primary on purpose: the lime itself is too light to be
+     a visible focus ring against white. */
+  --ring: oklch(0.72 0.16 125);
+  --chart-1: oklch(0.898 0.187 122.4);
+  --chart-2: oklch(0.636 0.073 204.9);
+  --chart-3: oklch(0.72 0.16 125);
+  --chart-4: oklch(0.554 0.041 257.4);
+  --chart-5: oklch(0.527 0.137 150.1);
+  --radius: 0.875rem;
+  --sidebar: oklch(0.947 0.014 145.5);
+  --sidebar-foreground: oklch(0.212 0.012 129.1);
+  --sidebar-primary: oklch(0.898 0.187 122.4);
+  --sidebar-primary-foreground: oklch(0.204 0.017 118.1);
+  --sidebar-accent: oklch(0.925 0.02 140);
+  --sidebar-accent-foreground: oklch(0.212 0.012 129.1);
+  --sidebar-border: oklch(0.905 0.016 145.5);
+  --sidebar-ring: oklch(0.72 0.16 125);
 
   /* Order status colors (docs/UI_GUIDELINES.md) — used from Sprint 4/5
-       onward for order status badges, defined once here. */
-  --status-pending: oklch(0.556 0 0);
-  --status-waiting-verif: oklch(0.769 0.188 70.08);
-  --status-confirmed: oklch(0.546 0.215 262.1);
-  --status-cooking: oklch(0.646 0.222 41.116);
-  --status-ready: oklch(0.768 0.169 145.53);
-  --status-completed: oklch(0.518 0.161 146.5);
+       onward for order status badges, defined once here. Each one ships
+       with its own -foreground so the label stays legible: light chips
+       (amber/orange/lime) take near-black text, dark chips take white. */
+  --status-pending: oklch(0.554 0.041 257.4);
+  --status-pending-foreground: oklch(1 0 0);
+  --status-waiting-verif: oklch(0.769 0.165 70.1);
+  --status-waiting-verif-foreground: oklch(0.26 0.05 70);
+  --status-confirmed: oklch(0.52 0.09 205);
+  --status-confirmed-foreground: oklch(1 0 0);
+  --status-cooking: oklch(0.705 0.187 47.6);
+  --status-cooking-foreground: oklch(0.24 0.06 47);
+  --status-ready: oklch(0.87 0.17 128);
+  --status-ready-foreground: oklch(0.204 0.017 118.1);
+  --status-completed: oklch(0.527 0.137 150.1);
+  --status-completed-foreground: oklch(1 0 0);
   --status-cancelled: oklch(0.577 0.245 27.325);
+  --status-cancelled-foreground: oklch(1 0 0);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.623 0.188 262.1);
-  --primary-foreground: oklch(0.145 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.183 0.007 135);
+  --foreground: oklch(0.97 0.005 130);
+  --card: oklch(0.226 0.01 132.7);
+  --card-foreground: oklch(0.97 0.005 130);
+  --popover: oklch(0.226 0.01 132.7);
+  --popover-foreground: oklch(0.97 0.005 130);
+  /* Same lime as light mode, barely dimmed so it doesn't glare on a dark
+     surface. Text on it stays near-black in both themes. */
+  --primary: oklch(0.87 0.19 122.4);
+  --primary-foreground: oklch(0.204 0.017 118.1);
+  --primary-strong: oklch(0.87 0.19 122.4);
+  --secondary: oklch(0.266 0.014 131.7);
+  --secondary-foreground: oklch(0.97 0.005 130);
+  --muted: oklch(0.266 0.014 131.7);
+  --muted-foreground: oklch(0.724 0.012 130);
+  --accent: oklch(0.3 0.03 128);
+  --accent-foreground: oklch(0.97 0.005 130);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.623 0.188 262.1);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.623 0.188 262.1);
-  --sidebar-primary-foreground: oklch(0.145 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.623 0.188 262.1);
+  --destructive-foreground: oklch(0.2 0.06 25);
+  --border: oklch(0.294 0.015 129.1);
+  --input: oklch(0.32 0.016 129);
+  --ring: oklch(0.87 0.19 122.4);
+  --chart-1: oklch(0.87 0.19 122.4);
+  --chart-2: oklch(0.7 0.09 204.9);
+  --chart-3: oklch(0.75 0.16 150);
+  --chart-4: oklch(0.7 0.04 257);
+  --chart-5: oklch(0.8 0.155 70);
+  --sidebar: oklch(0.183 0.007 135);
+  --sidebar-foreground: oklch(0.97 0.005 130);
+  --sidebar-primary: oklch(0.87 0.19 122.4);
+  --sidebar-primary-foreground: oklch(0.204 0.017 118.1);
+  --sidebar-accent: oklch(0.27 0.016 130);
+  --sidebar-accent-foreground: oklch(0.97 0.005 130);
+  --sidebar-border: oklch(0.28 0.014 129.1);
+  --sidebar-ring: oklch(0.87 0.19 122.4);
 
-  --status-pending: oklch(0.708 0 0);
-  --status-waiting-verif: oklch(0.769 0.188 70.08);
-  --status-confirmed: oklch(0.623 0.188 262.1);
-  --status-cooking: oklch(0.705 0.213 47.6);
-  --status-ready: oklch(0.792 0.209 151.71);
-  --status-completed: oklch(0.648 0.15 146.5);
-  --status-cancelled: oklch(0.704 0.191 22.216);
+  /* Dark mode lifts every chip background well above the page so it reads
+     as a chip at all — which means all of them take near-black text. */
+  --status-pending: oklch(0.7 0.035 257);
+  --status-pending-foreground: oklch(0.2 0.012 257);
+  --status-waiting-verif: oklch(0.8 0.155 70);
+  --status-waiting-verif-foreground: oklch(0.24 0.05 70);
+  --status-confirmed: oklch(0.72 0.1 205);
+  --status-confirmed-foreground: oklch(0.2 0.04 205);
+  --status-cooking: oklch(0.75 0.17 50);
+  --status-cooking-foreground: oklch(0.23 0.06 47);
+  --status-ready: oklch(0.87 0.19 128);
+  --status-ready-foreground: oklch(0.204 0.017 118.1);
+  --status-completed: oklch(0.75 0.16 150);
+  --status-completed-foreground: oklch(0.2 0.05 150);
+  --status-cancelled: oklch(0.7 0.19 25);
+  --status-cancelled-foreground: oklch(0.2 0.06 25);
 }
 
 @layer base {
@@ -153,5 +200,105 @@
   body {
     @apply bg-background text-foreground;
     @apply font-sans;
+  }
+}
+
+/* Responsive tables. Below sm a table stops being a grid and each row
+   becomes its own card of label/value pairs — an eight-column table is
+   unreadable on a 375px screen, and the horizontal scroll it used to need
+   hid whole columns off the right edge.
+
+   Driven entirely by the data-slot attributes the table primitives already
+   emit, plus a data-label on each cell that supplies the left-hand label.
+   A cell without data-label (the empty-state row) keeps its own layout.
+   Selectors lead with the element name so they outrank the Tailwind
+   utilities on the same elements (whitespace-nowrap, text-right,
+   overflow-x-auto) without !important. */
+@media (width < 40rem) {
+  div[data-slot='table-container'] {
+    overflow-x: visible;
+  }
+
+  table[data-slot='table'],
+  tbody[data-slot='table-body'],
+  tr[data-slot='table-row'],
+  td[data-slot='table-cell'] {
+    display: block;
+    width: 100%;
+  }
+
+  thead[data-slot='table-header'] {
+    display: none;
+  }
+
+  tr[data-slot='table-row'] {
+    margin-block-end: 0.625rem;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    background: color-mix(in oklab, var(--muted) 45%, transparent);
+    padding-inline: 0.75rem;
+  }
+
+  tr[data-slot='table-row']:last-child {
+    margin-block-end: 0;
+  }
+
+  /* The empty-state row has no label cells — drop the card chrome so it
+     reads as a message, not as a record. */
+  tr[data-slot='table-row']:not(:has(td[data-label])) {
+    border: 0;
+    background: none;
+    padding-inline: 0;
+  }
+
+  td[data-slot='table-cell'] {
+    white-space: normal;
+    padding-block: 0.5rem;
+    padding-inline: 0;
+  }
+
+  td[data-slot='table-cell'][data-label] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    /* flex-end + auto margin on the label keeps every value element
+       grouped together on the right; space-between would scatter them when
+       a cell holds more than one (an action cell's buttons, say). */
+    justify-content: flex-end;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    text-align: end;
+  }
+
+  td[data-slot='table-cell'][data-label]::before {
+    content: attr(data-label);
+    margin-inline-end: auto;
+    flex: none;
+    font-weight: 500;
+    text-align: start;
+    color: var(--muted-foreground);
+  }
+
+  td[data-slot='table-cell'] + td[data-slot='table-cell'] {
+    border-block-start: 1px dashed var(--border);
+  }
+
+  /* Comfortable tap targets: the icon buttons in an action cell are 32px
+     on desktop, which is below the threshold for a thumb. */
+  td[data-slot='table-cell'][data-label] button {
+    min-block-size: 2.25rem;
+    min-inline-size: 2.25rem;
+  }
+}
+
+@layer utilities {
+  /* The sidebar scrolls on short screens but a visible track cuts the nav
+     column in half; keyboard/wheel scrolling still works. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }

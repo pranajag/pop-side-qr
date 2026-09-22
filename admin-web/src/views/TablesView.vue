@@ -20,6 +20,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -190,16 +191,16 @@ function printQr() {
             Belum ada meja.
           </TableEmpty>
           <TableRow v-for="t in store.items" :key="t.id">
-            <TableCell class="font-medium">{{ t.nomorMeja }}</TableCell>
-            <TableCell class="text-muted-foreground"
+            <TableCell class="font-medium" data-label="Nomor Meja">{{ t.nomorMeja }}</TableCell>
+            <TableCell class="text-muted-foreground" data-label="Kapasitas"
               >{{ t.kapasitas }} orang</TableCell
             >
-            <TableCell>
+            <TableCell data-label="Status">
               <Badge :variant="t.isActive ? 'default' : 'secondary'">
                 {{ t.isActive ? 'Aktif' : 'Nonaktif' }}
               </Badge>
             </TableCell>
-            <TableCell>
+            <TableCell data-label="QR Code">
               <button
                 type="button"
                 class="flex items-center gap-2 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
@@ -209,7 +210,7 @@ function printQr() {
                 Lihat / Cetak
               </button>
             </TableCell>
-            <TableCell class="text-right">
+            <TableCell class="text-right" data-label="Aksi">
               <Button variant="ghost" size="icon" @click="openEdit(t)">
                 <PencilIcon class="size-4" />
               </Button>
@@ -228,6 +229,9 @@ function printQr() {
           <DialogTitle>{{
             editingId ? 'Ubah Meja' : 'Tambah Meja'
           }}</DialogTitle>
+          <DialogDescription>
+            Tiap meja punya QR sendiri yang dipakai customer untuk memesan.
+          </DialogDescription>
         </DialogHeader>
         <form id="table-form" class="space-y-4" @submit.prevent="onSubmit">
           <div class="space-y-2">
@@ -271,6 +275,10 @@ function printQr() {
       <DialogContent class="print:border-0 print:shadow-none">
         <DialogHeader>
           <DialogTitle>QR Meja {{ qrTarget?.nomorMeja }}</DialogTitle>
+          <DialogDescription class="sr-only">
+            Gambar QR untuk ditempel di meja ini, lengkap dengan tombol cetak
+            dan unduh.
+          </DialogDescription>
         </DialogHeader>
         <div v-if="qrTarget" class="flex flex-col items-center gap-4 py-2">
           <img

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useTableStore } from '@/stores/table'
@@ -30,6 +30,8 @@ import {
   QrCodeIcon,
   BanknoteIcon,
   CreditCardIcon,
+  BadgeCheckIcon,
+  StarIcon,
 } from '@lucide/vue'
 
 const table = useTableStore()
@@ -103,6 +105,16 @@ function clearCheckoutDraft() {
 
 const summary = ref(null)
 const loadingSummary = ref(false)
+// null whenever the number is blank, unknown, or the server hasn't answered
+// yet — the template branches on exactly that.
+const member = computed(() => summary.value?.member ?? null)
+const memberTier = computed(() => member.value?.tier ?? null)
+const hasPriceBreakdown = computed(
+  () =>
+    (summary.value?.discountAmount ?? 0) > 0 ||
+    (summary.value?.taxAmount ?? 0) > 0 ||
+    (summary.value?.serviceChargeAmount ?? 0) > 0
+)
 const submitting = ref(false)
 // Generated once per checkout visit, reused across every retry of the same
 // tap (a dropped connection, timeout, or double-click) — never regenerated
@@ -121,6 +133,13 @@ onMounted(async () => {
     catatan.value = draft.catatan ?? ''
     customerPhone.value = draft.customerPhone ?? ''
   }
+  await refreshSummary()
+})
+
+// The summary is recomputed server-side rather than adjusted in the browser
+// because the member discount depends on points only the server knows, and
+// the total quoted here has to be the exact one createOrder will charge.
+async function refreshSummary() {
   loadingSummary.value = true
   try {
     summary.value = await api.post('/public/cart/total', {
@@ -129,13 +148,42 @@ onMounted(async () => {
         qty: i.qty,
         variantOptionIds: i.variantOptionIds,
       })),
+      customerPhone: lookupPhone.value,
+      // Not part of the price — it scopes the member-lookup rate limit to
+      // this table instead of the cafe's shared IP (api rateLimit.js).
+      token: table.token ?? undefined,
     })
   } catch (err) {
     toast.error(formatApiError(err))
   } finally {
     loadingSummary.value = false
   }
+}
+
+// Only a plausibly-complete number is worth asking the server about. Half
+// a number can never match anyone, and every partial lookup would burn a
+// slot of the member-lookup rate limit for no result.
+const MIN_PHONE_DIGITS = 9
+const lookupPhone = computed(() => {
+  const trimmed = customerPhone.value.trim()
+  const digits = trimmed.replace(/\D/g, '')
+  return digits.length >= MIN_PHONE_DIGITS ? trimmed : undefined
 })
+
+// Debounced: a phone number is typed a digit at a time, and only the
+// finished number is worth a lookup. Short enough that the discount still
+// appears while the customer is looking at the field.
+const checkingMember = ref(false)
+let memberDebounce = null
+watch(lookupPhone, () => {
+  clearTimeout(memberDebounce)
+  checkingMember.value = true
+  memberDebounce = setTimeout(async () => {
+    await refreshSummary()
+    checkingMember.value = false
+  }, 500)
+})
+onUnmounted(() => clearTimeout(memberDebounce))
 
 const hasIssues = computed(() => (summary.value?.issues?.length ?? 0) > 0)
 const confirmOpen = ref(false)
@@ -288,6 +336,67 @@ async function onSubmit() {
         <p class="mt-1.5 text-xs text-muted-foreground">
           {{ locale.t('memberDesc') }}
         </p>
+
+        <p
+          v-if="checkingMember && lookupPhone"
+          class="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"
+        >
+          <LoaderCircleIcon class="size-3 animate-spin" />
+          {{ locale.t('memberMengecek') }}
+        </p>
+
+        <div
+          v-else-if="member"
+          class="mt-2 rounded-lg border p-3"
+          :class="
+            memberTier
+              ? 'border-brand-primary/50 bg-brand-primary/10'
+              : 'border-border bg-muted/40'
+          "
+        >
+          <p class="flex items-center gap-1.5 text-xs font-medium">
+            <BadgeCheckIcon class="size-3.5 shrink-0" />
+            {{ locale.t('memberDikenali') }}
+          </p>
+          <p class="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <StarIcon class="size-3 shrink-0 fill-current" />
+            {{ locale.t('memberPoinKamu', { n: member.points }) }}
+          </p>
+
+          <template v-if="memberTier">
+            <p class="mt-2 text-sm font-semibold">
+              {{ locale.t('memberDiskonAktif', { percent: memberTier.discountPercent }) }}
+              <span class="font-normal text-muted-foreground">
+                {{ locale.t('memberDiskonSyarat', { n: memberTier.minPoints }) }}
+              </span>
+            </p>
+            <p class="text-lg font-bold">
+              &minus;{{ formatRupiah(summary?.discountAmount ?? 0) }}
+            </p>
+            <!-- The one thing a customer is most likely to get wrong: a
+            tier is a threshold, not a balance being spent. Saying so here
+            is cheaper than answering it at the counter. -->
+            <p class="mt-1 text-xs text-muted-foreground">
+              {{ locale.t('memberPoinTidakDipotong') }}
+            </p>
+          </template>
+          <p v-else class="mt-2 text-xs text-muted-foreground">
+            {{ locale.t('memberBelumCukupPoin') }}
+          </p>
+          <p
+            v-if="summary?.pointsToEarn > 0"
+            class="mt-1 text-xs text-muted-foreground"
+          >
+            {{ locale.t('memberAkanDapatPoin', { n: summary.pointsToEarn }) }}
+          </p>
+        </div>
+
+        <p
+          v-else-if="lookupPhone && summary"
+          class="mt-2 text-xs text-muted-foreground"
+        >
+          {{ locale.t('memberTidakDitemukan') }}
+        </p>
       </section>
 
       <section>
@@ -308,6 +417,41 @@ async function onSubmit() {
             </span>
             <span class="shrink-0">{{ formatRupiah(item.subtotal) }}</span>
           </div>
+          <!-- Only shown once something actually splits the subtotal from
+          the total — a plain order with no discount or tax keeps the single
+          Total line it always had. -->
+          <template v-if="hasPriceBreakdown">
+            <div class="mt-2 flex justify-between gap-2 border-t pt-2 text-muted-foreground">
+              <span>{{ locale.t('subtotal') }}</span>
+              <span class="shrink-0">{{ formatRupiah(summary?.subtotal ?? 0) }}</span>
+            </div>
+            <div
+              v-if="summary?.discountAmount > 0"
+              class="flex justify-between gap-2 font-medium text-brand-cta"
+            >
+              <span>
+                {{ locale.t('diskon') }}
+                <span v-if="memberTier" class="text-xs font-normal">
+                  ({{ memberTier.discountPercent }}%)
+                </span>
+              </span>
+              <span class="shrink-0">&minus;{{ formatRupiah(summary.discountAmount) }}</span>
+            </div>
+            <div
+              v-if="summary?.taxAmount > 0"
+              class="flex justify-between gap-2 text-muted-foreground"
+            >
+              <span>{{ locale.t('pajak') }}</span>
+              <span class="shrink-0">{{ formatRupiah(summary.taxAmount) }}</span>
+            </div>
+            <div
+              v-if="summary?.serviceChargeAmount > 0"
+              class="flex justify-between gap-2 text-muted-foreground"
+            >
+              <span>{{ locale.t('serviceCharge') }}</span>
+              <span class="shrink-0">{{ formatRupiah(summary.serviceChargeAmount) }}</span>
+            </div>
+          </template>
           <div class="mt-2 flex justify-between border-t pt-2 font-semibold">
             <span>{{ locale.t('total') }}</span>
             <span class="flex items-center gap-2">

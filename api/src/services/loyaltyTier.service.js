@@ -50,4 +50,17 @@ async function remove(id) {
   await prisma.loyaltyTier.delete({ where: { id } });
 }
 
-module.exports = { list, create, update, remove };
+// Highest tier a given point balance already qualifies for, or null when it
+// clears none. Mirrors admin-web's loyaltyTiers store, so the discount a
+// kasir sees suggested in Pesanan Manual and the one a customer gets at
+// public checkout are decided by the same rule. Takes a client so it can
+// run inside an order's transaction.
+async function applicableTier(client, points) {
+  const tier = await client.loyaltyTier.findFirst({
+    where: { minPoints: { lte: points } },
+    orderBy: { minPoints: 'desc' },
+  });
+  return tier ? toShaped(tier) : null;
+}
+
+module.exports = { list, create, update, remove, applicableTier };

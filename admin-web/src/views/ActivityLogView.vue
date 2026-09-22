@@ -79,10 +79,10 @@ onMounted(() => useNotificationsStore().markRiwayatSeen())
             >Belum ada aktivitas.</TableEmpty
           >
           <TableRow v-for="log in items" :key="log.id">
-            <TableCell class="text-sm text-muted-foreground">{{
+            <TableCell class="text-sm text-muted-foreground" data-label="Waktu">{{
               formatDateTime(log.createdAt)
             }}</TableCell>
-            <TableCell>
+            <TableCell data-label="Order">
               <p class="font-mono text-sm font-medium">{{ log.kodeOrder }}</p>
               <p class="text-xs text-muted-foreground">
                 {{
@@ -92,7 +92,7 @@ onMounted(() => useNotificationsStore().markRiwayatSeen())
                 }}
               </p>
             </TableCell>
-            <TableCell>
+            <TableCell data-label="Perubahan Status">
               <div class="flex items-center gap-1.5 text-sm">
                 <Badge :class="STATUS_BADGE_CLASS[log.statusFrom]">{{
                   STATUS_LABEL[log.statusFrom]
@@ -103,13 +103,13 @@ onMounted(() => useNotificationsStore().markRiwayatSeen())
                 }}</Badge>
               </div>
             </TableCell>
-            <TableCell class="text-sm">
+            <TableCell class="text-sm" data-label="Oleh">
               <span v-if="log.changedBy" class="font-medium">{{
                 log.changedBy
               }}</span>
               <span v-else class="italic text-muted-foreground">Customer</span>
             </TableCell>
-            <TableCell class="text-sm text-muted-foreground">{{
+            <TableCell class="text-sm text-muted-foreground" data-label="Catatan">{{
               log.catatan || '—'
             }}</TableCell>
           </TableRow>

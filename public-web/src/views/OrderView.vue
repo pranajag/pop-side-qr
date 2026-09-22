@@ -319,10 +319,10 @@ async function copyKode() {
     <div class="mx-auto max-w-md space-y-6 sm:max-w-lg md:max-w-xl">
       <div class="space-y-2 text-center">
         <span
-          class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-white"
+          class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
           :class="statusColor"
         >
-          <span class="size-1.5 rounded-full bg-white" />
+          <span class="size-1.5 rounded-full bg-current" />
           {{ statusLabel }}
         </span>
         <button

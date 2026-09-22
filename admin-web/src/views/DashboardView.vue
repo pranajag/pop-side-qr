@@ -8,6 +8,16 @@ import { formatRupiah, formatDateTime } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   LoaderCircleIcon,
   TrendingUpIcon,
   TrendingDownIcon,
@@ -16,6 +26,7 @@ import {
   WalletIcon,
   ClipboardListIcon,
   DoorOpenIcon,
+  EraserIcon,
 } from '@lucide/vue'
 
 const router = useRouter()
@@ -69,6 +80,37 @@ async function onToggleBillOpen(table, value) {
   }
 }
 
+// Confirmed first: the old bill is unrecoverable from the customer's side
+// once the visit moves on, and a mis-tap on the wrong table would wipe the
+// running bill of a group still sitting there.
+const clearTarget = ref(null)
+const clearing = ref(false)
+// AlertDialogAction closes the dialog on click, which nulls clearTarget via
+// @update:open *before* the @click handler below runs — same ordering trap
+// CategoriesView.vue documents. The plain variable survives it.
+let pendingClear = null
+
+function openClear(table) {
+  clearTarget.value = table
+  pendingClear = table
+}
+
+async function onClearVisitConfirm() {
+  const target = pendingClear
+  if (!target) return
+
+  clearing.value = true
+  try {
+    await tables.clearVisit(target.id)
+    toast.success(`Bill Meja ${target.nomorMeja} dikosongkan`)
+  } catch (err) {
+    toast.error(formatApiError(err))
+  } finally {
+    clearing.value = false
+    pendingClear = null
+  }
+}
+
 onMounted(() => {
   load()
   tables.fetchAll()
@@ -76,7 +118,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl space-y-8">
+  <div class="mx-auto max-w-4xl space-y-8">
     <div>
       <h1 class="text-lg font-semibold tracking-tight">Dashboard</h1>
       <p class="text-sm text-muted-foreground">Ringkasan hari ini.</p>
@@ -97,7 +139,7 @@ onMounted(() => {
           <span class="font-semibold">{{ overview.pendingVerifCount }}</span>
           pembayaran QRIS menunggu diverifikasi
         </p>
-        <span class="shrink-0 text-xs font-medium text-primary">Cek sekarang →</span>
+        <span class="shrink-0 text-xs font-medium text-primary-strong">Cek sekarang →</span>
       </button>
 
       <!-- The three numbers an admin actually opens this page to see, side
@@ -236,28 +278,65 @@ onMounted(() => {
           Belum ada meja aktif.
         </div>
         <div v-else class="grid gap-2 sm:grid-cols-2">
-          <label
+          <div
             v-for="t in activeTables"
             :key="t.id"
             class="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
           >
-            <span>Meja {{ t.nomorMeja }}</span>
+            <label :for="`bill-open-${t.id}`" class="flex-1 cursor-pointer">
+              Meja {{ t.nomorMeja }}
+            </label>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="gap-1.5 text-muted-foreground"
+              @click="openClear(t)"
+            >
+              <EraserIcon class="size-3.5" />
+              Kosongkan
+            </Button>
             <Switch
+              :id="`bill-open-${t.id}`"
               :model-value="t.isBillOpen"
               :disabled="billOpenBusyId === t.id"
               @update:model-value="(v) => onToggleBillOpen(t, v)"
             />
-          </label>
+          </div>
         </div>
       </div>
 
       <router-link
         :to="{ name: 'laporan' }"
-        class="flex items-center gap-1.5 text-sm text-primary hover:underline"
+        class="flex items-center gap-1.5 text-sm text-primary-strong hover:underline"
       >
         <ClipboardListIcon class="size-3.5" />
         Lihat laporan lengkap &amp; rentang tanggal lain
       </router-link>
     </template>
+
+    <AlertDialog
+      :open="!!clearTarget"
+      @update:open="(v) => !v && (clearTarget = null)"
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle
+            >Kosongkan bill Meja {{ clearTarget?.nomorMeja }}?</AlertDialogTitle
+          >
+          <AlertDialogDescription>
+            Meja dianggap selesai dipakai: bill yang dilihat customer di meja
+            ini kembali kosong, dan penanda "belum minta bayar" ikut dimatikan.
+            Pesanan lamanya tetap tersimpan di Riwayat Aktivitas dan laporan —
+            yang direset hanya tampilan bill mejanya.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Batal</AlertDialogCancel>
+          <AlertDialogAction :disabled="clearing" @click="onClearVisitConfirm">
+            Kosongkan
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

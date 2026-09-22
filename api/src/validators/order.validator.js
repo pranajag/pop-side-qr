@@ -24,11 +24,18 @@ const createOrderSchema = z.object({
   idempotencyKey: z.string().uuid().optional(),
   // Member auto-join: a customer opting in on public checkout, not staff
   // entering it for them — earns points same as createManualOrder's own
-  // customerPhone, but this is the ONLY thing a customer can set about
-  // their own membership here. No discount/points-redemption field exists
-  // on this schema on purpose (confirmed with the store owner): spending
-  // points stays staff-mediated in Pesanan Manual, same as manual discount
-  // already is — a customer can join and earn here, never redeem here.
+  // customerPhone, and since 2026-09-21 also applies the tier discount
+  // those points already qualify for (order.service.js's createOrder, via
+  // customerService.resolveMemberDiscount).
+  //
+  // This phone number stays the ONLY thing a customer can set about their
+  // own membership: there is deliberately no discount or percentage field
+  // on this schema, because the discount is looked up from the customer's
+  // stored points server-side. The rule that a customer must never set
+  // their own price is intact — what changed is only that qualifying for a
+  // tier now pays off here too, not just when staff apply it in Pesanan
+  // Manual. Points are a threshold, not a currency: a tier discount does
+  // not spend them.
   customerPhone: z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(20).optional()),
 });
 

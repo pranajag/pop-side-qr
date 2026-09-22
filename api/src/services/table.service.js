@@ -3,6 +3,7 @@ const QRCode = require('qrcode');
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const { isForeignKeyError, isUniqueConstraintError } = require('../utils/prismaErrors');
+const { NON_TERMINAL_STATUSES } = require('../utils/orderStatus');
 
 // Sprint 3 serves GET /t/:token on public-web to resolve a scanned table —
 // this is the contract that route must honor once it exists.
@@ -173,6 +174,41 @@ async function setBillOpen(id, isBillOpen) {
   return withUrl(table);
 }
 
+// Ends the table's current visit, so its bill starts empty for the next
+// group instead of still listing the one that already left. Until now a
+// visit only ever reset implicitly, on the first order of a genuinely free
+// table (order.service.js's bumpVisitIfTableIsFree) — which means a table
+// that finished serving and was never reused kept showing the old bill
+// indefinitely.
+//
+// Refuses while orders are still in flight: those are live kitchen/payment
+// work, and dropping them off the bill would just lose track of them rather
+// than resolve them.
+async function clearVisit(id) {
+  const existing = await prisma.table.findUnique({ where: { id } });
+  if (!existing) {
+    throw new AppError(404, 'Meja tidak ditemukan');
+  }
+
+  const activeCount = await prisma.order.count({
+    where: { tableId: id, status: { in: NON_TERMINAL_STATUSES } },
+  });
+  if (activeCount > 0) {
+    throw new AppError(
+      409,
+      `Meja ini masih punya ${activeCount} pesanan berjalan. Selesaikan atau batalkan dulu sebelum mengosongkan meja.`
+    );
+  }
+
+  const table = await prisma.table.update({
+    where: { id },
+    // isBillOpen resets with it — a cleared table is by definition not
+    // waiting to pay any more.
+    data: { currentVisitStartedAt: new Date(), isBillOpen: false },
+  });
+  return withUrl(table);
+}
+
 async function generateQrImage(id) {
   const table = await prisma.table.findUnique({ where: { id } });
   if (!table) {
@@ -208,4 +244,4 @@ async function verifyToken(token) {
   return { id: table.id, nomorMeja: table.nomorMeja, currentVisitStartedAt: table.currentVisitStartedAt };
 }
 
-module.exports = { list, create, update, remove, resetToken, setBillOpen, generateQrImage, verifyToken };
+module.exports = { list, create, update, remove, resetToken, setBillOpen, clearVisit, generateQrImage, verifyToken };

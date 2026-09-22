@@ -21,6 +21,7 @@ router.put('/:id', validateIdParam, validate(updateTableSchema), tableController
 router.delete('/:id', validateIdParam, tableController.remove);
 router.post('/:id/reset-token', validateIdParam, tableController.resetToken);
 router.patch('/:id/bill-open', validateIdParam, validate(setBillOpenSchema), tableController.setBillOpen);
+router.post('/:id/clear-visit', validateIdParam, tableController.clearVisit);
 router.get('/:id/qr', validateIdParam, tableController.qrImage);
 
 module.exports = router;

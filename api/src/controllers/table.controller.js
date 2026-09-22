@@ -31,6 +31,11 @@ async function setBillOpen(req, res) {
   res.json({ table });
 }
 
+async function clearVisit(req, res) {
+  const table = await tableService.clearVisit(req.params.id);
+  res.json({ table });
+}
+
 async function qrImage(req, res) {
   const buffer = await tableService.generateQrImage(req.params.id);
   res.set('Content-Type', 'image/png');
@@ -52,4 +57,4 @@ async function verifyToken(req, res) {
   res.json({ table });
 }
 
-module.exports = { list, create, update, remove, resetToken, setBillOpen, qrImage, verifyToken };
+module.exports = { list, create, update, remove, resetToken, setBillOpen, clearVisit, qrImage, verifyToken };

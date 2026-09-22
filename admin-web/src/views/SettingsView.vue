@@ -234,7 +234,7 @@ async function onSave() {
 </script>
 
 <template>
-  <div class="max-w-2xl space-y-6">
+  <div class="mx-auto max-w-2xl space-y-6">
     <div>
       <h1 class="text-lg font-semibold tracking-tight">Pengaturan</h1>
       <p class="text-sm text-muted-foreground">

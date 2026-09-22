@@ -192,7 +192,7 @@ onMounted(() => useNotificationsStore().markLaporanSeen())
 </script>
 
 <template>
-  <div class="max-w-4xl space-y-6">
+  <div class="mx-auto max-w-4xl space-y-6">
     <div>
       <h1 class="text-lg font-semibold tracking-tight">Laporan Pendapatan</h1>
       <p class="text-sm text-muted-foreground">

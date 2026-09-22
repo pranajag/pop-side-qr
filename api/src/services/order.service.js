@@ -4,18 +4,16 @@ const { generateOrderCode } = require('../utils/orderCode');
 const { isUniqueConstraintError } = require('../utils/prismaErrors');
 const { resolveProductVariants } = require('../utils/productVariants');
 const { jakartaDayBoundsUTC } = require('../utils/jakartaTime');
+const { NON_TERMINAL_STATUSES } = require('../utils/orderStatus');
 const tableService = require('./table.service');
 const paymentProof = require('./paymentProof.service');
 const customerService = require('./customer.service');
+const settingsService = require('./settings.service');
 const webhookService = require('./webhook.service');
 const shiftService = require('./shift.service');
 
 const MAX_CODE_ATTEMPTS = 5;
 const KODE_ORDER_PATTERN = /^ORD-\d{8}-[A-Z0-9]{4}$/;
-// Anything not yet completed/cancelled — used to decide whether a table is
-// still "occupied" by whoever placed its most recent order (see
-// bumpVisitIfTableIsFree below).
-const NON_TERMINAL_STATUSES = ['pending', 'waiting_verif', 'confirmed', 'cooking', 'ready'];
 
 // A table's "visit" is the run of orders from one seating, with no schema
 // concept of its own — approximated here as "since the last time this table
@@ -105,21 +103,13 @@ async function buildOrderItems(tx, items) {
   return { orderItemsData, totalHarga };
 }
 
-// Tax/service charge, both optional and 0 by default (StoreSetting) — folds
-// straight into totalHarga so every already-built system keyed off it
-// (revenue reports, shift cash reconciliation, loyalty points, webhooks)
-// keeps working with zero changes of its own; taxAmount/serviceChargeAmount
-// are kept only so a receipt can show the breakdown.
-// baseAmount is the subtotal AFTER discount (manual orders) — tax/service
-// apply to what's actually being charged, not the pre-discount price.
-async function computeTaxAndService(tx, baseAmount) {
-  const settings = await tx.storeSetting.findUnique({ where: { id: 1 } });
-  const pajakPersen = settings ? Number(settings.pajakPersen) : 0;
-  const serviceChargePersen = settings ? Number(settings.serviceChargePersen) : 0;
-  const taxAmount = Math.round(baseAmount * (pajakPersen / 100));
-  const serviceChargeAmount = Math.round(baseAmount * (serviceChargePersen / 100));
-  return { taxAmount, serviceChargeAmount, totalHarga: baseAmount + taxAmount + serviceChargeAmount };
-}
+// Tax/service charge folds straight into totalHarga so every already-built
+// system keyed off it (revenue reports, shift cash reconciliation, loyalty
+// points, webhooks) keeps working with zero changes of its own;
+// taxAmount/serviceChargeAmount are kept only so a receipt can show the
+// breakdown. The arithmetic itself now lives in settings.service.js, shared
+// with the checkout preview so both quote the same total.
+const { computeTaxAndService } = settingsService;
 
 async function createOrder({ token, metode, catatan, items, idempotencyKey, customerPhone }) {
   const table = await tableService.verifyToken(token);
@@ -145,19 +135,40 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
       const created = await prisma.$transaction(async (tx) => {
         await bumpVisitIfTableIsFree(tx, table.id);
         const { orderItemsData, totalHarga: subtotal } = await buildOrderItems(tx, items);
-        const { taxAmount, serviceChargeAmount, totalHarga } = await computeTaxAndService(tx, subtotal);
+
+        // Member discount: the tier the customer's *already banked* points
+        // qualify them for, resolved from the database off the phone number
+        // alone. The request never carries a price or a percentage, so this
+        // stays inside AGENTS.md's rule that a customer can't set their own
+        // price — the same rule the staff-entered discount on manual orders
+        // follows from the other direction.
+        //
+        // Deliberately the same shape cart.service.js quotes on the
+        // checkout screen, in the same order (discount first, then tax and
+        // service on the remainder), so what was previewed is what gets
+        // charged.
+        const { tier, discountAmount } = await customerService.resolveMemberDiscount(
+          tx,
+          customerPhone,
+          subtotal
+        );
+        const afterDiscount = subtotal - discountAmount;
+        const { taxAmount, serviceChargeAmount, totalHarga } = await computeTaxAndService(tx, afterDiscount);
 
         // Member auto-join: the customer's own opt-in on public checkout,
         // not staff entering it on their behalf (createManualOrder's own
-        // customerPhone). Earning only — see this schema field's own
-        // comment in order.validator.js for why redemption never lives
-        // here. pointsEarned is snapshotted now but NOT credited yet —
-        // unlike a manual order (already 'confirmed', payment already in
-        // hand at creation), this one starts 'pending'/'waiting_verif' and
-        // might never actually get paid. orderManagement.service.js's
-        // confirmPayment credits it at the moment a kasir actually
-        // confirms payment, the same snapshot updateStatus's void path
-        // already claws back with reversePoints.
+        // customerPhone). pointsEarned is snapshotted now but NOT credited
+        // yet — unlike a manual order (already 'confirmed', payment already
+        // in hand at creation), this one starts 'pending'/'waiting_verif'
+        // and might never actually get paid.
+        // orderManagement.service.js's confirmPayment credits it at the
+        // moment a kasir actually confirms payment, the same snapshot
+        // updateStatus's void path already claws back with reversePoints.
+        //
+        // Qualifying for a tier does not spend points: the discount is a
+        // standing benefit of the balance, so the balance is untouched here
+        // and keeps earning below, exactly as Pesanan Manual already
+        // behaves for the same customer.
         let customer = null;
         let pointsEarned = 0;
         if (customerPhone) {
@@ -174,6 +185,12 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
             status: 'pending',
             metode,
             totalHarga,
+            discountAmount,
+            // Reads as "Diskon (Member 1% (≥ 5 poin))" wherever a receipt or
+            // the tracking page wraps it in its own "Diskon" label, and
+            // matches the phrasing Pesanan Manual already writes for the
+            // staff-applied version of the same discount.
+            discountReason: tier ? `Member ${tier.discountPercent}% (≥ ${tier.minPoints} poin)` : null,
             taxAmount,
             serviceChargeAmount,
             catatan,

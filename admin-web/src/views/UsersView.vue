@@ -28,6 +28,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -186,7 +187,7 @@ async function onDeleteConfirm() {
             Belum ada akun.
           </TableEmpty>
           <TableRow v-for="user in store.items" :key="user.id">
-            <TableCell class="font-medium">
+            <TableCell class="font-medium" data-label="Username">
               {{ user.username }}
               <span
                 v-if="user.id === auth.user?.id"
@@ -194,21 +195,21 @@ async function onDeleteConfirm() {
                 >(kamu)</span
               >
             </TableCell>
-            <TableCell>
+            <TableCell data-label="Role">
               <Badge variant="outline">{{
                 user.role === 'admin' ? 'Admin' : 'Kasir'
               }}</Badge>
             </TableCell>
-            <TableCell>
+            <TableCell data-label="Status">
               <Badge :variant="user.isActive ? 'default' : 'secondary'">
                 {{ user.isActive ? 'Aktif' : 'Nonaktif' }}
               </Badge>
             </TableCell>
-            <TableCell>
+            <TableCell data-label="PIN">
               <span v-if="user.hasPin" class="text-xs text-status-completed">Sudah diset</span>
               <span v-else class="text-xs text-muted-foreground">Belum diset</span>
             </TableCell>
-            <TableCell class="text-right">
+            <TableCell class="text-right" data-label="Aksi">
               <Button variant="ghost" size="icon" @click="openEdit(user)">
                 <PencilIcon class="size-4" />
               </Button>
@@ -232,6 +233,10 @@ async function onDeleteConfirm() {
           <DialogTitle>{{
             editingId ? 'Ubah Akun' : 'Tambah Akun'
           }}</DialogTitle>
+          <DialogDescription>
+            Role menentukan apa yang bisa diakses: kasir hanya menangani
+            pesanan, admin bisa mengelola menu, laporan, dan akun.
+          </DialogDescription>
         </DialogHeader>
         <form id="user-form" class="space-y-4" @submit.prevent="onSubmit">
           <div class="space-y-2">
