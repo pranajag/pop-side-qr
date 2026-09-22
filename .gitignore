@@ -18,3 +18,7 @@ logs/
 # Local-only MySQL 8.4 data dir (see AGENTS.md "Database Lokal") — never
 # commit actual database files.
 .mysql-data/
+
+# Local AI coding-assistant workspace (dev-server launch config, worktrees,
+# task locks). Machine-specific tooling, not part of the app.
+.claude/
