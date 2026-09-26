@@ -1,4 +1,7 @@
 # Render Blueprint — API Popside (Express + Socket.IO), paket gratis.
+# ALTERNATIF, TIDAK DIPAKAI: Blueprint Render meminta kartu kredit walau
+# paketnya gratis, dan kartu pemilik ditolak bank — API berjalan di Railway
+# (AGENTS.md "Hosting demo"). Disimpan untuk kalau kelak ada kartu.
 # Dipakai lewat Render Dashboard -> New -> Blueprint -> repo ini (branch demo).
 #
 # Rahasia (SESSION_SECRET, CSRF_SECRET, kunci enkripsi) dibuat acak oleh Render

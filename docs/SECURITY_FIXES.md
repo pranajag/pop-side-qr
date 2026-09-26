@@ -4,7 +4,7 @@ Hardening keamanan dikerjakan dalam tiga tahap:
 
 1. **Pass audit A–F** (21–25 September) — berdasarkan prompt audit "Senior Application Security Engineer", ditambah pengetatan database 23 September.
 2. **Keputusan pemilik** (26 September) — 10 poin yang di pass pertama berstatus "butuh keputusan" sudah diputuskan pemilik dan dikerjakan. Ringkasannya di [Keputusan pemilik](#keputusan-pemilik-26-september).
-3. **Realtime & hosting demo** (26 September) — notifikasi realtime (Socket.IO) dan persiapan deploy Vercel + Render + Aiven. Lihat [bagian G](#g-realtime--hosting).
+3. **Realtime & hosting demo** (26–27 September) — notifikasi realtime (Socket.IO) dan deploy ke Vercel (dua website) + Railway (API dan MySQL). Lihat [bagian G](#g-realtime--hosting).
 
 Perbaikan bug logika bisnis ada di [`LOGIC_BUGS_FIX.md`](LOGIC_BUGS_FIX.md).
 
@@ -74,7 +74,7 @@ Tes integrasi (`tests/integrasi.test.js`) butuh MySQL hidup dan `DIRECT_URL` di 
 | Poin | Status | Keterangan |
 |---|---|---|
 | Session store + cookie `__Host-popside.sid` | **Diperbaiki** | Lihat [rincian 5](#5-sesi-disimpan-di-mysql). Redis tidak dipakai — tidak ada di tech stack AGENTS.md; tujuannya (sesi tidak hilang saat restart, tidak menumpuk di memori) tercapai dengan MySQL. |
-| `helmet` + HSTS | Sudah ada | CSP, HSTS, X-Frame-Options, nosniff (pentest #11). Di hosting, header yang sama dipasang Vercel untuk kedua frontend ([rincian 21](#21-hosting-demo-vercel--render--aiven)). |
+| `helmet` + HSTS | Sudah ada | CSP, HSTS, X-Frame-Options, nosniff (pentest #11). Di hosting, header yang sama dipasang Vercel untuk kedua frontend ([rincian 21](#21-hosting-demo-vercel--railway)). |
 | `trust proxy` yang benar | **Diperbaiki** | Lihat [rincian 6](#6-trust-proxy). |
 | RBAC di setiap route admin | Sudah ada | `requireRole` di setiap router admin (tes memeriksa semua file route); kasir mendapat 403 di endpoint khusus admin (pentest #3); hapus produk khusus admin. |
 | PIN void: per akun, 3x salah kunci 15 menit, tercatat | **Diperbaiki** | Lihat [rincian 7](#7-pin-void). |
@@ -99,11 +99,11 @@ Tes integrasi (`tests/integrasi.test.js`) butuh MySQL hidup dan `DIRECT_URL` di 
 | Koneksi WebSocket dari situs lain | Aman | Origin dicek di setiap koneksi baru (pentest #16). |
 | Banjir koneksi / pesan WebSocket | Aman | Maks 1.000 koneksi sekaligus, pesan maks 10 KB, maks 10 order per koneksi. |
 | Status order orang lain lewat realtime | Aman | Hanya perangkat pemesan yang bisa berlangganan (pentest #14). |
-| Cookie sesi di domain hosting yang berbeda | Aman | `/api` diteruskan Vercel → cookie tetap first-party `__Host-`, `sameSite=strict`. [Rincian 21](#21-hosting-demo-vercel--render--aiven). |
+| Cookie sesi di domain hosting yang berbeda | Aman | `/api` diteruskan Vercel → cookie tetap first-party `__Host-`, `sameSite=strict`. [Rincian 21](#21-hosting-demo-vercel--railway). |
 | IP palsu lewat `X-Forwarded-For` | Aman | Batas yang paling penting tidak bergantung IP. |
 | Disk hosting tidak permanen | Aman | `UPLOAD_DRIVER=database`. [Rincian 19](#19-upload-di-hosting-database). |
-| Rahasia produksi | Aman | Dibuat Render, tidak pernah ada di repo; `DATABASE_URL` diisi pemilik. |
-| Akun database hosting | Aman | Akun aplikasi hanya DML (tabel log: baca + tambah saja), TLS dengan verifikasi sertifikat CA. |
+| Rahasia produksi | Aman | Dibuat acak oleh skrip penyiapan, dikirim ke variabel Railway lewat stdin — tidak pernah di repo, layar, maupun chat. |
+| Database hosting | Aman | MySQL Railway hanya di jaringan privat (tidak ada alamat internet); akun aplikasi hanya DML (tabel log: baca + tambah saja). |
 
 ## Rincian perbaikan
 
@@ -160,7 +160,7 @@ Tes: "sesi: tersimpan di database…", "logout: menghapus cookie sesi…".
 
 ### 6. trust proxy
 
-`app.set('trust proxy', …)` sekarang hanya aktif kalau `TRUST_PROXY` diisi di `.env` (jumlah hop proxy, biasanya `1`). Tanpa reverse proxy, biarkan kosong: `trust proxy` yang aktif tanpa proxy membuat klien bisa memalsukan IP lewat header `X-Forwarded-For` dan lolos dari semua rate limit. Hosting demo memakai `2` (Vercel → Render); akibatnya bagi yang menembak Render langsung, lihat [rincian 21](#21-hosting-demo-vercel--render--aiven). Tes: "trust proxy: mati kecuali diatur lewat TRUST_PROXY".
+`app.set('trust proxy', …)` sekarang hanya aktif kalau `TRUST_PROXY` diisi di `.env` (jumlah hop proxy, biasanya `1`). Tanpa reverse proxy, biarkan kosong: `trust proxy` yang aktif tanpa proxy membuat klien bisa memalsukan IP lewat header `X-Forwarded-For` dan lolos dari semua rate limit. Hosting demo memakai `2` (Vercel → Railway); akibatnya bagi yang menembak Railway langsung, lihat [rincian 21](#21-hosting-demo-vercel--railway). Tes: "trust proxy: mati kecuali diatur lewat TRUST_PROXY".
 
 ### 7. PIN void
 
@@ -174,7 +174,7 @@ Header `authorization`, `cookie`, `set-cookie`, `x-csrf-token`, dan `x-api-key` 
 
 Tabel `order_status_log` (halaman Riwayat Aktivitas) dijaga trigger database (migrasi `20260925091000_log_status_append_only`): `UPDATE` selalu ditolak, `DELETE` ditolak untuk semua akun kecuali akun perawatan `popside_migrate` (dipakai pentest untuk menghapus order uji buatannya sendiri). Akun aplikasi tidak bisa mengubah atau menghapus jejak siapa mengubah status apa, walau ada celah di aplikasi.
 
-Migrasi ini harus dijalankan sekali sebagai `root` (MySQL 8 dengan binary log mewajibkan hak SUPER untuk membuat trigger) — perintahnya tertulis di file migrasinya. Di MySQL terkelola (Aiven) yang tidak mengizinkan trigger, perlindungan yang sama dipasang lewat hak akses tabel: akun aplikasi hanya punya `SELECT` + `INSERT` di tabel log ([rincian 21](#21-hosting-demo-vercel--render--aiven)). Tes: integrasi "log aktivitas: akun aplikasi tidak bisa mengubah atau menghapus log".
+Migrasi ini harus dijalankan sekali sebagai `root` (MySQL 8 dengan binary log mewajibkan hak SUPER untuk membuat trigger) — perintahnya tertulis di file migrasinya. Di MySQL terkelola (Aiven) yang tidak mengizinkan trigger, perlindungan yang sama dipasang lewat hak akses tabel: akun aplikasi hanya punya `SELECT` + `INSERT` di tabel log ([rincian 21](#21-hosting-demo-vercel--railway)). Tes: integrasi "log aktivitas: akun aplikasi tidak bisa mengubah atau menghapus log".
 
 ### 10. Database (pengetatan 23 September)
 
@@ -204,7 +204,7 @@ Tes: integrasi "OTP member: kode hanya untuk member bertier, sekali pakai, salah
 - Pencarian nomor persis lewat sidik HMAC-SHA256 (`DATA_HASH_KEY`) — blind index `telepon_hash` yang unik. Pencarian staff "…7890" lewat 4 digit terakhir (`telepon_akhir`); pencarian potongan di tengah nomor tidak bisa lagi.
 - API menolak start kalau kunci tidak ada, bukan 32 byte, atau keduanya sama.
 - Data yang sudah ada dienkripsi dengan `npm run db:enkripsi-telepon`.
-- **Kunci hilang = nomor tidak bisa dibaca lagi.** Simpan salinannya terpisah dari backup database. Di hosting, kunci dibuat Render — salin dari halaman Environment service-nya.
+- **Kunci hilang = nomor tidak bisa dibaca lagi.** Simpan salinannya terpisah dari backup database. Di hosting, kunci ada di variabel Railway, dan cadangannya ditulis skrip penyiapan ke folder Documents pemilik.
 
 Tes: security "enkripsi: …" (3 tes); integrasi "nomor HP member: tidak ada nomor polos di database, tetap bisa dicari", "reservasi: nomor HP customer tersimpan terenkripsi".
 
@@ -249,7 +249,7 @@ Tes: logic "validasi strict: setiap schema request menolak field yang tidak dike
 
 - Tabel `audit_log`: setiap aksi tulis staff (`POST/PUT/PATCH/DELETE`) dan `GET` yang sensitif (ekspor laporan, melihat bukti bayar) — siapa, peran, aksi, hasil (berhasil/ditolak), IP, waktu.
 - Isi request ikut dicatat setelah disensor: field bernama pass/pin/kode/secret/token/otp/csrf menjadi `[disamarkan]`, nomor HP disamarkan, teks dipotong 4.000 karakter.
-- Append-only: trigger database (migrasi `20260926093000_audit_log_append_only`), atau hak akses tabel di MySQL terkelola ([rincian 21](#21-hosting-demo-vercel--render--aiven)).
+- Append-only: trigger database (migrasi `20260926093000_audit_log_append_only`), atau hak akses tabel di MySQL terkelola ([rincian 21](#21-hosting-demo-vercel--railway)).
 - Halaman Log Audit khusus admin (filter tanggal & hasil); kasir mendapat 403.
 
 Tes: integrasi "log audit: aksi staff tercatat tanpa rahasia; akun aplikasi tidak bisa mengubah/menghapusnya"; pentest #15.
@@ -262,7 +262,7 @@ Tes: integrasi "reservasi: DP di bawah aturan toko hanya boleh admin, wajib alas
 
 ### 19. Upload di hosting: database
 
-- Render gratis tidak punya disk permanen. `UPLOAD_DRIVER=database` menyimpan foto menu, QRIS, dan bukti bayar di tabel `berkas_upload` (`MEDIUMBLOB`) — aturan upload sama persis: magic bytes, maks 2 MB, nama acak, dan kategori file tidak bisa ditukar.
+- Disk container hosting (Render maupun Railway) tidak permanen. `UPLOAD_DRIVER=database` menyimpan foto menu, QRIS, dan bukti bayar di tabel `berkas_upload` (`MEDIUMBLOB`) — aturan upload sama persis: magic bytes, maks 2 MB, nama acak, dan kategori file tidak bisa ditukar.
 - Bukti bayar dikirim dengan `Cache-Control: private, no-store`, hanya lewat route ber-login. Foto menu/QRIS publik boleh di-cache (immutable + ETag).
 
 File: `api/src/lib/imageStore.js`. Tes: integrasi "upload mode database: aturan sama, bukti bayar tidak di-cache, kategori tidak bisa ditukar".
@@ -276,16 +276,17 @@ File: `api/src/lib/imageStore.js`. Tes: integrasi "upload mode database: aturan 
 
 File: `api/src/realtime.js`. Tes: integrasi "realtime: staff butuh token sah; customer hanya bisa berlangganan order miliknya", "realtime: jumlah koneksi dibatasi, origin asing & pesan raksasa ditolak"; pentest #16 (7 serangan).
 
-### 21. Hosting demo (Vercel + Render + Aiven)
+### 21. Hosting demo (Vercel + Railway)
 
-- Kedua frontend memanggil `/api` di domainnya sendiri, lalu Vercel meneruskannya ke Render (rewrite di `vercel.json`). Cookie sesi, CSRF, dan cookie perangkat tetap first-party `__Host-` + `sameSite=strict` — tidak perlu dilonggarkan ke `SameSite=None`. WebSocket langsung ke Render dengan token ([rincian 20](#20-realtime-socketio)).
+- Kedua frontend memanggil `/api` di domainnya sendiri, lalu Vercel meneruskannya ke Railway (rewrite di `vercel.json`). Cookie sesi, CSRF, dan cookie perangkat tetap first-party `__Host-` + `sameSite=strict` — tidak perlu dilonggarkan ke `SameSite=None` (dicek di produksi: `__Host-popside.sid` dan `__Host-popside.csrf-token` terpasang `HttpOnly; Secure; SameSite=Strict` di domain website). WebSocket langsung ke Railway dengan token ([rincian 20](#20-realtime-socketio)); di produksi, origin kedua website tersambung dan origin lain ditolak.
 - Header dari Vercel: CSP ketat (`script-src 'self'` + hash satu-satunya skrip inline, `connect-src` hanya domain sendiri dan API), HSTS, `X-Frame-Options: DENY`, nosniff, Permissions-Policy.
-- `TRUST_PROXY=2`. Siapa pun yang menembak Render langsung bisa memalsukan `X-Forwarded-For`, jadi batas yang paling penting tidak bergantung IP: gagal login 20/15 menit per username, order 20/10 menit per meja, panggil staff 10/10 menit per meja, OTP per nomor.
-- Rahasia (`SESSION_SECRET`, `CSRF_SECRET`, `QR_HMAC_SECRET`, `DATA_ENC_KEY`, `DATA_HASH_KEY`) dibuat acak oleh Render (`generateValue` di `render.yaml`) dan tidak pernah ada di repo. `DATABASE_URL` diisi pemilik sendiri saat membuat Blueprint.
-- Database Aiven disiapkan `npm run siapkan-produksi` dari laptop pemilik (password admin database hanya diketik di terminal): akun `popside_app` (DML saja; tabel log hanya `SELECT` + `INSERT`) dan `popside_migrate` (hanya untuk migrasi dari laptop), password acak baru, TLS dengan verifikasi sertifikat CA Aiven (`sslaccept=strict`). Path sertifikat dibuat absolut untuk Prisma Client (`api/src/utils/urlDatabase.js`), karena penafsiran path relatif saat runtime berbeda antar OS.
-- Data yang disalin dari laptop (`prisma/data-demo.json`) hanya menu, meja (token QR dibuat ulang), tier, dan info toko publik — tanpa member, order, akun, log, atau harga modal. File ini ikut di repo publik, jadi tidak boleh memuat data pribadi.
+- `TRUST_PROXY=2`. Siapa pun yang menembak Railway langsung bisa memalsukan `X-Forwarded-For`, jadi batas yang paling penting tidak bergantung IP: gagal login 20/15 menit per username, order 20/10 menit per meja, panggil staff 10/10 menit per meja, OTP per nomor. Service API dikunci 1 replika, karena batas-batas itu dan kunci PIN disimpan di memori proses.
+- Rahasia (`SESSION_SECRET`, `CSRF_SECRET`, `QR_HMAC_SECRET`, `DATA_ENC_KEY`, `DATA_HASH_KEY`) dibuat acak 32 byte oleh `scripts/siapkan-produksi.js --railway` dan dikirim ke variabel Railway satu per satu lewat stdin — tidak pernah muncul di layar, argumen perintah, repo, maupun chat. Cadangannya ditulis ke folder Documents pemilik. Skrip menolak berjalan lagi kalau service sudah punya kunci, supaya kunci tidak pernah tertimpa (kunci baru = data terenkripsi hilang).
+- Database produksi: MySQL Railway di region yang sama dengan API, **hanya bisa dijangkau lewat jaringan privat Railway** (`mysql.railway.internal`) — lebih tertutup dibanding database terkelola yang terbuka ke internet. Akun `popside_app` (DML saja; tabel log hanya `SELECT` + `INSERT`) dan `popside_migrate` dengan password acak; diuji sebelum dipakai: akun aplikasi bisa membaca data, tidak bisa mengubah `audit_log`. Untuk memindahkan data dari Aiven, dibuka TCP proxy sementara (koneksi TLS), lalu dihapus dan dipastikan tertutup.
+- Database cadangan Aiven (Bengaluru): TLS dengan verifikasi sertifikat CA Aiven (`sslaccept=strict`), path sertifikat dibuat absolut untuk Prisma Client (`api/src/utils/urlDatabase.js`) karena penafsiran path relatif saat runtime berbeda antar OS. Tidak dipakai lagi sejak 27 September (±240 ms per query dari Railway Singapura).
+- Data yang disalin dari laptop (`prisma/data-demo.json`) hanya menu, meja (token QR dibuat ulang), tier, dan info toko publik — tanpa member, order, akun, log, atau harga modal. File ini ikut di repo publik, jadi tidak boleh memuat data pribadi. `api/.railwayignore` memastikan `.env` lokal dan folder `uploads/` (bukti bayar) tidak ikut terunggah saat deploy.
 
-Tes: security "database hosting: sertifikat CA dibaca dari folder prisma/, TLS tetap diverifikasi", "sesi: … cookie __Host- …".
+Pemeriksaan produksi (27 September): health, pengaturan toko, menu, gambar menu & QRIS dari database, cookie `__Host-`, WebSocket (origin sah tersambung, origin lain ditolak), dan *path traversal* di route gambar (404). Rata-rata respons lewat domain website 0,13–0,17 detik. Tes: security "database hosting: sertifikat CA dibaca dari folder prisma/, TLS tetap diverifikasi", "sesi: … cookie __Host- …".
 
 ## npm audit
 
@@ -299,7 +300,7 @@ Tidak ada temuan critical di ketiga paket. `npm audit fix` (tanpa `--force`) tid
 
 ## Dicatat, sengaja tidak diubah
 
-- **Lockout login 5x gagal per 1 menit** (AGENTS.md aturan 8 menyebut 15 menit): sengaja, atas permintaan pemilik — tercatat di `api/src/middleware/rateLimit.js`. Setelah [rincian 2](#2-kunci-rate-limit-dibakukan), variasi spasi atau huruf besar di username tidak lagi memberi jatah baru. Di hosting ada tambahan batas per username yang tidak bergantung IP ([rincian 21](#21-hosting-demo-vercel--render--aiven)).
+- **Lockout login 5x gagal per 1 menit** (AGENTS.md aturan 8 menyebut 15 menit): sengaja, atas permintaan pemilik — tercatat di `api/src/middleware/rateLimit.js`. Setelah [rincian 2](#2-kunci-rate-limit-dibakukan), variasi spasi atau huruf besar di username tidak lagi memberi jatah baru. Di hosting ada tambahan batas per username yang tidak bergantung IP ([rincian 21](#21-hosting-demo-vercel--railway)).
 - **QR statis per meja** — keputusan #1.
 - **Batas diskon manual kasir** — keputusan #10: tetap bisa diatur 0–100% dengan alasan tercatat.
 - **Nama header API key** — lihat bagian D.
@@ -326,5 +327,5 @@ Sepuluh poin yang di pass pertama berstatus "butuh keputusan", beserta keputusan
 
 ### Yang masih menunggu
 
-- **Gateway WhatsApp/SMS untuk OTP di produksi** — butuh akun gateway atas nama toko (isi `OTP_PENGIRIM=http` + `OTP_HTTP_*` di Render). Sampai itu ada, diskon member lewat kasir.
-- **Salinan kunci `DATA_ENC_KEY` & `DATA_HASH_KEY` dari Render** — disimpan pemilik di tempat aman, terpisah dari backup database.
+- **Gateway WhatsApp/SMS untuk OTP di produksi** — butuh akun gateway atas nama toko (isi `OTP_PENGIRIM=http` + `OTP_HTTP_*` di variabel Railway). Sampai itu ada, diskon member lewat kasir.
+- **Cadangan kunci `DATA_ENC_KEY` & `DATA_HASH_KEY`** — file `popside-kunci-produksi-*.txt` di folder Documents pemilik; pindahkan ke password manager atau tempat aman lain, terpisah dari backup database.

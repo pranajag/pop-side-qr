@@ -116,6 +116,15 @@ function deploySebelum(env, batas) {
 }
 
 async function main() {
+  // Kunci aplikasi (DATA_ENC_KEY, dll.) hanya boleh dibuat SEKALI: kunci baru
+  // membuat nomor HP & rahasia 2FA yang sudah terenkripsi tidak bisa dibaca
+  // lagi — dan DATABASE_URL server akan dialihkan ke database skrip ini.
+  if (process.argv.includes('--railway') && railwaySudahPunyaKunci()) {
+    throw new Error(
+      `service Railway ${LAYANAN_RAILWAY} sudah punya kunci aplikasi (DATA_ENC_KEY). Skrip ini tidak akan menimpanya — ` +
+        'lihat AGENTS.md "Hosting demo" untuk mengganti database tanpa mengganti kunci.'
+    );
+  }
   if (!UJI_LOKAL && !process.stdin.isTTY) throw new Error('Jalankan langsung di terminal — password diketik interaktif.');
   if (!UJI_LOKAL && !fs.existsSync(CA)) throw new Error('prisma/aiven-ca.pem belum ada. Unduh "CA certificate" dari Aiven Console dulu.');
 
@@ -273,6 +282,22 @@ function keClipboard(teks) {
 // di argumen perintah (terlihat di daftar proses) atau di layar. Nama
 // variabel dicek dulu, jadi perintah shell-nya hanya berisi teks tetap.
 const LAYANAN_RAILWAY = 'popside-api';
+
+// Hanya memeriksa NAMA variabel yang ada — nilainya tidak pernah dipakai.
+function railwaySudahPunyaKunci() {
+  const r = spawnSync(`npx --yes @railway/cli variable list --json --service ${LAYANAN_RAILWAY}`, {
+    cwd: API,
+    shell: true,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (r.status !== 0) return false;
+  try {
+    return 'DATA_ENC_KEY' in JSON.parse(r.stdout.slice(r.stdout.indexOf('{')));
+  } catch {
+    return false;
+  }
+}
 function keRailway(blok) {
   for (const baris of blok.split('\n')) {
     const i = baris.indexOf('=');

@@ -33,7 +33,7 @@ Kalau AI agent merasa "framework/library lain lebih cocok" — JANGAN diganti se
 popside-qr-system/
 ├── AGENTS.md
 ├── MEMORY.md
-├── render.yaml             # Render Blueprint — API di hosting demo
+├── render.yaml             # Render Blueprint — alternatif hosting API (butuh kartu kredit)
 ├── docs/
 │   ├── PRD.md
 │   ├── PLANNING.md
@@ -46,7 +46,7 @@ popside-qr-system/
 │   ├── prisma/
 │   │   ├── schema.prisma
 │   │   ├── data-demo.json  # menu/meja/tier/info toko untuk database hosting — TANPA data pribadi (repo publik)
-│   │   └── aiven-ca.pem    # sertifikat CA database hosting (bukan rahasia)
+│   │   └── aiven-ca.pem    # sertifikat CA database cadangan Aiven (bukan rahasia)
 │   ├── scripts/            # pentest, audit-db, siapkan-produksi, reset-2fa, dll
 │   ├── src/
 │   │   ├── routes/
@@ -116,24 +116,29 @@ GRANT ALL PRIVILEGES ON popside_qr.* TO 'popside_migrate'@'127.0.0.1';
 
 Pemeriksaan rutin: `cd api && npm test` (aturan bisnis & keamanan; tes integrasinya butuh MySQL hidup + `DIRECT_URL`, dan membersihkan data ujinya sendiri), `npm run db:audit` (kesehatan data, baca-saja), dan `npm run pentest` (simulasi serangan; butuh `PENTEST_ADMIN_USERNAME`/`PENTEST_ADMIN_PASSWORD` + `PENTEST_ADMIN_TOTP_SECRET` karena admin wajib 2FA, opsional `PENTEST_KASIR_USERNAME`/`PENTEST_KASIR_PASSWORD`, dan satu shift aktif untuk akun admin itu supaya tes pembayaran tidak ditolak gerbang shift). Jangan pakai akun admin asli untuk pentest — buat akun uji sementara lalu hapus lagi. Apa saja yang sudah ditutup dan keputusan pemilik: `docs/SECURITY_FIXES.md` dan `docs/LOGIC_BUGS_FIX.md`.
 
-## Hosting demo (Vercel + Render + Aiven)
+## Hosting demo (Vercel + Railway) — berjalan sejak 27 September 2026
 
-| Bagian | Layanan | Konfigurasi |
+| Bagian | Layanan | Alamat / konfigurasi |
 |---|---|---|
-| `public-web` | Vercel, project `popside-menu` | `public-web/vercel.json`, `public-web/.env.production` |
-| `admin-web` | Vercel, project `popside-admin` | `admin-web/vercel.json`, `admin-web/.env.production` |
-| `api` | Render, service `popside-api` (paket gratis, branch `demo`) | `render.yaml` |
-| MySQL | Aiven (paket gratis) | disiapkan `npm run siapkan-produksi` |
+| `public-web` | Vercel, project `popside-menu` | https://popside-menu.vercel.app — `public-web/vercel.json`, `public-web/.env.production` |
+| `admin-web` | Vercel, project `popside-admin` | https://popside-admin.vercel.app — `admin-web/vercel.json`, `admin-web/.env.production` |
+| `api` | Railway project `popside`, service `popside-api` (Singapura, 1 replika) | https://popside-api-production.up.railway.app — variabel di Railway |
+| MySQL | Railway service `MySQL` (MySQL 9.4, Singapura) | hanya jaringan privat `mysql.railway.internal`, tanpa akses publik |
+| Cadangan | Aiven MySQL (Bengaluru) — salinan data 27 Sep dini hari, tidak dipakai lagi | `npm run siapkan-produksi` |
+
+Kenapa begini: Render meminta kartu kredit (Blueprint) dan kartu pemilik ditolak bank; di Railway tidak perlu kartu (trial). Database Aiven di Bengaluru butuh ±240 ms per query dari server Railway Singapura (jalurnya buruk), sehingga aksi staff bisa 1–3 detik; database dipindah ke MySQL Railway di region yang sama (±1 ms per query). `render.yaml` disimpan sebagai alternatif kalau kelak ada kartu.
 
 Aturan yang JANGAN diubah tanpa paham akibatnya:
-- Frontend memanggil `/api` di domainnya sendiri; Vercel meneruskannya ke Render (`rewrites` di `vercel.json`). Karena itu cookie sesi/CSRF/perangkat tetap first-party `__Host-` + `sameSite=strict`. Jangan arahkan frontend langsung ke `onrender.com`, dan jangan longgarkan cookie ke `SameSite=None`.
-- WebSocket langsung ke Render (`VITE_REALTIME_URL`) dengan token 60 detik — bukan lewat Vercel (rewrite tidak meneruskan WebSocket).
-- Kalau domain berubah, ubah bersamaan: `vercel.json` (rewrite + CSP `connect-src`), `.env.production` (`VITE_REALTIME_URL`), dan `CORS_ORIGIN`/`PUBLIC_WEB_URL` di Render.
-- `UPLOAD_DRIVER=database` (disk Render gratis hilang tiap restart) dan `TRUST_PROXY=2` (Vercel → Render). Batas yang paling penting tidak bergantung IP, karena `X-Forwarded-For` bisa dipalsukan oleh yang menembak Render langsung.
-- Rahasia dibuat Render (`generateValue`) dan TIDAK pernah ditulis di repo. `DATA_ENC_KEY`/`DATA_HASH_KEY` di Render harus disalin pemilik ke tempat aman — kalau service dibuat ulang dengan kunci baru, nomor HP & rahasia 2FA yang sudah terenkripsi tidak bisa dibaca lagi.
-- Render tidak menjalankan migrasi (akun aplikasinya memang tidak bisa DDL). Migrasi baru di produksi: jalankan ulang `npm run siapkan-produksi` dari laptop — hak `popside_app` diberikan per tabel, jadi tabel baru juga perlu langkah itu. Password kedua akun berganti setiap kali; perbarui `DATABASE_URL` di Render sesudahnya.
-- Tanpa trigger (MySQL terkelola tidak mengizinkannya), tabel log tetap append-only lewat hak akses: `popside_app` hanya `SELECT` + `INSERT` di `audit_log` dan `order_status_log`.
-- Render gratis tidur setelah ±15 menit tanpa request; buka link beberapa menit sebelum dipakai.
+- Frontend memanggil `/api` di domainnya sendiri; Vercel meneruskannya ke Railway (`rewrites` di `vercel.json`). Karena itu cookie sesi/CSRF/perangkat tetap first-party `__Host-` + `sameSite=strict`. Jangan arahkan frontend langsung ke `railway.app`, dan jangan longgarkan cookie ke `SameSite=None`.
+- WebSocket langsung ke domain Railway (`VITE_REALTIME_URL`) dengan token 60 detik — bukan lewat Vercel (rewrite tidak meneruskan WebSocket).
+- Kalau domain berubah, ubah bersamaan: `vercel.json` (rewrite + CSP `connect-src`), `.env.production` (`VITE_REALTIME_URL`), dan variabel `CORS_ORIGIN`/`PUBLIC_WEB_URL` di Railway.
+- `popside-api` harus tetap **1 replika**: rate limit, kunci PIN, dan koneksi realtime disimpan di memori proses.
+- `UPLOAD_DRIVER=database` (disk container tidak permanen) dan `TRUST_PROXY=2` (Vercel → Railway). Batas yang paling penting tidak bergantung IP, karena `X-Forwarded-For` bisa dipalsukan oleh yang menembak Railway langsung.
+- Deploy ulang API dari `api/`: `npx @railway/cli up --service popside-api --ci` (mengunggah folder lokal; `.railwayignore` menyingkirkan `.env` dan `uploads/`). Start `node src/server.js` dan health check `/api/health` diatur di pengaturan service (lewat Railway API) — `railway.json` tidak terbaca untuk deploy dari CLI.
+- Rahasia hanya ada di variabel Railway, TIDAK pernah di repo; cadangannya di folder Documents pemilik (`popside-kunci-produksi-*.txt`). `DATA_ENC_KEY`/`DATA_HASH_KEY` tidak boleh dibuat ulang — nomor HP & rahasia 2FA yang sudah terenkripsi tidak bisa dibaca dengan kunci baru. Karena itu `siapkan-produksi --railway` menolak berjalan kalau service sudah punya kunci.
+- MySQL Railway tidak bisa dijangkau dari internet. Migrasi baru di produksi: buka TCP proxy sementara untuk service `MySQL` (Settings → Networking, lalu redeploy), jalankan `prisma migrate deploy` dengan `DIRECT_URL` akun `popside_migrate` lewat proxy itu, beri `popside_app` hak di tabel baru (SELECT/INSERT/UPDATE/DELETE; tabel log hanya SELECT/INSERT), lalu hapus lagi proxy-nya.
+- Tanpa trigger, tabel log tetap append-only lewat hak akses: `popside_app` hanya `SELECT` + `INSERT` di `audit_log` dan `order_status_log`.
+- Railway trial: $5 / 30 hari untuk API + MySQL (volume maks 500 MB). Sesudahnya: upgrade paket Railway, atau kembali ke Aiven — salin datanya dulu dari MySQL Railway, lalu isi `DATABASE_URL` dengan `ROLLBACK_DATABASE_URL_AIVEN` di file cadangan.
 - OTP member di produksi butuh gateway WhatsApp/SMS (`OTP_PENGIRIM=http` + `OTP_HTTP_*`). Tanpa itu verifikasi mati dan diskon member lewat kasir.
 
 ## BOLEH
