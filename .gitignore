@@ -28,3 +28,6 @@ backups/
 
 # Folder sementara scripts/siapkan-produksi.js
 api/prisma/.migrasi-ditunda/
+
+# Tautan project Vercel CLI (lokal per mesin)
+.vercel/

@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
+# File lokal Vercel CLI (VERCEL_OIDC_TOKEN) — .env.production tetap ikut repo
+.env*.local
