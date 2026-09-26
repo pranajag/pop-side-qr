@@ -1,0 +1,13 @@
+# Yang TIDAK ikut diunggah `railway up` — rahasia lokal, data customer
+# (bukti bayar, foto upload), dan file sementara. Konfigurasi server diambil
+# dari variabel Railway, dan file upload produksi disimpan di database
+# (UPLOAD_DRIVER=database).
+.env
+.env.*
+!.env.example
+node_modules/
+uploads/
+logs/
+*.log
+prisma/.migrasi-ditunda/
+.vercel/
