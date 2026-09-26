@@ -1,8 +1,12 @@
 export const API_URL =
   import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 
-// Public API — stateless, no session cookie, no CSRF token needed (see
-// api/src/app.js: /api/public/* is mounted ahead of the CSRF middleware).
+// Public API — no login session, no CSRF token needed (see api/src/app.js:
+// /api/public/* is mounted ahead of the CSRF middleware). Cookies ARE sent
+// (credentials: 'include'): the API sets two httpOnly cookies here — the
+// ordering device (only this device can track its orders) and the member
+// OTP verification. JavaScript cannot read either one; they are sameSite
+// strict, so other sites cannot send them.
 async function request(
   path,
   { method = 'GET', body, isFormData = false } = {}
@@ -16,6 +20,7 @@ async function request(
 
   const res = await fetch(`${API_URL}${path}`, {
     method,
+    credentials: 'include',
     headers,
     body:
       body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
@@ -26,6 +31,9 @@ async function request(
     const error = new Error(data?.error || `Request gagal (${res.status})`)
     error.status = res.status
     error.details = data?.details
+    // Machine-readable tag for the few refusals a screen has to react to
+    // structurally (see api/src/utils/AppError.js). Undefined for most.
+    error.code = data?.code
     throw error
   }
   return data

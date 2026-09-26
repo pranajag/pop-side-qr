@@ -12,6 +12,10 @@ import {
   EyeIcon,
   EyeOffIcon,
   LockIcon,
+  ShieldCheckIcon,
+  CopyIcon,
+  CheckIcon,
+  ArrowLeftIcon,
 } from '@lucide/vue'
 
 const auth = useAuthStore()
@@ -75,12 +79,82 @@ function safeRedirectTarget() {
   return { name: auth.user?.role === 'admin' ? 'dashboard' : 'pesanan' }
 }
 
+// Langkah login: 'password' -> (akun wajib 2FA) 'kode-2fa' atau
+// 'setup-2fa' -> 'kode-cadangan' (sekali, setelah 2FA baru dipasang).
+// Keadaan "password benar, menunggu 2FA" disimpan server, bukan di sini —
+// memuat ulang halaman berarti mulai lagi dari password.
+const langkah = ref('password')
+const kode = ref('')
+const pakaiCadangan = ref(false)
+const setupData = ref(null)
+const kodeCadangan = ref([])
+const tersalin = ref(false)
+const sudahDisimpan = ref(false)
+
+function kembaliKePassword(pesan = '') {
+  langkah.value = 'password'
+  kode.value = ''
+  pakaiCadangan.value = false
+  setupData.value = null
+  error.value = pesan
+}
+
+function tanganiError2fa(err) {
+  kode.value = ''
+  // 401 = jeda 5 menit sejak password benar sudah lewat: ulangi dari awal.
+  if (err.status === 401) return kembaliKePassword(err.message)
+  error.value = err.message
+}
+
+async function muatSetup() {
+  setupData.value = null
+  try {
+    setupData.value = await auth.mulaiSetup2fa()
+  } catch (err) {
+    tanganiError2fa(err)
+  }
+}
+
+async function kirimKode() {
+  error.value = ''
+  submitting.value = true
+  try {
+    if (langkah.value === 'setup-2fa') {
+      kodeCadangan.value = await auth.aktifkan2fa(kode.value.trim())
+      langkah.value = 'kode-cadangan'
+    } else {
+      await auth.verifikasi2fa(kode.value.trim())
+      router.replace(safeRedirectTarget())
+    }
+  } catch (err) {
+    tanganiError2fa(err)
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function salinKodeCadangan() {
+  try {
+    await navigator.clipboard.writeText(kodeCadangan.value.join('\n'))
+    tersalin.value = true
+  } catch {
+    tersalin.value = false
+  }
+}
+
 async function onSubmit() {
   if (isLockedOut.value) return
   error.value = ''
   submitting.value = true
   try {
-    await auth.login(username.value, password.value)
+    const berikut = await auth.login(username.value, password.value)
+    if (berikut) {
+      password.value = ''
+      kode.value = ''
+      langkah.value = berikut
+      if (berikut === 'setup-2fa') await muatSetup()
+      return
+    }
     router.replace(safeRedirectTarget())
   } catch (err) {
     if (err.status === 429) {
@@ -113,7 +187,117 @@ async function onSubmit() {
         </p>
       </div>
 
+      <!-- Kode cadangan: ditampilkan SEKALI setelah 2FA baru dipasang. -->
+      <div
+        v-if="langkah === 'kode-cadangan'"
+        class="space-y-4 rounded-lg border bg-card p-6"
+      >
+        <div class="flex items-start gap-3">
+          <ShieldCheckIcon class="mt-0.5 size-5 shrink-0 text-primary" />
+          <div class="space-y-1">
+            <h2 class="text-sm font-semibold">2FA aktif. Simpan kode cadangan ini</h2>
+            <p class="text-sm text-muted-foreground">
+              Kalau HP authenticator hilang, satu kode ini bisa dipakai sekali
+              untuk masuk. Kode ini tidak akan ditampilkan lagi.
+            </p>
+          </div>
+        </div>
+        <ul class="grid grid-cols-2 gap-2 rounded-md bg-muted/50 p-3 font-mono text-sm tabular-nums">
+          <li v-for="k in kodeCadangan" :key="k" class="text-center">{{ k }}</li>
+        </ul>
+        <Button type="button" variant="outline" class="w-full" @click="salinKodeCadangan">
+          <CheckIcon v-if="tersalin" class="size-4" />
+          <CopyIcon v-else class="size-4" />
+          {{ tersalin ? 'Tersalin' : 'Salin semua kode' }}
+        </Button>
+        <label class="flex items-start gap-2 text-sm">
+          <input v-model="sudahDisimpan" type="checkbox" class="mt-0.5 size-4 accent-primary" />
+          <span>Saya sudah menyimpan kode ini di tempat aman (bukan di HP yang sama).</span>
+        </label>
+        <Button type="button" class="w-full" :disabled="!sudahDisimpan" @click="router.replace(safeRedirectTarget())">
+          Lanjut ke dashboard
+        </Button>
+      </div>
+
+      <!-- Langkah 2FA: kode dari aplikasi, atau pasang 2FA dulu. -->
       <form
+        v-else-if="langkah === 'kode-2fa' || langkah === 'setup-2fa'"
+        class="space-y-4 rounded-lg border bg-card p-6"
+        @submit.prevent="kirimKode"
+      >
+        <Alert v-if="error" variant="destructive">
+          <CircleAlertIcon class="size-4" />
+          <AlertTitle>Belum bisa masuk</AlertTitle>
+          <AlertDescription>{{ error }}</AlertDescription>
+        </Alert>
+
+        <template v-if="langkah === 'setup-2fa'">
+          <div class="space-y-1">
+            <h2 class="text-sm font-semibold">Pasang verifikasi 2 langkah (wajib untuk admin)</h2>
+            <p class="text-sm text-muted-foreground">
+              Buka Google Authenticator, Authy, atau Microsoft Authenticator di
+              HP, pilih tambah akun, lalu pindai QR ini.
+            </p>
+          </div>
+          <div class="flex justify-center">
+            <img
+              v-if="setupData"
+              :src="setupData.qrDataUrl"
+              alt="QR kode 2FA untuk aplikasi authenticator"
+              class="size-48 rounded-md border bg-white p-2"
+            />
+            <div v-else class="flex size-48 items-center justify-center rounded-md border">
+              <LoaderCircleIcon class="size-5 animate-spin text-muted-foreground" />
+            </div>
+          </div>
+          <p v-if="setupData" class="text-center text-xs text-muted-foreground">
+            Tidak bisa memindai? Ketik kunci ini di aplikasi:
+            <span class="block pt-1 font-mono text-sm text-foreground select-all">{{ setupData.rahasia }}</span>
+          </p>
+        </template>
+        <div v-else class="space-y-1">
+          <h2 class="text-sm font-semibold">Verifikasi 2 langkah</h2>
+          <p class="text-sm text-muted-foreground">
+            {{ pakaiCadangan ? 'Masukkan salah satu kode cadangan (XXXX-XXXX).' : 'Masukkan kode 6 digit dari aplikasi authenticator.' }}
+          </p>
+        </div>
+
+        <div class="space-y-2">
+          <Label for="kode2fa">{{ pakaiCadangan ? 'Kode cadangan' : 'Kode 6 digit' }}</Label>
+          <Input
+            id="kode2fa"
+            v-model="kode"
+            :inputmode="pakaiCadangan ? 'text' : 'numeric'"
+            autocomplete="one-time-code"
+            :maxlength="pakaiCadangan ? 9 : 6"
+            :placeholder="pakaiCadangan ? 'XXXX-XXXX' : '000000'"
+            class="text-center font-mono text-lg tracking-widest"
+            required
+            autofocus
+          />
+        </div>
+
+        <Button type="submit" class="w-full" :disabled="submitting || !kode.trim()">
+          <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
+          {{ langkah === 'setup-2fa' ? 'Aktifkan & masuk' : 'Masuk' }}
+        </Button>
+        <div class="flex items-center justify-between text-sm">
+          <button type="button" class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground" @click="kembaliKePassword()">
+            <ArrowLeftIcon class="size-3.5" /> Kembali
+          </button>
+          <button
+            v-if="langkah === 'kode-2fa'"
+            type="button"
+            class="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            @click="pakaiCadangan = !pakaiCadangan; kode = ''"
+          >
+            {{ pakaiCadangan ? 'Pakai kode aplikasi' : 'Pakai kode cadangan' }}
+          </button>
+        </div>
+      </form>
+
+      <form
+        v-else
         class="space-y-4 rounded-lg border bg-card p-6"
         @submit.prevent="onSubmit"
       >

@@ -3,6 +3,8 @@ const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const { isForeignKeyError, isUniqueConstraintError } = require('../utils/prismaErrors');
 const pinAttempts = require('../utils/pinAttempts');
+const logger = require('../utils/logger');
+const twoFactor = require('./twoFactor.service');
 
 const BCRYPT_COST = 12;
 // Same rationale as auth.service.js's DUMMY_HASH — pays the same bcrypt
@@ -16,7 +18,8 @@ const DUMMY_PIN_HASH = bcrypt.hashSync('0000', BCRYPT_COST);
 // without string-matching an error message.
 class PinRequiredError extends AppError {
   constructor(message) {
-    super(403, message);
+    // Kode mesin: layar kasir menampilkan kolom PIN saat menerima ini.
+    super(403, message, 'PIN_DIPERLUKAN');
     this.name = 'PinRequiredError';
   }
 }
@@ -25,6 +28,7 @@ class PinRequiredError extends AppError {
 // never hit in practice, but keeps this safe to call defensively.
 async function verifyPin(userId, pin) {
   if (pinAttempts.isLocked(userId)) {
+    logger.warn({ userId }, 'PIN void ditolak: akun sedang terkunci');
     throw new PinRequiredError('Terlalu banyak percobaan PIN salah. Coba lagi beberapa menit lagi.');
   }
   const user = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { pinHash: true } }) : null;
@@ -34,7 +38,13 @@ async function verifyPin(userId, pin) {
   }
   const matches = await bcrypt.compare(pin ?? '', user.pinHash);
   if (!matches) {
-    pinAttempts.recordFailure(userId);
+    // Jejak untuk pemilik/admin: siapa yang berkali-kali salah PIN void.
+    // PIN-nya sendiri tidak pernah ikut tercatat.
+    const baruTerkunci = pinAttempts.recordFailure(userId);
+    logger.warn(
+      { userId, terkunci: baruTerkunci },
+      baruTerkunci ? 'PIN void salah 3x — akun dikunci 15 menit' : 'PIN void salah'
+    );
     throw new PinRequiredError('PIN salah.');
   }
   pinAttempts.recordSuccess(userId);
@@ -50,7 +60,28 @@ function toSafeUser(user) {
     role: user.role,
     isActive: user.isActive,
     hasPin: user.pinHash !== null,
+    duaFaktorAktif: user.totpAktifSejak !== null,
   };
+}
+
+// Semua sesi login akun ini, di mana pun (sessions tersimpan di MySQL —
+// utils/sessionStore.js). Isi sesi berupa JSON dengan user {id, ...} di
+// depan, jadi pencocokannya persis ke id itu, bukan id lain yang
+// kebetulan berawalan sama.
+async function hapusSemuaSesi(userId) {
+  await prisma.session.deleteMany({ where: { data: { contains: `"user":{"id":${Number(userId)},` } } });
+}
+
+// Mencabut 2FA seorang staff (mis. HP-nya hilang/ganti). Wajib PIN admin
+// yang melakukannya — sesi admin yang tertinggal terbuka tidak cukup untuk
+// mencabut 2FA siapa pun. Semua sesi login akun itu ikut dihapus; admin
+// wajib memasang 2FA lagi di login berikutnya.
+async function reset2fa(targetId, actorId, pin) {
+  await verifyPin(actorId, pin);
+  const target = await prisma.user.findUnique({ where: { id: targetId }, select: { id: true } });
+  if (!target) throw new AppError(404, 'Akun tidak ditemukan');
+  await twoFactor.reset(targetId);
+  await hapusSemuaSesi(targetId);
 }
 
 async function list() {
@@ -124,4 +155,4 @@ async function remove(id, actorId) {
   }
 }
 
-module.exports = { list, create, update, remove, verifyPin, PinRequiredError };
+module.exports = { list, create, update, remove, verifyPin, reset2fa, hapusSemuaSesi, PinRequiredError };

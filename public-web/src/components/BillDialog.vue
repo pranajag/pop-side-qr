@@ -79,7 +79,7 @@ watch(
           <div
             v-for="order in bill.orders"
             :key="order.kodeOrder"
-            class="space-y-1.5 rounded-lg border p-3"
+            class="space-y-1.5 rounded-2xl border p-3.5"
           >
             <div class="flex items-center justify-between gap-2">
               <span class="font-mono text-xs font-semibold">{{

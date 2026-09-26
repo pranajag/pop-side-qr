@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { useNetworkStore } from '@/stores/network'
 import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { useLocaleStore } from '@/stores/locale'
+import { useCafeStatusStore } from '@/stores/cafeStatus'
 import { retryPendingOrder } from '@/lib/offlineQueue'
 import { formatApiError } from '@/lib/api'
 import { WifiOffIcon } from '@lucide/vue'
@@ -13,12 +14,13 @@ import { WifiOffIcon } from '@lucide/vue'
 const network = useNetworkStore()
 const recentOrders = useRecentOrdersStore()
 const locale = useLocaleStore()
+const cafeStatus = useCafeStatusStore()
 const router = useRouter()
 
 function retryQueue() {
   retryPendingOrder({
     onSuccess: (order) => {
-      recentOrders.add(order.kodeOrder)
+      recentOrders.add(order.kodeOrder, order.createdAt)
       toast.success(locale.t('offlineOrderSent'))
       router.push({ name: 'order', params: { kodeOrder: order.kodeOrder } })
     },
@@ -35,6 +37,10 @@ onMounted(() => {
   // itself (offlineQueue.js) is a no-op when there's nothing pending.
   retryQueue()
   window.addEventListener('online', retryQueue)
+  // Buka/tutupnya kafe bisa berubah kapan saja (staff mulai atau akhiri
+  // shift) — dicek ulang berkala supaya menu tidak terus bilang "tutup"
+  // padahal sudah bisa pesan, atau sebaliknya.
+  cafeStatus.pantau()
 })
 </script>
 

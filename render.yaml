@@ -1,0 +1,63 @@
+# Render Blueprint — API Popside (Express + Socket.IO), paket gratis.
+# Dipakai lewat Render Dashboard -> New -> Blueprint -> repo ini (branch demo).
+#
+# Rahasia (SESSION_SECRET, CSRF_SECRET, kunci enkripsi) dibuat acak oleh Render
+# sendiri (generateValue) — tidak pernah ditulis di repo. DATABASE_URL diisi
+# pemilik saat membuat Blueprint (sync: false), dari keluaran
+# `npm run siapkan-produksi`.
+#
+# PENTING: simpan salinan DATA_ENC_KEY & DATA_HASH_KEY dari Render Dashboard
+# (Environment) di tempat aman. Kalau service dibuat ulang, Render membuat
+# kunci baru, dan nomor HP member / rahasia 2FA yang sudah terenkripsi tidak
+# bisa dibaca lagi.
+services:
+  - type: web
+    name: popside-api
+    runtime: node
+    plan: free
+    region: singapore
+    branch: demo
+    rootDir: api
+    # --include=dev: Prisma CLI adalah devDependency; tanpa ini `npx prisma`
+    # akan mengunduh versi terbaru yang tidak cocok dengan @prisma/client.
+    buildCommand: npm ci --include=dev && npx prisma generate
+    startCommand: node src/server.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: TZ
+        value: Asia/Jakarta
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: CSRF_SECRET
+        generateValue: true
+      - key: QR_HMAC_SECRET
+        generateValue: true
+      - key: DATA_ENC_KEY
+        generateValue: true
+      - key: DATA_HASH_KEY
+        generateValue: true
+      # Render gratis tidak punya disk permanen — foto menu, QRIS, dan bukti
+      # bayar disimpan di database (lib/imageStore.js).
+      - key: UPLOAD_DRIVER
+        value: database
+      # Request dari web lewat 2 proxy: Vercel (rewrite /api) lalu load
+      # balancer Render. Batas yang penting tidak bergantung IP
+      # (middleware/rateLimit.js), jadi IP palsu tidak membuka celah.
+      - key: TRUST_PROXY
+        value: "2"
+      - key: CORS_ORIGIN
+        value: https://popside-admin.vercel.app,https://popside-menu.vercel.app
+      - key: PUBLIC_WEB_URL
+        value: https://popside-menu.vercel.app
+      # Tanpa gateway WhatsApp/SMS, OTP member mati di produksi (mode console
+      # hanya untuk pengembangan) — diskon member lewat kasir. Lihat
+      # utils/pengirimOtp.js untuk mengisi OTP_PENGIRIM=http + OTP_HTTP_*.
+      - key: OTP_PENGIRIM
+        value: console

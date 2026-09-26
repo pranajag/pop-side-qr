@@ -7,6 +7,7 @@ import { formatRupiah } from '@/lib/format'
 import { STATUS_LABEL_KEY, STATUS_COLOR } from '@/lib/orderStatus'
 import { useLocaleStore } from '@/stores/locale'
 import { playReadySound } from '@/lib/notifySound'
+import { lacakOrder, berhentiLacak, dengarkan, realtimeTersambung } from '@/lib/realtime'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 import { Button } from '@/components/ui/button'
 import {
@@ -60,15 +61,41 @@ async function enableNotifications() {
   }
 }
 
-function notifyReady() {
-  playReadySound()
-  toast.success(locale.t('pesananSiapDiambil'), { description: locale.t('pesananSiapDiambilDesc') })
+// Every status worth interrupting the customer for. 'ready' keeps its own
+// louder treatment (it's the one that means "get up and walk to the
+// counter"); the rest are reassurance that someone is actually acting on
+// the order, which is the whole reason a customer keeps this tab open.
+// Statuses absent here (pending, waiting_verif) are states the customer
+// themselves just caused, so announcing them back is noise.
+const STATUS_NOTIFICATION = {
+  confirmed: { title: 'notifDikonfirmasi', body: 'notifDikonfirmasiDesc', tone: 'success' },
+  cooking: { title: 'notifDimasak', body: 'notifDimasakDesc', tone: 'info' },
+  ready: { title: 'pesananSiapDiambil', body: 'pesananSiapDiambilDesc', tone: 'ready' },
+  completed: { title: 'notifSelesai', body: 'notifSelesaiDesc', tone: 'success' },
+  cancelled: { title: 'notifDibatalkan', body: 'notifDibatalkanDesc', tone: 'error' },
+}
+
+function notifyStatus(status) {
+  const spec = STATUS_NOTIFICATION[status]
+  if (!spec) return
+
+  const title = locale.t(spec.title)
+  const body = locale.t(spec.body)
+
+  // Sound only for 'ready' — a chime for every routine step would train
+  // the customer to ignore the one that actually needs them to move.
+  if (spec.tone === 'ready') playReadySound()
+
+  if (spec.tone === 'error') toast.error(title, { description: body })
+  else if (spec.tone === 'info') toast.info(title, { description: body })
+  else toast.success(title, { description: body })
+
+  // The OS-level notification is what reaches a customer who has switched
+  // away to another app — the toast above only exists while this tab is on
+  // screen.
   if (notificationSupported && Notification.permission === 'granted') {
     try {
-      new Notification(locale.t('pesananSiapDiambil'), {
-        body: locale.t('pesananSiapDiambilDesc'),
-        icon: logoUrl,
-      })
+      new Notification(title, { body, icon: logoUrl, tag: 'popside-order-status' })
     } catch {
       // Construction can throw in some contexts (e.g. iOS Safari PWA) —
       // the sound/toast above already covered notifying the customer.
@@ -164,18 +191,29 @@ const elapsedMinutes = computed(() => {
   )
 })
 
+// Kapan request status terakhir dikirim — polling cadangan melewati tick
+// yang datang terlalu cepat setelah event realtime.
+let terakhirDimuat = 0
+// Naik setiap event realtime diterapkan; respons yang request-nya berangkat
+// sebelum event itu bisa sudah basi, jadi dibuang (muat ulang terjadwal di
+// terimaStatus yang menyusul).
+let versiEvent = 0
+
 async function load({ silent = false } = {}) {
   if (!silent) loading.value = true
+  const versi = versiEvent
   try {
-    const previousStatus = order.value?.status
+    terakhirDimuat = Date.now()
     const data = await api.get(`/public/orders/${route.params.kodeOrder}`)
+    if (versi !== versiEvent) return
+    const previousStatus = order.value?.status
     order.value = data.order
     notFound.value = false
-    // Fires on the TRANSITION into ready, not just "is ready" — loading a
-    // page that's already ready (e.g. a fresh tab reopened later) shouldn't
+    // Fires on the TRANSITION, not just "is in this state" — loading a page
+    // that's already ready (e.g. a fresh tab reopened later) shouldn't
     // replay the alert; only the moment it actually changes should.
-    if (previousStatus && previousStatus !== 'ready' && data.order.status === 'ready') {
-      notifyReady()
+    if (previousStatus && previousStatus !== data.order.status) {
+      notifyStatus(data.order.status)
     }
   } catch (err) {
     // Silent (polling) failures — a rate limit hit, a network blip — just
@@ -217,13 +255,56 @@ onMounted(async () => {
       clearInterval(statusTimer)
       return
     }
+    // Tab di latar belakang tidak ikut menembak server — HP yang ditinggal
+    // dengan halaman ini terbuka tidak menghabiskan jatah rate limit (dan
+    // baterai). Begitu tab terlihat lagi, statusnya langsung disegarkan.
+    if (document.visibilityState === 'hidden') return
+    // Realtime tersambung: perubahan status datang lewat event seketika
+    // (lacakOrder di bawah) — polling cukup sesekali sebagai cadangan.
+    if (realtimeTersambung.value && Date.now() - terakhirDimuat < 60000) return
     await load({ silent: true })
   }, 20000)
+  lacakOrder(route.params.kodeOrder)
+  berhentiDengar = dengarkan('order:status', terimaStatus)
+  document.addEventListener('visibilitychange', onVisibilityChange)
   clockTimer = setInterval(() => {
     now.value = Date.now()
   }, 30000)
 })
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible' && !isTerminal.value) load({ silent: true })
+}
+
+// Event realtime membawa status barunya — layar langsung berubah tanpa
+// menunggu request. Detail lain (poin, waktu) disegarkan menyusul, paling
+// sering sekali per JEDA_MUAT_ULANG_MS: staff yang mengubah status beruntun
+// (bayar → masak → siap → selesai dalam semenit) tidak membuat halaman ini
+// menembus batas 5 request/menit/kode order (AGENTS.md).
+const JEDA_MUAT_ULANG_MS = 20000
+let timerMuatUlang = null
+function terimaStatus(isi) {
+  // Satu HP bisa melacak beberapa pesanan di koneksi yang sama.
+  if (!order.value || isi?.kodeOrder !== order.value.kodeOrder) return
+  if (!isi.status || isi.status === order.value.status || isTerminal.value) return
+  versiEvent += 1
+  order.value = { ...order.value, status: isi.status, updatedAt: new Date().toISOString() }
+  notifyStatus(isi.status)
+  if (timerMuatUlang) return
+  timerMuatUlang = setTimeout(
+    () => {
+      timerMuatUlang = null
+      load({ silent: true })
+    },
+    Math.max(0, terakhirDimuat + JEDA_MUAT_ULANG_MS - Date.now())
+  )
+}
+
+let berhentiDengar = () => {}
 onUnmounted(() => {
+  berhentiDengar()
+  clearTimeout(timerMuatUlang)
+  berhentiLacak(route.params.kodeOrder)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
   clearInterval(statusTimer)
   clearInterval(clockTimer)
   if (buktiPreview.value) URL.revokeObjectURL(buktiPreview.value)
@@ -316,10 +397,16 @@ async function copyKode() {
   </div>
 
   <div v-else class="min-h-svh px-4 py-6">
-    <div class="mx-auto max-w-md space-y-6 sm:max-w-lg md:max-w-xl">
-      <div class="space-y-2 text-center">
+    <div class="mx-auto max-w-md space-y-6 sm:max-w-xl lg:max-w-2xl">
+      <!-- The anchor of this screen. A customer stares at this page while
+      they wait, so the status is the largest thing on it and the order
+      code — the one thing they have to read out to a kasir — sits right
+      under it at a size that survives a glance across a table. -->
+      <div
+        class="space-y-3 rounded-3xl bg-card px-5 py-6 text-center shadow-[0_1px_2px_rgba(13,15,20,0.04)]"
+      >
         <span
-          class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium"
+          class="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold"
           :class="statusColor"
         >
           <span class="size-1.5 rounded-full bg-current" />
@@ -327,13 +414,15 @@ async function copyKode() {
         </span>
         <button
           type="button"
-          class="flex items-center justify-center gap-1.5 text-xl font-bold tracking-wide"
+          class="flex w-full items-center justify-center gap-2 rounded-xl py-1 text-2xl font-bold tracking-wide transition-colors hover:bg-accent active:bg-accent"
           @click="copyKode"
         >
           {{ order.kodeOrder }}
-          <CopyIcon class="size-4 text-muted-foreground" />
+          <CopyIcon class="size-4 shrink-0 text-muted-foreground" />
         </button>
-        <p class="text-xs text-muted-foreground">
+        <p
+          class="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground"
+        >
           {{
             order.nomorMeja
               ? `${locale.t('meja')} ${order.nomorMeja}`
@@ -344,7 +433,7 @@ async function copyKode() {
 
       <div
         v-if="showNotificationBanner"
-        class="flex items-center gap-3 rounded-lg border p-3 text-sm"
+        class="flex items-center gap-3 rounded-2xl bg-card p-3 text-sm shadow-[0_1px_2px_rgba(13,15,20,0.04)]"
       >
         <BellIcon class="size-4 shrink-0 text-muted-foreground" />
         <p class="min-w-0 flex-1 text-xs text-muted-foreground">
@@ -355,14 +444,14 @@ async function copyKode() {
         </Button>
         <button
           type="button"
-          class="shrink-0 text-xs text-muted-foreground underline"
+          class="shrink-0 text-xs text-muted-foreground underline transition-colors hover:text-foreground"
           @click="notificationBannerDismissed = true"
         >
           {{ locale.t('nanti') }}
         </button>
       </div>
 
-      <div v-if="showStepper" class="space-y-3 rounded-lg border p-4">
+      <div v-if="showStepper" class="space-y-3 rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)]">
         <h2 class="text-sm font-semibold text-muted-foreground">
           {{ locale.t('progresPesanan') }}
         </h2>
@@ -382,9 +471,9 @@ async function copyKode() {
                 class="relative flex size-5 shrink-0 items-center justify-center"
               >
                 <span
-                  class="absolute size-5 animate-ping rounded-full bg-brand-cta/40"
+                  class="absolute size-5 animate-ping rounded-full bg-primary-strong/40"
                 />
-                <span class="relative size-2.5 rounded-full bg-brand-cta" />
+                <span class="relative size-2.5 rounded-full bg-primary-strong" />
               </span>
               <CircleIcon
                 v-else
@@ -416,7 +505,7 @@ async function copyKode() {
 
       <div
         v-if="needsQrisPayment"
-        class="space-y-3 rounded-lg border p-4 text-center"
+        class="space-y-3 rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)] text-center"
       >
         <p class="text-sm font-medium">
           {{
@@ -429,7 +518,7 @@ async function copyKode() {
           v-if="qrisImage"
           :src="`${API_URL}/public/settings/qris-photo/${qrisImage}`"
           alt="QRIS"
-          class="mx-auto max-h-64 rounded-lg border"
+          class="mx-auto max-h-64 rounded-2xl border"
         />
         <p v-else class="text-xs text-muted-foreground">
           {{ locale.t('qrisBelumTersedia') }}
@@ -471,7 +560,7 @@ async function copyKode() {
 
       <div
         v-else-if="isWaitingKasir"
-        class="space-y-1 rounded-lg border p-4 text-center"
+        class="space-y-1 rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)] text-center"
       >
         <ClockIcon class="mx-auto size-6 text-muted-foreground" />
         <p class="text-sm font-medium">{{ locale.t('sebutkanKodeKeKasir') }}</p>
@@ -490,7 +579,7 @@ async function copyKode() {
 
       <div
         v-else-if="order.status === 'waiting_verif'"
-        class="space-y-1 rounded-lg border p-4 text-center"
+        class="space-y-1 rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)] text-center"
       >
         <LoaderCircleIcon
           class="mx-auto size-6 animate-spin text-muted-foreground"
@@ -505,7 +594,7 @@ async function copyKode() {
 
       <div
         v-else-if="order.status === 'completed'"
-        class="space-y-1 rounded-lg border p-4 text-center"
+        class="space-y-1 rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)] text-center"
       >
         <CircleCheckIcon class="mx-auto size-6 text-status-completed" />
         <p class="text-sm font-medium">{{ locale.t('pesananSelesai') }}</p>
@@ -513,7 +602,7 @@ async function copyKode() {
 
       <div
         v-else-if="order.status === 'cancelled'"
-        class="space-y-1 rounded-lg border p-4 text-center"
+        class="space-y-1 rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)] text-center"
       >
         <XCircleIcon class="mx-auto size-6 text-status-cancelled" />
         <p class="text-sm font-medium">
@@ -523,7 +612,7 @@ async function copyKode() {
 
       <div
         v-else-if="order.status === 'ready'"
-        class="space-y-1 rounded-lg border p-4 text-center"
+        class="space-y-1 rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)] text-center"
       >
         <PackageCheckIcon class="mx-auto size-6 text-status-ready" />
         <p class="text-sm font-medium">{{ locale.t('pesananSiapDiambil') }}</p>
@@ -532,7 +621,7 @@ async function copyKode() {
         </p>
       </div>
 
-      <div v-else class="rounded-lg border p-4 text-center">
+      <div v-else class="rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)] text-center">
         <UtensilsIcon class="mx-auto size-6 text-muted-foreground" />
         <p class="mt-1 text-sm font-medium">
           {{ locale.t('pesananSedangDiproses') }}
@@ -573,7 +662,7 @@ async function copyKode() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div class="space-y-2 rounded-lg border p-4">
+      <div class="space-y-2 rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)]">
         <h2 class="text-sm font-semibold text-muted-foreground">
           {{ locale.t('detailPesanan') }}
         </h2>
@@ -595,7 +684,10 @@ async function copyKode() {
             formatRupiah(item.harga * item.qty)
           }}</span>
         </div>
-        <div v-if="hasBreakdown" class="flex justify-between border-t pt-2 text-sm text-muted-foreground">
+        <div
+          v-if="hasBreakdown"
+          class="flex justify-between border-t border-dashed pt-2.5 text-sm text-muted-foreground"
+        >
           <span>Subtotal</span>
           <span>{{ formatRupiah(subtotal) }}</span>
         </div>
@@ -612,21 +704,23 @@ async function copyKode() {
           <span>{{ formatRupiah(order.serviceChargeAmount) }}</span>
         </div>
         <div
-          class="flex justify-between text-sm font-semibold"
-          :class="hasBreakdown ? '' : 'border-t pt-2'"
+          class="flex items-baseline justify-between gap-3 border-t border-dashed pt-3"
+          :class="hasBreakdown ? 'mt-1' : ''"
         >
-          <span>{{ locale.t('total') }}</span>
-          <span>{{ formatRupiah(order.totalHarga) }}</span>
+          <span class="text-sm font-semibold">{{ locale.t('total') }}</span>
+          <span class="text-lg font-bold">{{
+            formatRupiah(order.totalHarga)
+          }}</span>
         </div>
         <p
           v-if="order.pointsEarned > 0 && !['pending', 'waiting_verif', 'cancelled'].includes(order.status)"
-          class="border-t pt-2 text-xs text-status-completed"
+          class="border-t border-dashed pt-2.5 text-xs text-primary-strong"
         >
           {{ locale.t('poinDidapat', { n: order.pointsEarned }) }}
         </p>
         <p
           v-if="order.catatan"
-          class="border-t pt-2 text-xs text-muted-foreground"
+          class="border-t border-dashed pt-2.5 text-xs text-muted-foreground"
         >
           {{ locale.t('catatanLabel', { catatan: order.catatan }) }}
         </p>

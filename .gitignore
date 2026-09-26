@@ -22,3 +22,9 @@ logs/
 # Local AI coding-assistant workspace (dev-server launch config, worktrees,
 # task locks). Machine-specific tooling, not part of the app.
 .claude/
+
+# Dump database lokal sebelum operasi berisiko — jangan ikut ke repo.
+backups/
+
+# Folder sementara scripts/siapkan-produksi.js
+api/prisma/.migrasi-ditunda/

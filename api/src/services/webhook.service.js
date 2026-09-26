@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const logger = require('../utils/logger');
-const { isUrlSafe } = require('../utils/ssrfGuard');
+const { isUrlSafe, kirimAman } = require('../utils/ssrfGuard');
 
 const VALID_EVENTS = ['order.created', 'order.status_changed'];
 
@@ -87,20 +87,23 @@ async function dispatch(event, payload) {
         return;
       }
       const signature = crypto.createHmac('sha256', webhook.secret).update(body).digest('hex');
-      fetch(webhook.url, {
+      // kirimAman (utils/ssrfGuard.js), bukan fetch(): alamat IP diperiksa
+      // ulang pada saat koneksi dibuat, jadi celah waktu antara pengecekan
+      // di atas dan koneksi sebenarnya (DNS rebinding) tertutup. Redirect
+      // tidak pernah diikuti — sebuah redirect bisa diam-diam mengalihkan
+      // URL publik yang sudah divalidasi ke alamat internal — dan dianggap
+      // pengiriman gagal.
+      kirimAman(webhook.url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Popside-Signature': signature },
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+          'X-Popside-Signature': signature,
+        },
         body,
-        signal: AbortSignal.timeout(5000),
-        // Manual, not the default 'follow' — a redirect response could
-        // silently retarget an already-validated public URL at a private
-        // one (the fetch itself would then reach it directly, bypassing
-        // both isUrlSafe checks entirely). A redirect target is never
-        // trusted automatically; treated as a failed delivery instead.
-        redirect: 'manual',
       })
         .then((res) => {
-          if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+          if (res.redirect) {
             logger.warn({ webhookId: webhook.id, event }, 'webhook delivery blocked: endpoint returned a redirect');
           }
         })

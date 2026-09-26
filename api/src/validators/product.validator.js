@@ -1,14 +1,14 @@
 const { z } = require('zod');
 const { zBooleanish } = require('./common');
 
-const variantOptionSchema = z.object({
+const variantOptionSchema = z.strictObject({
   nama: z.string().trim().min(1).max(100),
   // Can go negative — e.g. a "Small" option priced below the product's
   // base (Medium) price — not just upcharges like "Large +5000".
   hargaTambahan: z.coerce.number().int().min(-1_000_000).max(1_000_000).default(0),
 });
 
-const variantGroupSchema = z.object({
+const variantGroupSchema = z.strictObject({
   nama: z.string().trim().min(1).max(100),
   required: z.boolean().default(false),
   multiple: z.boolean().default(false),
@@ -47,7 +47,7 @@ const productBase = {
   variantGroups: variantGroupsField,
 };
 
-const createProductSchema = z.object(productBase);
-const updateProductSchema = z.object(productBase).partial();
+const createProductSchema = z.strictObject(productBase);
+const updateProductSchema = z.strictObject(productBase).partial();
 
 module.exports = { createProductSchema, updateProductSchema };

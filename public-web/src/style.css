@@ -6,6 +6,15 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Tailwind v4 membungkus setiap `hover:` dengan @media (hover: hover) —
+   di layar sentuh (HP, tablet, mode device di DevTools) semua efek hover
+   mati total, di lebar berapa pun. Web ini justru paling banyak dipakai di
+   HP, jadi dikembalikan ke perilaku Tailwind v3: :hover biasa, yang di
+   layar sentuh menyala saat elemen diketuk. Cara resmi dari panduan upgrade
+   Tailwind v4. Efek tekan `active:` tetap dipasang terpisah untuk rasa
+   "ditekan" selama jari masih menempel. */
+@custom-variant hover (&:hover);
+
 @theme inline {
   --font-sans: 'Inter', sans-serif;
   --font-heading: var(--font-sans);
@@ -56,6 +65,10 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  /* The brand lime is a surface colour — as text on a white card it is
+     unreadable. Links and standalone brand icons use this darkened pair
+     instead, same split admin-web uses. */
+  --color-primary-strong: var(--primary-strong);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -78,34 +91,46 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  /* #0F172A (slate-900) per docs/UI_GUIDELINES.md */
-  --foreground: oklch(0.208 0.042 265.75);
+  /* Customer app. Layout language comes from the "Aplikasi Pesan Makanan"
+     reference — a tinted page with white cards floating on it, generous
+     corner radii, one accent that owns every call to action. The accent
+     itself is Popside's own lime rather than the reference's blue, so the
+     customer app and the staff dashboard read as one product; the sage
+     backdrop is the same one admin-web uses.
+
+     The lime is a SURFACE colour: legible with near-black on top, never
+     as text on a white card. Anything that needs the brand as text or a
+     standalone icon uses --primary-strong below. */
+  --background: oklch(0.947 0.014 145.5);
+  --foreground: oklch(0.212 0.012 129.1);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.208 0.042 265.75);
+  --card-foreground: oklch(0.212 0.012 129.1);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.208 0.042 265.75);
-  /* Single solid brand accent (#2563EB) — placeholder until Popside's
-       real brand color is known. Buttons/CTAs only; never a gradient. */
-  --primary: oklch(0.546 0.215 262.1);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.208 0.042 265.75);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.208 0.042 265.75);
+  --popover-foreground: oklch(0.212 0.012 129.1);
+  --primary: oklch(0.898 0.187 122.4);
+  --primary-foreground: oklch(0.204 0.017 118.1);
+  --primary-strong: oklch(0.55 0.13 130);
+  --secondary: oklch(0.968 0.006 145);
+  --secondary-foreground: oklch(0.212 0.012 129.1);
+  --muted: oklch(0.962 0.008 145);
+  --muted-foreground: oklch(0.508 0.015 140);
+  --accent: oklch(0.955 0.045 122);
+  --accent-foreground: oklch(0.212 0.012 129.1);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.546 0.215 262.1);
+  --border: oklch(0.923 0.014 145.5);
+  --input: oklch(0.923 0.014 145.5);
+  /* Darker than --primary on purpose: the lime itself is too light to be
+     a visible focus ring against white. */
+  --ring: oklch(0.72 0.16 125);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  /* The reference rounds almost everything hard — cards, images, buttons.
+     Bumped from 0.625rem so rounded-xl/2xl land in that territory. */
+  --radius: 1rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.208 0.042 265.75);
   --sidebar-primary: oklch(0.546 0.215 262.1);
@@ -143,25 +168,29 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.623 0.188 262.1);
-  --primary-foreground: oklch(0.145 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  /* Same structure inverted, matching admin-web's dark palette so the two
+     apps stay one product in either theme. Lime barely dimmed so it does
+     not glare on a dark surface; text on it stays near-black. */
+  --background: oklch(0.183 0.007 135);
+  --foreground: oklch(0.97 0.005 130);
+  --card: oklch(0.226 0.01 132.7);
+  --card-foreground: oklch(0.97 0.005 130);
+  --popover: oklch(0.226 0.01 132.7);
+  --popover-foreground: oklch(0.97 0.005 130);
+  --primary: oklch(0.87 0.19 122.4);
+  --primary-foreground: oklch(0.204 0.017 118.1);
+  --primary-strong: oklch(0.87 0.19 122.4);
+  --secondary: oklch(0.266 0.014 131.7);
+  --secondary-foreground: oklch(0.97 0.005 130);
+  --muted: oklch(0.266 0.014 131.7);
+  --muted-foreground: oklch(0.724 0.012 130);
+  --accent: oklch(0.3 0.03 128);
+  --accent-foreground: oklch(0.97 0.005 130);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.2 0.06 25);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.623 0.188 262.1);
+  --border: oklch(0.294 0.015 129.1);
+  --input: oklch(0.32 0.016 129);
+  --ring: oklch(0.87 0.19 122.4);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);

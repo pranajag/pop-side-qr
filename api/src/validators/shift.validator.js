@@ -1,13 +1,13 @@
 const { z } = require('zod');
 
-const startShiftSchema = z.object({
+const startShiftSchema = z.strictObject({
   cashStart: z.coerce.number().min(0).max(999999999),
   // The actual person on shift, not the login account — see
   // schema.prisma's Shift.namaStaff comment for why these can differ.
   namaStaff: z.string().trim().min(1).max(100),
 });
 
-const endShiftSchema = z.object({
+const endShiftSchema = z.strictObject({
   cashCounted: z.coerce.number().min(0).max(999999999),
   // Optional (store owner's explicit request) — a shift with no Gojek/
   // GrabFood orders at all shouldn't force the kasir to type a 0 they

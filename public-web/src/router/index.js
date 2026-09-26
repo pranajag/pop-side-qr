@@ -27,6 +27,8 @@ const routes = [
     name: 'order',
     component: () => import('@/views/OrderView.vue'),
   },
+  // Alamat tak dikenal (salah ketik, link lama) — ke menu, bukan layar kosong.
+  { path: '/:pathMatch(.*)*', redirect: { name: 'menu' } },
 ]
 
 const router = createRouter({

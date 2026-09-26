@@ -1,10 +1,13 @@
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
+const { NON_TERMINAL_STATUSES, TERMINAL_STATUSES, canTransition } = require('../utils/orderStatus');
 const paymentProof = require('./paymentProof.service');
 const userService = require('./user.service');
+const settingsService = require('./settings.service');
 const customerService = require('./customer.service');
 const webhookService = require('./webhook.service');
 const shiftService = require('./shift.service');
+const realtime = require('../realtime');
 
 // Store owner's explicit request — cash/order handling only happens inside
 // an accounted-for shift, never off the books. Without this, a kasir could
@@ -53,7 +56,16 @@ const ORDER_INCLUDE = {
   payment: { select: { buktiFile: true, verifiedAt: true, cashReceived: true } },
 };
 
-function shapeOrder(order) {
+// Order yang masih menunggu konfirmasi pembayaran.
+const MENUNGGU_KONFIRMASI = new Set(['pending', 'waiting_verif']);
+
+// batasPin: settingsService.getPinVerifikasiMinimal() — dikirim sekali per
+// daftar, bukan dibaca per order. Kosong (pemanggil lain) = tidak ditandai.
+function perluPin(totalHarga, batasPin) {
+  return batasPin !== null && batasPin !== undefined && Number(totalHarga) >= batasPin;
+}
+
+function shapeOrder(order, batasPin) {
   // Change owed back, derived rather than stored: it is always exactly
   // "what was handed over minus what was owed", so persisting it too would
   // just create a second number that could disagree with the first.
@@ -84,6 +96,9 @@ function shapeOrder(order) {
     // by serveBuktiBayar, keyed off this order's own id, never handed to
     // the client to construct a URL from directly.
     hasBuktiBayar: !!order.payment?.buktiFile,
+    // Layar kasir meminta PIN di dialog konfirmasi sejak awal, tanpa harus
+    // gagal dulu. Server (confirmPayment) tetap yang memutuskan.
+    perluPinKonfirmasi: MENUNGGU_KONFIRMASI.has(order.status) && perluPin(order.totalHarga, batasPin),
     items: order.items.map((item) => ({
       nama: item.product.nama,
       qty: item.qty,
@@ -107,10 +122,13 @@ function buildWhere(statusFilter) {
 }
 
 async function list(statusFilter) {
-  const orders = await prisma.order.findMany({ where: buildWhere(statusFilter), include: ORDER_INCLUDE });
+  const [orders, batasPin] = await Promise.all([
+    prisma.order.findMany({ where: buildWhere(statusFilter), include: ORDER_INCLUDE }),
+    settingsService.getPinVerifikasiMinimal(),
+  ]);
   return orders
     .sort((a, b) => STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status] || a.createdAt - b.createdAt)
-    .map(shapeOrder);
+    .map((o) => shapeOrder(o, batasPin));
 }
 
 // For external.routes.js's polling endpoint — "everything touched since I
@@ -124,7 +142,7 @@ async function listSince(since, limit) {
     orderBy: { updatedAt: 'asc' },
     take: limit,
   });
-  return orders.map(shapeOrder);
+  return orders.map((o) => shapeOrder(o));
 }
 
 async function findFull(tx, id) {
@@ -140,7 +158,7 @@ async function findFull(tx, id) {
 // isn't blocked — but when given it's validated against the order total
 // here rather than trusted from the form, and the change is derived
 // server-side so the number on screen and the number recorded can't drift.
-async function confirmPayment(orderId, userId, cashReceived) {
+async function confirmPayment(orderId, userId, cashReceived, pin) {
   await assertActiveShift(userId);
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) {
@@ -148,11 +166,17 @@ async function confirmPayment(orderId, userId, cashReceived) {
   }
 
   const expectedStatus = order.metode === 'qris' ? 'waiting_verif' : 'pending';
-  if (order.status !== expectedStatus) {
+  if (order.status !== expectedStatus || !canTransition(expectedStatus, 'confirmed')) {
     throw new AppError(409, `Order berstatus "${order.status}", tidak bisa dikonfirmasi dari sini.`);
   }
 
   const total = Number(order.totalHarga);
+  // Pembayaran besar butuh PIN staff yang mengonfirmasi — sesi yang
+  // tertinggal terbuka di tablet kasir tidak cukup untuk menandai lunas
+  // order bernilai besar. Penguncian sama seperti void: 3x salah, 15 menit.
+  if (perluPin(total, await settingsService.getPinVerifikasiMinimal())) {
+    await userService.verifyPin(userId, pin);
+  }
   let cash = null;
   if (cashReceived !== undefined && cashReceived !== null) {
     if (order.metode !== 'tunai') {
@@ -203,6 +227,8 @@ async function confirmPayment(orderId, userId, cashReceived) {
     statusFrom: expectedStatus,
     statusTo: 'confirmed',
   });
+  realtime.keStaff('order:berubah', { id: orderId, status: 'confirmed' });
+  realtime.keOrder(orderId, 'order:status', { kodeOrder: shaped.kodeOrder, status: 'confirmed' });
   return shaped;
 }
 
@@ -214,6 +240,11 @@ async function updateStatus(orderId, newStatus, userId, catatan, refundAmount, p
   }
 
   const currentStatus = order.status;
+  // Batas luar: perpindahan yang tidak ada di tabel TRANSITIONS
+  // (utils/orderStatus.js) ditolak sebelum aturan jalur ini dicek.
+  if (!canTransition(currentStatus, newStatus)) {
+    throw new AppError(409, `Tidak bisa mengubah status dari "${currentStatus}" ke "${newStatus}".`);
+  }
   if (newStatus === 'cancelled') {
     if (!CANCELLABLE_FROM.has(currentStatus)) {
       throw new AppError(409, `Order berstatus "${currentStatus}" tidak bisa dibatalkan.`);
@@ -268,6 +299,27 @@ async function updateStatus(orderId, newStatus, userId, catatan, refundAmount, p
       }
     }
 
+    // A table whose last order just finished is free again, so its bill
+    // starts empty for whoever sits down next. Without this the previous
+    // group's completed orders stay on the bill until someone happens to
+    // place a new order — which is exactly when a new guest scans the QR,
+    // looks at Bill, and sees a stranger's food.
+    //
+    // Deliberately per-table and only once nothing is left in flight: an
+    // order finishing while the same group still has another one cooking
+    // must not wipe the running total they are halfway through.
+    if (order.tableId && TERMINAL_STATUSES.has(newStatus)) {
+      const stillActive = await tx.order.count({
+        where: { tableId: order.tableId, status: { in: NON_TERMINAL_STATUSES } },
+      });
+      if (stillActive === 0) {
+        await tx.table.update({
+          where: { id: order.tableId },
+          data: { currentVisitStartedAt: new Date(), isBillOpen: false },
+        });
+      }
+    }
+
     await tx.orderStatusLog.create({
       data: { orderId, statusFrom: currentStatus, statusTo: newStatus, changedBy: userId, catatan },
     });
@@ -279,6 +331,8 @@ async function updateStatus(orderId, newStatus, userId, catatan, refundAmount, p
     statusFrom: currentStatus,
     statusTo: newStatus,
   });
+  realtime.keStaff('order:berubah', { id: orderId, status: newStatus });
+  realtime.keOrder(orderId, 'order:status', { kodeOrder: shaped.kodeOrder, status: newStatus });
   return shaped;
 }
 

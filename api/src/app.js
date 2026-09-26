@@ -3,9 +3,14 @@ const helmet = require('helmet');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
+const pino = require('pino');
 const pinoHttp = require('pino-http');
 
 const logger = require('./utils/logger');
+const { PrismaSessionStore } = require('./utils/sessionStore');
+const { SESSION_COOKIE_NAME } = require('./utils/session');
+const { periksaKunci } = require('./utils/kripto');
+const { auditLog } = require('./middleware/auditLog');
 const { doubleCsrfProtection } = require('./middleware/csrf');
 const { csrfTokenLimiter } = require('./middleware/rateLimit');
 const errorHandler = require('./middleware/errorHandler');
@@ -26,10 +31,24 @@ const customerRoutes = require('./routes/customer.routes');
 const loyaltyTierRoutes = require('./routes/loyaltyTier.routes');
 const apiKeyRoutes = require('./routes/apiKey.routes');
 const webhookRoutes = require('./routes/webhook.routes');
+const auditLogRoutes = require('./routes/auditLog.routes');
+const realtimeRoutes = require('./routes/realtime.routes');
 const publicRoutes = require('./routes/public.routes');
 const externalRoutes = require('./routes/external.routes');
 
 const isProd = process.env.NODE_ENV === 'production';
+
+// Di belakang reverse proxy (nginx, Cloudflare, dll) req.ip selalu IP si
+// proxy — semua rate limit berbasis IP jadi satu ember untuk semua orang.
+// Tapi memasang 'trust proxy' TANPA ada proxy justru berbahaya: klien bisa
+// memalsukan header X-Forwarded-For dan lolos dari setiap rate limit. Jadi
+// hanya aktif kalau TRUST_PROXY diisi saat deploy — jumlah hop proxy
+// (mis. "1"), atau nilai lain yang dipahami Express seperti "loopback".
+function trustProxyDariEnv(nilai) {
+  const v = String(nilai ?? '').trim();
+  if (!v) return null;
+  return /^\d+$/.test(v) ? Number(v) : v;
+}
 
 // Fail fast, not fail open — an empty or short SESSION_SECRET/CSRF_SECRET
 // wouldn't stop the app from starting (express-session/csrf-csrf tolerate
@@ -43,8 +62,13 @@ for (const name of ['SESSION_SECRET', 'CSRF_SECRET']) {
     );
   }
 }
+// Kunci enkripsi nomor HP / 2FA — alasan yang sama: lebih baik gagal start
+// dengan pesan jelas daripada gagal di transaksi pertama yang menyimpan data.
+periksaKunci();
 
 const app = express();
+const trustProxy = trustProxyDariEnv(process.env.TRUST_PROXY);
+if (trustProxy !== null) app.set('trust proxy', trustProxy);
 
 // CORS_ORIGIN is comma-separated — admin-web and public-web run on
 // different dev ports (and different real domains later), both need to
@@ -64,13 +88,25 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
 const DEV_LAN_ORIGIN_PATTERN =
   /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
 
+// Satu aturan origin untuk HTTP (cors di bawah) dan realtime (realtime.js).
+// `origin` is undefined for non-browser/same-origin requests (curl,
+// server-to-server) — those aren't subject to CORS, so allow them.
+function originDiizinkan(origin) {
+  return !origin || allowedOrigins.includes(origin) || (!isProd && DEV_LAN_ORIGIN_PATTERN.test(origin));
+}
+
 app.use(helmet());
+
+// Cek hidup untuk hosting (Render healthCheckPath) dan pemantau uptime —
+// sebelum CORS/sesi/database: murah, tidak membuat sesi, tidak membocorkan
+// apa pun selain "hidup".
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true });
+});
 app.use(
   cors({
     origin: (origin, callback) => {
-      // `origin` is undefined for non-browser/same-origin requests (curl,
-      // server-to-server) — those aren't subject to CORS, so allow them.
-      if (!origin || allowedOrigins.includes(origin) || (!isProd && DEV_LAN_ORIGIN_PATTERN.test(origin))) {
+      if (originDiizinkan(origin)) {
         return callback(null, true);
       }
       callback(new Error('Not allowed by CORS'));
@@ -87,7 +123,21 @@ app.use(
 );
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
-app.use(pinoHttp({ logger }));
+// url & query ditulis dengan nomor HP disamarkan (utils/logger.js). Lewat
+// wrapRequestSerializer: fungsi ini menerima req yang SUDAH diserialisasi
+// pino, jadi objek request aslinya tidak pernah diubah.
+app.use(
+  pinoHttp({
+    logger,
+    serializers: {
+      req: pino.stdSerializers.wrapRequestSerializer((req) => {
+        req.url = logger.samarkanNomor(req.url);
+        req.query = logger.samarkanObjek(req.query);
+        return req;
+      }),
+    },
+  })
+);
 
 // /api/public/* (customer-facing, no login — menu, table-token verify,
 // cart total, and Sprint 4's order creation) is mounted before session and
@@ -108,7 +158,13 @@ app.use('/api/external/v1', externalRoutes);
 
 app.use(
   session({
-    name: 'popside.sid',
+    // Awalan __Host- (produksi saja, karena mewajibkan HTTPS): browser
+    // menolak cookie ini kalau tidak Secure, punya Domain, atau Path bukan
+    // "/" — subdomain lain tidak bisa menimpa atau membaca sesi staff.
+    // Sama seperti cookie CSRF di middleware/csrf.js. Namanya didefinisikan
+    // di utils/session.js supaya logout menghapus cookie yang sama.
+    name: SESSION_COOKIE_NAME,
+    store: new PrismaSessionStore(),
     secret: process.env.SESSION_SECRET,
     resave: false,
     // GET /csrf-token (below) never writes to req.session — it only reads
@@ -143,6 +199,11 @@ app.use(cookieParser());
 // the public site and the admin dashboard.
 app.get('/api/auth/csrf-token', csrfTokenLimiter, authController.csrfToken);
 
+// Log audit (middleware/auditLog.js) — sebelum pemeriksaan CSRF, supaya
+// request staff yang DITOLAK CSRF (tanda percobaan serangan lewat situs
+// lain) ikut tercatat, bukan hanya yang berhasil.
+app.use(['/api/auth', '/api/admin'], auditLog);
+
 // Applied to everything below so every mutating admin/kasir route stays
 // protected by default (GET/HEAD/OPTIONS are exempt via csrf-csrf's own
 // defaults).
@@ -164,6 +225,8 @@ app.use('/api/admin/customers', customerRoutes);
 app.use('/api/admin/loyalty-tiers', loyaltyTierRoutes);
 app.use('/api/admin/api-keys', apiKeyRoutes);
 app.use('/api/admin/webhooks', webhookRoutes);
+app.use('/api/admin/audit-log', auditLogRoutes);
+app.use('/api/admin/realtime', realtimeRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
@@ -172,3 +235,4 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 module.exports = app;
+module.exports.originDiizinkan = originDiizinkan;

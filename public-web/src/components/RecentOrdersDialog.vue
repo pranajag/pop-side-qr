@@ -40,10 +40,10 @@ function openOrder(kodeOrder) {
           v-for="kodeOrder in recentOrders.items"
           :key="kodeOrder"
           type="button"
-          class="flex w-full items-center gap-2.5 rounded-lg border p-3 text-left text-sm font-medium transition-colors active:bg-accent"
+          class="flex w-full items-center gap-2.5 rounded-2xl border p-3.5 text-left text-sm font-medium transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent"
           @click="openOrder(kodeOrder)"
         >
-          <ReceiptIcon class="size-4 shrink-0 text-brand-cta" />
+          <ReceiptIcon class="size-4 shrink-0 text-primary-strong" />
           <span class="min-w-0 flex-1 truncate font-mono">{{ kodeOrder }}</span>
           <ChevronRightIcon class="size-4 shrink-0 text-muted-foreground" />
         </button>

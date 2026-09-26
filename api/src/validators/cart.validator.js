@@ -1,9 +1,10 @@
 const { z } = require('zod');
+const { memberPhoneSchema } = require('./common');
 
-const cartTotalSchema = z.object({
+const cartTotalSchema = z.strictObject({
   items: z
     .array(
-      z.object({
+      z.strictObject({
         productId: z.coerce.number().int().positive(),
         qty: z.coerce.number().int().positive().max(99),
         variantOptionIds: z.array(z.coerce.number().int().positive()).max(20).optional(),
@@ -15,11 +16,12 @@ const cartTotalSchema = z.object({
   // number qualifies for before the order is placed. Only ever a lookup
   // key — the discount percentage itself comes from the customer's stored
   // points, never from the request.
-  customerPhone: z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(20).optional()),
-  // Not used for pricing — the table's QR token is only what scopes the
-  // member-lookup rate limit per table instead of per cafe-wide IP
-  // (rateLimit.js's memberLookupLimiter). Optional so a preview without it
-  // still works, just sharing one bucket.
+  customerPhone: memberPhoneSchema,
+  // Not used for pricing — the table's QR token scopes the member-lookup
+  // rate limit per table instead of per cafe-wide IP (rateLimit.js's
+  // memberLookupLimiter), and is REQUIRED (and verified) whenever
+  // customerPhone is present (cart.service.js). Optional otherwise, so the
+  // plain cart total keeps working without it.
   token: z.string().trim().max(64).optional(),
 });
 

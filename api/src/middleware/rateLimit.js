@@ -1,4 +1,5 @@
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
+const { normalisasiTelepon } = require('../validators/common');
 
 // IP alone over-shares a bucket across every table on the cafe's WiFi (one
 // public IP behind NAT for the whole venue) — a busy shift with several
@@ -8,8 +9,15 @@ const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 // budget independent of everyone else's, while a single customer/table
 // still can't exceed the same limit AGENTS.md specifies — this narrows
 // the bucket, it doesn't loosen it.
+//
+// The scope is trimmed the same way the zod validators trim it: limiters
+// run BEFORE validate(), so without this "token" and "token   " would be
+// two separate buckets that both pass validation as the same token —
+// padding the real token with a different amount of whitespace on every
+// request would get a fresh budget each time.
 function scopedKey(req, scope) {
-  return `${ipKeyGenerator(req.ip)}:${scope || ''}`;
+  const kunci = typeof scope === 'string' ? scope.trim() : '';
+  return `${ipKeyGenerator(req.ip)}:${kunci}`;
 }
 
 // 5 failed logins / 1 minute / (IP + username) combination. Shortened from
@@ -33,7 +41,12 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
-  keyGenerator: (req) => `${ipKeyGenerator(req.ip)}:${(req.body?.username || '').toLowerCase()}`,
+  // Username dibakukan persis seperti usernameSchema (trim) + tidak peka
+  // huruf besar/kecil (collation MySQL _ci): "admin", " admin " dan "ADMIN"
+  // adalah akun yang sama, jadi harus satu jatah. Tanpa trim, tiap variasi
+  // spasi di ujung dapat 5 percobaan baru dan lockout bisa dilewati.
+  keyGenerator: (req) =>
+    `${ipKeyGenerator(req.ip)}:${typeof req.body?.username === 'string' ? req.body.username.trim().toLowerCase() : ''}`,
   handler: (req, res) => {
     res.status(429).json({ error: 'Terlalu banyak percobaan gagal. Coba lagi nanti.' });
   },
@@ -63,7 +76,10 @@ const createOrderLimiter = rateLimit({
 // createOrderLimiter: a cafe's whole floor shares one public IP, so a flat
 // per-IP cap tight enough to stop probing would start rejecting real
 // customers at a busy table. An attacker only holds the tokens they can
-// physically scan, so scoping narrows their ceiling instead of widening it.
+// physically scan, so scoping narrows their ceiling instead of widening it
+// — which only holds because cart.service.js REJECTS a member lookup whose
+// token isn't a real table's: otherwise a made-up token per request would
+// be a brand-new bucket every time.
 //
 // Skipped entirely when there's no phone in the body, so an ordinary cart
 // total keeps the limit it always had.
@@ -108,9 +124,16 @@ const orderStatusLimiter = rateLimit({
 // busy cafe's shared WiFi IP headroom for ~10 tables each polling their own
 // order every 20s (OrderView.vue), while capping a single-IP attacker to
 // ~43k guesses/day — full enumeration now needs many source IPs, not one.
+//
+// 2026-09-26: 30 -> 300. Menebak kode sudah tidak ada gunanya: pelacakan
+// terikat ke cookie perangkat pemesan (order.service.js milikPerangkat),
+// jadi kode yang benar pun dijawab 404 dari perangkat lain. Yang tersisa
+// hanya menjaga beban — dan 30/menit terlalu sempit untuk satu WiFi kafe:
+// 15 HP yang melacak pesanan (3x/menit masing-masing) sudah mentok,
+// customer ke-11 mulai melihat error. 300 = ~100 HP sekaligus.
 const orderStatusIpLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 30,
+  limit: 300,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => ipKeyGenerator(req.ip),
@@ -144,9 +167,13 @@ const confirmPaymentLimiter = rateLimit({
 // polling interval. Bounds how fast a stranger can spray fake payment
 // proofs across other customers' orders (each hit flips a real order to
 // "waiting_verif" and drops junk into the kasir's verification queue).
+//
+// 2026-09-26: 10 -> 60. Bukti bayar hanya diterima dari perangkat pemesan
+// (cookie), jadi menyemprot bukti palsu ke order orang lain tidak mungkin
+// lagi; batas per-IP ini tinggal penjaga beban untuk WiFi kafe bersama.
 const confirmPaymentIpLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 10,
+  limit: 60,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => ipKeyGenerator(req.ip),
@@ -154,6 +181,75 @@ const confirmPaymentIpLimiter = rateLimit({
     res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi sebentar.' });
   },
 });
+
+// OTP member di checkout publik (memberOtp.service.js). Dua sisi:
+//   - per NOMOR, siapa pun yang meminta: melindungi pemilik nomor dari
+//     dibanjiri pesan, membatasi biaya gateway, dan membatasi berapa kode
+//     yang bisa dicoba ditebak untuk satu nomor (3 kode/10 menit x 5
+//     percobaan per kode);
+//   - per (IP + meja): satu orang tidak bisa memborong jatah banyak nomor.
+// Nomor dibakukan dulu (seperti validator), jadi variasi penulisan nomor
+// yang sama tetap satu jatah. Batasnya sama untuk nomor apa pun — member
+// atau bukan — jadi pesan "terlalu sering" pun tidak membocorkan apa-apa.
+function kunciNomor(req) {
+  const nomor = typeof req.body?.customerPhone === 'string' ? normalisasiTelepon(req.body.customerPhone) : '';
+  return `nomor:${nomor}`;
+}
+
+function batasOtp(windowMs, limit, keyGenerator, pesan) {
+  return rateLimit({
+    windowMs,
+    limit,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator,
+    handler: (req, res) => {
+      res.status(429).json({ error: pesan });
+    },
+  });
+}
+
+// Langkah 2FA login admin. Batas per akun (5x salah -> kunci 15 menit) ada
+// di twoFactor.service.js; ini batas kasar per IP di atasnya.
+const duaFaktorLimiter = batasOtp(5 * 60 * 1000, 20, (req) => ipKeyGenerator(req.ip), 'Terlalu banyak percobaan. Coba lagi beberapa menit lagi.');
+
+// Batas yang TIDAK bergantung pada IP. Di hosting, IP pengunjung dibaca dari
+// header X-Forwarded-For (TRUST_PROXY), dan siapa pun yang menembak API
+// langsung (melewati proxy) bisa memalsukannya — limiter per IP lalu bisa
+// diakali dengan mengganti IP palsu tiap request. Limiter di bawah ini
+// menempel pada hal yang tidak bisa dipalsukan: username yang dicoba, dan
+// token meja (harus token asli untuk bisa berbuat apa-apa).
+//   - login per username: 20 gagal / 15 menit. Admin juga dilindungi 2FA;
+//     ini terutama untuk akun kasir (tanpa 2FA).
+//   - buat pesanan per meja: 20 / 10 menit — jauh di atas pemakaian wajar
+//     satu meja, menahan banjir pesanan palsu dari satu QR.
+//   - panggil staff per meja: 10 / 10 menit.
+function kunciUsername(req) {
+  const u = typeof req.body?.username === 'string' ? req.body.username.trim().toLowerCase() : '';
+  return `username:${u}`;
+}
+function kunciMeja(req) {
+  const tkn = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+  return `meja:${tkn}`;
+}
+const loginUsernameLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: kunciUsername,
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak percobaan gagal untuk akun ini. Coba lagi 15 menit lagi.' });
+  },
+});
+const createOrderMejaLimiter = batasOtp(10 * 60 * 1000, 20, kunciMeja, 'Terlalu banyak pesanan dari meja ini. Coba lagi sebentar, atau panggil staff.');
+const staffCallMejaLimiter = batasOtp(10 * 60 * 1000, 10, kunciMeja, 'Staff sudah dipanggil beberapa kali dari meja ini — mohon tunggu sebentar.');
+
+const otpMintaNomorLimiter = batasOtp(10 * 60 * 1000, 3, kunciNomor, 'Terlalu sering meminta kode untuk nomor ini. Coba lagi 10 menit lagi.');
+const otpMintaHarianLimiter = batasOtp(24 * 60 * 60 * 1000, 10, kunciNomor, 'Batas permintaan kode hari ini untuk nomor ini sudah habis.');
+const otpMintaIpLimiter = batasOtp(60 * 60 * 1000, 10, (req) => scopedKey(req, req.body?.token), 'Terlalu banyak permintaan kode dari perangkat ini. Coba lagi nanti.');
+const otpVerifikasiLimiter = batasOtp(10 * 60 * 1000, 15, (req) => scopedKey(req, req.body?.token), 'Terlalu banyak percobaan kode. Coba lagi beberapa menit lagi.');
 
 // Not an order, so no anti-guessing rationale like the ones above — this
 // is purely spam-prevention against a customer mashing the button. Scoped
@@ -176,9 +272,14 @@ const staffCallLimiter = rateLimit({
 // but an unbounded GET still lets anyone hammer this route for cheap
 // resource-exhaustion / scraping. Generous limit since a real customer's
 // own page can legitimately re-verify a few times (reload, back-forward).
+//
+// 2026-09-26: 20 -> 200. Per IP, dan satu WiFi kafe = satu IP: rombongan 20
+// orang yang scan QR di menit yang sama (plus membuka Bill, yang lewat
+// limiter ini juga) sudah mentok di 20 — orang ke-21 tidak bisa membuka
+// menu sama sekali. Token 256-bit tetap mustahil ditebak berapa pun batasnya.
 const tableVerifyLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 20,
+  limit: 200,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => ipKeyGenerator(req.ip),
@@ -191,9 +292,16 @@ const tableVerifyLimiter = rateLimit({
 // same resource-exhaustion/scraping concern as above, just for read-mostly
 // routes instead. Generous enough that normal browsing (menu load, each
 // cart edit debounced at 250ms) never gets close.
+//
+// 2026-09-26: 60 -> 600. "Normal browsing never gets close" hanya benar
+// untuk SATU customer; semua customer di WiFi kafe berbagi satu IP, dan 60
+// habis oleh ~6-10 orang yang membuka menu + mengubah keranjang bersamaan
+// (terukur: permintaan ke-61 dari satu IP dalam semenit ditolak 429).
+// 600/menit = 10/detik dari satu IP — ringan untuk endpoint baca ini
+// (menu ~5 ms), dan tetap menahan satu klien yang menyedot habis-habisan.
 const publicReadLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 60,
+  limit: 600,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => ipKeyGenerator(req.ip),
@@ -276,6 +384,14 @@ const externalAuthLimiter = rateLimit({
 
 module.exports = {
   loginLimiter,
+  loginUsernameLimiter,
+  createOrderMejaLimiter,
+  staffCallMejaLimiter,
+  duaFaktorLimiter,
+  otpMintaNomorLimiter,
+  otpMintaHarianLimiter,
+  otpMintaIpLimiter,
+  otpVerifikasiLimiter,
   createOrderLimiter,
   orderStatusLimiter,
   orderStatusIpLimiter,

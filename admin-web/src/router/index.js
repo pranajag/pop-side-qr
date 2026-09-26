@@ -81,6 +81,12 @@ const routes = [
         meta: { roles: ['admin'] },
       },
       {
+        path: 'log-audit',
+        name: 'log-audit',
+        component: () => import('@/views/AuditLogView.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
         path: 'akun',
         name: 'akun',
         component: () => import('@/views/UsersView.vue'),
@@ -94,6 +100,9 @@ const routes = [
       },
     ],
   },
+  // Alamat tak dikenal (salah ketik, link lama) — ke halaman awal sesuai
+  // peran lewat guard di bawah, bukan layar kosong.
+  { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
 
 const router = createRouter({

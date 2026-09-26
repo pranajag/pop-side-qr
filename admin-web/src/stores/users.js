@@ -22,6 +22,13 @@ export const useUsersStore = defineStore('users', {
       const idx = this.items.findIndex((u) => u.id === id)
       if (idx !== -1) this.items[idx] = data.user
     },
+    // Mencabut 2FA seorang staff (HP hilang/ganti). Butuh PIN admin yang
+    // melakukannya; semua sesi login akun itu dihapus server.
+    async reset2fa(id, pin) {
+      await api.post(`/admin/users/${id}/reset-2fa`, { pin })
+      const user = this.items.find((u) => u.id === id)
+      if (user) user.duaFaktorAktif = false
+    },
     async remove(id) {
       await api.del(`/admin/users/${id}`)
       this.items = this.items.filter((u) => u.id !== id)

@@ -1,5 +1,6 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { toast } from 'vue-sonner'
 import { useRouter } from 'vue-router'
 import { useTableStore } from '@/stores/table'
 import { useMenuStore } from '@/stores/menu'
@@ -13,6 +14,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import QtyStepper from '@/components/QtyStepper.vue'
+import ReservasiNotice from '@/components/ReservasiNotice.vue'
+import { teksReservasi } from '@/lib/reservasi'
 import VariantPickerDialog from '@/components/VariantPickerDialog.vue'
 import CallStaffDialog from '@/components/CallStaffDialog.vue'
 import RecentOrdersDialog from '@/components/RecentOrdersDialog.vue'
@@ -65,7 +68,13 @@ const visibleCategories = computed(() => {
     .filter((c) => c.products.length > 0)
 })
 
+// Saat tutup, menu cuma bisa dilihat: tidak ada yang bisa masuk keranjang.
+// Tombolnya sudah dimatikan di template; ini penjaga kalau event tetap
+// sampai (mis. status berubah tepat saat tombol ditekan).
+const tutup = computed(() => cafeStatus.tutup)
+
 function onTambahClick(product) {
+  if (tutup.value) return
   if (product.variantGroups.length > 0) {
     pickerProduct.value = product
     pickerOpen.value = true
@@ -74,7 +83,26 @@ function onTambahClick(product) {
   }
 }
 
+// Notif sekali per reservasi (dan sekali lagi saat berubah dari "sebentar
+// lagi" ke "sedang berlangsung") — bannernya tetap ada selama berlaku,
+// toast cuma supaya tidak terlewat saat pertama kali muncul.
+watch(
+  () => table.reservasi,
+  (r) => {
+    if (!r) return
+    const kunci = `${r.waktu}|${r.sudahMulai}`
+    if (table.reservasiDiberitahu === kunci) return
+    table.reservasiDiberitahu = kunci
+    const teks = teksReservasi(locale, table.nomorMeja, r)
+    toast.warning(teks.judul, { description: teks.isi, duration: 8000 })
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
+  // Setelah scan QR info reservasinya masih segar; setelah reload halaman
+  // belum pernah dicek — perbaruiReservasi sendiri yang memutuskan.
+  table.perbaruiReservasi()
   if (table.isVerified && !menu.loaded) {
     menu.fetchMenu()
   }
@@ -126,7 +154,7 @@ const estimatedTotal = computed(() =>
     </div>
   </div>
 
-  <div v-else class="mx-auto min-h-svh max-w-md pb-24 sm:max-w-lg md:max-w-xl">
+  <div v-else class="mx-auto min-h-svh max-w-md pb-28 sm:max-w-2xl lg:max-w-5xl">
     <header
       class="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur"
     >
@@ -134,7 +162,7 @@ const estimatedTotal = computed(() =>
       <div class="flex items-center gap-1.5">
         <button
           type="button"
-          class="flex h-10 shrink-0 items-center justify-center rounded-full border px-2.5 text-xs font-semibold active:bg-accent"
+          class="flex h-10 shrink-0 items-center justify-center rounded-full border px-2.5 text-xs font-semibold transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent"
           @click="locale.toggle()"
         >
           {{ locale.locale === 'id' ? 'EN' : 'ID' }}
@@ -142,14 +170,14 @@ const estimatedTotal = computed(() =>
         <button
           type="button"
           :aria-label="locale.t(theme.isDark ? 'temaTerang' : 'temaGelap')"
-          class="flex size-10 shrink-0 items-center justify-center rounded-full border active:bg-accent"
+          class="flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent"
           @click="theme.toggle()"
         >
           <SunIcon v-if="theme.isDark" class="size-4" />
           <MoonIcon v-else class="size-4" />
         </button>
         <span
-          class="rounded-full bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-body"
+          class="rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
         >
           {{ locale.t('meja') }} {{ table.nomorMeja }}
         </span>
@@ -157,7 +185,7 @@ const estimatedTotal = computed(() =>
           v-if="recentOrders.items.length > 0"
           type="button"
           :aria-label="locale.t('pesananSayaLabel')"
-          class="flex size-10 shrink-0 items-center justify-center rounded-full border active:bg-accent"
+          class="flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent"
           @click="recentOrdersOpen = true"
         >
           <ReceiptIcon class="size-4" />
@@ -165,7 +193,7 @@ const estimatedTotal = computed(() =>
         <button
           type="button"
           :aria-label="locale.t('panggilStaffLabel')"
-          class="flex size-10 shrink-0 items-center justify-center rounded-full border active:bg-accent"
+          class="flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent"
           @click="callStaffOpen = true"
         >
           <BellIcon class="size-4" />
@@ -173,7 +201,7 @@ const estimatedTotal = computed(() =>
         <button
           type="button"
           :aria-label="locale.t('billLabel')"
-          class="flex size-10 shrink-0 items-center justify-center rounded-full border active:bg-accent"
+          class="flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent"
           @click="billOpen = true"
         >
           <ReceiptTextIcon class="size-4" />
@@ -190,8 +218,8 @@ const estimatedTotal = computed(() =>
         class="shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors"
         :class="
           activeCategoryId === null
-            ? 'bg-brand-cta text-heading'
-            : 'border border-border text-muted-foreground hover:text-foreground'
+            ? 'bg-primary text-primary-foreground'
+            : 'bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
         "
         @click="activeCategoryId = null"
       >
@@ -204,8 +232,8 @@ const estimatedTotal = computed(() =>
         class="shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors"
         :class="
           activeCategoryId === category.id
-            ? 'bg-brand-cta text-heading'
-            : 'border border-border text-muted-foreground hover:text-foreground'
+            ? 'bg-primary text-primary-foreground'
+            : 'bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
         "
         @click="activeCategoryId = category.id"
       >
@@ -214,8 +242,10 @@ const estimatedTotal = computed(() =>
     </div>
 
     <main class="px-4 py-4">
+      <ReservasiNotice class="mb-4" />
+
       <div
-        v-if="cafeStatus.loaded && !cafeStatus.sedangBuka"
+        v-if="tutup"
         class="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5"
       >
         <p class="text-sm font-semibold text-destructive">
@@ -231,13 +261,13 @@ const estimatedTotal = computed(() =>
         class="relative mb-4"
       >
         <SearchIcon
-          class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          class="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
         />
         <input
           v-model="searchQuery"
           type="text"
           :placeholder="locale.t('cariMenu')"
-          class="h-10 w-full rounded-full border border-input bg-transparent pl-9 pr-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          class="h-12 w-full rounded-full border border-transparent bg-card pl-10 pr-4 text-sm shadow-[0_1px_2px_rgba(13,15,20,0.04)] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         />
       </div>
 
@@ -272,12 +302,12 @@ const estimatedTotal = computed(() =>
         <section
           v-for="category in visibleCategories"
           :key="category.id"
-          class="rounded-xl border bg-card p-4 shadow-sm"
+          class="rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)]"
         >
           <h2
             class="mb-3 flex items-center gap-2 text-base font-bold text-foreground"
           >
-            <span class="h-4 w-1.5 shrink-0 rounded-full bg-brand-cta"></span>
+            <span class="h-4 w-1.5 shrink-0 rounded-full bg-primary"></span>
             {{ category.nama }}
           </h2>
           <p
@@ -286,22 +316,28 @@ const estimatedTotal = computed(() =>
           >
             {{ locale.t('belumAdaProduk') }}
           </p>
-          <ul class="divide-y divide-border">
+          <!-- One column on a phone (a divided list reads fastest with a
+          thumb), two or three once there is room — on a laptop a single
+          narrow column would leave most of the screen empty. The divider
+          only makes sense in list mode, so it is dropped in grid mode. -->
+          <ul
+            class="divide-y divide-border sm:grid sm:grid-cols-2 sm:gap-3 sm:divide-y-0 lg:grid-cols-3"
+          >
             <li
               v-for="product in category.products"
               :key="product.id"
-              class="flex gap-3 py-3.5 first:pt-0 last:pb-0"
+              class="-mx-2 flex gap-3 rounded-2xl px-2 py-3.5 transition-colors first:pt-2 last:pb-2 hover:bg-accent/40 active:bg-accent/60 sm:mx-0 sm:border sm:p-3 sm:py-3 sm:first:pt-3 sm:last:pb-3 sm:hover:border-primary/40"
             >
               <img
                 v-if="product.foto"
                 :src="photoUrl(product.foto)"
                 :alt="product.nama"
                 loading="lazy"
-                class="size-16 shrink-0 rounded-xl border object-cover"
+                class="size-20 shrink-0 rounded-2xl object-cover"
               />
               <div
                 v-else
-                class="flex size-16 shrink-0 items-center justify-center rounded-xl border bg-muted"
+                class="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-muted"
               >
                 <ImageOffIcon class="size-5 text-muted-foreground" />
               </div>
@@ -325,7 +361,8 @@ const estimatedTotal = computed(() =>
                     "
                     size="sm"
                     variant="outline"
-                    class="h-9"
+                    class="h-9 active:border-primary/50 active:bg-accent"
+                    :disabled="tutup"
                     @click="onTambahClick(product)"
                   >
                     {{
@@ -337,7 +374,7 @@ const estimatedTotal = computed(() =>
                   <QtyStepper
                     v-else
                     :qty="cart.qtyFor(product.id, [])"
-                    :max="maxQty(product)"
+                    :max="tutup ? cart.qtyFor(product.id, []) : maxQty(product)"
                     @update:qty="(q) => cart.setQty(product.id, [], q)"
                   />
                 </div>
@@ -350,31 +387,34 @@ const estimatedTotal = computed(() =>
 
     <div
       v-if="!cart.isEmpty"
-      class="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md px-3 pb-3 sm:max-w-lg md:max-w-xl"
+      class="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md px-3 pb-3 sm:max-w-2xl lg:max-w-5xl"
     >
       <button
         type="button"
-        :disabled="cafeStatus.loaded && !cafeStatus.sedangBuka"
-        class="flex w-full items-center gap-3 rounded-2xl bg-brand-cta p-3 pr-4 shadow-lg shadow-black/15 transition-transform active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
+        :disabled="tutup"
+        class="flex w-full items-center gap-3 rounded-2xl bg-primary p-3 pr-4 shadow-lg shadow-black/15 transition-all hover:brightness-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:shadow-none disabled:saturate-[0.3] disabled:hover:brightness-100 disabled:active:scale-100"
         @click="router.push({ name: 'cart' })"
       >
         <span
-          class="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-primary text-sm font-bold text-body"
+          class="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-foreground/10 text-sm font-bold text-primary-foreground"
         >
           {{ cart.totalQty }}
         </span>
         <span class="min-w-0 flex-1 text-left">
-          <span class="block text-[11px] font-medium text-brand-secondary">{{
+          <span class="block text-[11px] font-medium text-primary-foreground/70">{{
             locale.t('totalPesanan')
           }}</span>
-          <span class="block truncate text-base font-semibold text-heading">{{
+          <span class="block truncate text-base font-semibold text-primary-foreground">{{
             formatRupiah(estimatedTotal)
           }}</span>
         </span>
+        <!-- Allowed to wrap rather than shrink-0: the closed-cafe label is
+        long enough to squeeze the total next to it down to "Rp 40.0…",
+        and the one number the customer came here to read must survive. -->
         <span
-          class="flex shrink-0 items-center gap-0.5 text-sm font-semibold text-heading"
+          class="flex max-w-[45%] items-center gap-0.5 text-right text-sm font-semibold leading-tight text-primary-foreground"
         >
-          <template v-if="cafeStatus.loaded && !cafeStatus.sedangBuka">
+          <template v-if="tutup">
             {{ locale.t('kafeTutupTombol') }}
           </template>
           <template v-else>

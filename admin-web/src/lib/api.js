@@ -27,7 +27,9 @@ function setSessionExpiredHandler(fn) {
 // form needs to show.
 let sessionExpiredFired = false
 function handleSessionExpired(path) {
-  if (path.startsWith('/auth/login')) return false
+  // Langkah 2FA juga: 401 di sana berarti "ulangi dari password", dan layar
+  // login sendiri yang menanganinya.
+  if (path.startsWith('/auth/login') || path.startsWith('/auth/2fa')) return false
   if (sessionExpiredFired) return true
   sessionExpiredFired = true
   onSessionExpired?.()
@@ -87,6 +89,9 @@ async function request(
     // is suppressed, so every other unhandled rejection still shows up.
     if (res.status === 401) error.handled = handleSessionExpired(path)
     error.details = data?.details
+    // Kode mesin untuk penolakan yang harus ditanggapi layar (mis.
+    // PIN_DIPERLUKAN -> tampilkan kolom PIN), lihat api/src/utils/AppError.js.
+    error.code = data?.code
     // Set by express-rate-limit (standardHeaders: true) on every response
     // from a rate-limited route, not just once it trips — harmless to read
     // generically here since most endpoints simply won't have them.

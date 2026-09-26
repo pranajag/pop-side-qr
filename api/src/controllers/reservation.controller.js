@@ -1,4 +1,5 @@
 const reservationService = require('../services/reservation.service');
+const settingsService = require('../services/settings.service');
 
 async function list(req, res) {
   const reservations = await reservationService.list(req.query.status);
@@ -11,12 +12,12 @@ async function get(req, res) {
 }
 
 async function create(req, res) {
-  const reservation = await reservationService.create(req.body);
-  res.status(201).json({ reservation });
+  const hasil = await reservationService.create(req.body, req.session.user);
+  res.status(201).json(hasil);
 }
 
 async function update(req, res) {
-  const reservation = await reservationService.update(req.params.id, req.body);
+  const reservation = await reservationService.update(req.params.id, req.body, req.session.user);
   res.json({ reservation });
 }
 
@@ -25,9 +26,13 @@ async function updateStatus(req, res) {
   res.json({ reservation });
 }
 
-async function setDepositPaid(req, res) {
-  const reservation = await reservationService.setDepositPaid(req.params.id, req.body.metode);
-  res.json({ reservation });
+async function catatPembayaranDp(req, res) {
+  const hasil = await reservationService.catatPembayaranDp(req.params.id, req.body, req.session.user.id);
+  res.status(201).json(hasil);
+}
+
+async function aturanDp(req, res) {
+  res.json({ aturanDp: await settingsService.getAturanDp() });
 }
 
 async function remove(req, res) {
@@ -35,4 +40,4 @@ async function remove(req, res) {
   res.status(204).end();
 }
 
-module.exports = { list, get, create, update, updateStatus, setDepositPaid, remove };
+module.exports = { list, get, create, update, updateStatus, catatPembayaranDp, aturanDp, remove };

@@ -1,6 +1,7 @@
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const tableService = require('./table.service');
+const realtime = require('../realtime');
 
 function toShaped(call) {
   return {
@@ -22,6 +23,7 @@ async function create(token, catatan) {
     data: { tableId: table.id, catatan },
     include: { table: { select: { nomorMeja: true } } },
   });
+  realtime.keStaff('panggilan:baru', { id: call.id });
   return toShaped(call);
 }
 
@@ -63,6 +65,7 @@ async function resolve(id, userId) {
     where: { id },
     include: { table: { select: { nomorMeja: true } } },
   });
+  realtime.keStaff('panggilan:berubah', { id });
   return toShaped(call);
 }
 

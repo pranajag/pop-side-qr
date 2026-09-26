@@ -1,6 +1,6 @@
 const { z } = require('zod');
 
-const updateStatusSchema = z.object({
+const updateStatusSchema = z.strictObject({
   status: z.enum(['cooking', 'ready', 'completed', 'cancelled']),
   catatan: z.string().trim().max(200).optional(),
   // Only meaningful when status is 'cancelled' on an order that had
@@ -11,12 +11,15 @@ const updateStatusSchema = z.object({
   pin: z.string().max(10).optional(),
 });
 
-const confirmPaymentSchema = z.object({
+const confirmPaymentSchema = z.strictObject({
   // Cash the customer handed over, tunai orders only. Optional — confirming
   // without it still works exactly as before. The service (not this schema)
   // rejects an amount below the order total and an amount on a non-cash
   // order, since only it knows what the order actually costs.
   cashReceived: z.coerce.number().min(0).max(999999999).optional(),
+  // Wajib hanya untuk order dengan total >= batas PIN di Pengaturan —
+  // service yang memutuskan, bukan schema ini.
+  pin: z.string().max(10).optional(),
 });
 
 module.exports = { updateStatusSchema, confirmPaymentSchema };

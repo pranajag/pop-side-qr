@@ -7,7 +7,7 @@ const { z } = require('zod');
 const emptyToNull = (schema) =>
   z.preprocess((v) => (v === '' ? null : v), schema.nullable().optional());
 
-const updateStoreInfoSchema = z.object({
+const updateStoreInfoSchema = z.strictObject({
   namaToko: emptyToNull(z.string().trim().max(100)),
   alamat: emptyToNull(z.string().trim().max(300)),
   telepon: emptyToNull(z.string().trim().max(30)),
@@ -17,4 +17,24 @@ const updateStoreInfoSchema = z.object({
   serviceChargePersen: z.coerce.number().min(0).max(100).optional(),
 });
 
-module.exports = { updateStoreInfoSchema };
+// Its own endpoint rather than a field on updateStoreInfoSchema: the
+// dashboard flips this with a single switch and must not have to resend
+// (and risk clobbering) the receipt header and tax rates to do it.
+const updateMemberEnabledSchema = z.strictObject({
+  memberEnabled: z.boolean(),
+});
+
+// Aturan DP reservasi. Dibatasi Rp 10 juta supaya salah ketik satu nol
+// berlebih tidak diam-diam jadi DP wajib seratus juta.
+const updateAturanDpSchema = z.strictObject({
+  nominal: z.coerce.number().int().min(0).max(10000000),
+  perTamu: z.boolean(),
+});
+
+// Batas PIN konfirmasi pembayaran (Rupiah). null = PIN tidak pernah
+// diminta; 0 = semua pembayaran pakai PIN.
+const updatePinVerifikasiSchema = z.strictObject({
+  minimal: z.coerce.number().int().min(0).max(1000000000).nullable(),
+});
+
+module.exports = { updateStoreInfoSchema, updateMemberEnabledSchema, updateAturanDpSchema, updatePinVerifikasiSchema };

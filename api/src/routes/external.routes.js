@@ -2,6 +2,8 @@ const { Router } = require('express');
 const externalController = require('../controllers/external.controller');
 const requireApiKey = require('../middleware/requireApiKey');
 const { externalApiLimiter, externalAuthLimiter } = require('../middleware/rateLimit');
+const { validateQuery } = require('../middleware/validate');
+const { externalOrdersQuerySchema } = require('../validators/external.validator');
 
 const router = Router();
 
@@ -16,7 +18,7 @@ const router = Router();
 // requireApiKey responds 401 before req.apiKey is ever set.
 router.use(externalAuthLimiter, requireApiKey, externalApiLimiter);
 
-router.get('/orders', externalController.orders);
+router.get('/orders', validateQuery(externalOrdersQuerySchema), externalController.orders);
 router.get('/products', externalController.products);
 
 module.exports = router;

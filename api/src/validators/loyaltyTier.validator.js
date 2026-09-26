@@ -5,7 +5,7 @@ const { z } = require('zod');
 // own discountPercent can be configured past.
 const MAX_TIER_DISCOUNT_PERCENT = 25;
 
-const createLoyaltyTierSchema = z.object({
+const createLoyaltyTierSchema = z.strictObject({
   minPoints: z.coerce.number().int().min(1).max(1000000),
   discountPercent: z.coerce.number().min(0).max(MAX_TIER_DISCOUNT_PERCENT),
 });

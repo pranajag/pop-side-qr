@@ -66,13 +66,16 @@ const discountNumber = computed(() =>
   Math.round(subtotal.value * (discountPercentNumber.value / 100))
 )
 
-// Tier-discount suggestion: looks up the typed phone against existing
-// members and, if their points clear a configured tier, offers a one-click
-// discount fill-in. Deliberately never auto-applies — staff clicks the
-// button, same "opsional" requirement as the discount field itself. Reuses
-// the same customer-search endpoint MembersView.vue's table uses (`contains`
-// match), then narrows to an exact phone match client-side rather than
-// trusting the first partial hit.
+// Tier discount: looks up the typed phone against existing members and, if
+// their points clear a configured tier, fills the discount in on its own.
+// The server applies the same discount regardless (order.service.js's
+// createManualOrder), so this fill-in exists to keep the total on screen
+// honest rather than to decide anything — staff would otherwise be quoted
+// one price and the customer charged another.
+//
+// Reuses the same customer-search endpoint MembersView.vue's table uses
+// (`contains` match), then narrows to an exact phone match client-side
+// rather than trusting the first partial hit.
 const memberLookup = ref(null)
 let memberLookupDebounce = null
 watch(customerPhone, (phone) => {
@@ -96,12 +99,30 @@ const suggestedTier = computed(() =>
   memberLookup.value ? tiersStore.applicableTier(memberLookup.value.points) : null
 )
 
-function applyTierDiscount() {
-  if (!suggestedTier.value) return
-  discountPercent.value = suggestedTier.value.discountPercent
-  discountReason.value = `Tukar poin member (≥ ${suggestedTier.value.minPoints} poin)`
-  toast.success(`Diskon ${suggestedTier.value.discountPercent}% dari poin member diterapkan`)
-}
+// Tracks the value this auto-fill wrote, so it can tell its own number
+// apart from one staff typed. A discount staff entered themselves is an
+// explicit decision and is never overwritten — the server honours that same
+// precedence.
+let autoFilledPercent = null
+
+watch(suggestedTier, (tier) => {
+  const staffTypedTheirOwn =
+    discountPercent.value !== '' && discountPercent.value !== autoFilledPercent
+  if (staffTypedTheirOwn) return
+
+  if (tier) {
+    discountPercent.value = tier.discountPercent
+    discountReason.value = `Member ${tier.discountPercent}% (≥ ${tier.minPoints} poin)`
+    autoFilledPercent = tier.discountPercent
+  } else if (autoFilledPercent !== null) {
+    // The number that was in the field came from a member who no longer
+    // applies (phone edited/cleared) — clear it rather than silently
+    // discounting the next customer.
+    discountPercent.value = ''
+    discountReason.value = ''
+    autoFilledPercent = null
+  }
+})
 
 // { productId, nama, unitPrice, variantOptionIds, variantLabel, qty, group }
 // `group` is only meaningful once splitMode is on — every line starts in
@@ -303,6 +324,28 @@ const subtotal = computed(() =>
 )
 const total = computed(() => Math.max(0, subtotal.value - discountNumber.value))
 
+// Cash handed over at the counter. Blank is allowed — a kasir who already
+// knows the change isn't forced through an extra field — and the server
+// recomputes the change from this, so what shows here is only a preview.
+const cashReceivedInput = ref('')
+const cashReceivedNumber = computed(() => {
+  const raw = cashReceivedInput.value
+  if (raw === '' || raw === null) return null
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : null
+})
+const changePreview = computed(() =>
+  cashReceivedNumber.value === null ? null : cashReceivedNumber.value - total.value
+)
+// The exact total first, then the round notes a customer actually hands
+// over for a bill this size.
+const cashSuggestions = computed(() => {
+  if (!total.value) return []
+  const ceil = Math.ceil(total.value / 10000) * 10000
+  const notes = [20000, 50000, 100000, 150000, 200000].filter((v) => v > total.value)
+  return [...new Set([total.value, ceil, ...notes])].slice(0, 4)
+})
+
 function itemsFor(groupLines) {
   return groupLines.map((l) => ({
     productId: l.productId,
@@ -366,11 +409,20 @@ async function onSubmit() {
       items: itemsFor(lines.value),
       discountAmount: discountNumber.value || undefined,
       discountReason: discountNumber.value > 0 ? discountReason.value.trim() : undefined,
+      // Cash only — the server rejects it on any other method rather than
+      // recording something meaningless.
+      cashReceived: metode.value === 'tunai' ? (cashReceivedNumber.value ?? undefined) : undefined,
     })
+    const bits = []
+    if (order.changeAmount !== null && order.changeAmount !== undefined) {
+      bits.push(`Kembalian ${formatRupiah(order.changeAmount)}`)
+    }
+    if (order.pointsEarned > 0) bits.push(`+${order.pointsEarned} poin`)
     toast.success(
-      order.pointsEarned > 0
-        ? `Pesanan ${order.kodeOrder} dibuat — +${order.pointsEarned} poin`
-        : `Pesanan ${order.kodeOrder} dibuat`
+      bits.length
+        ? `Pesanan ${order.kodeOrder} dibuat — ${bits.join(' · ')}`
+        : `Pesanan ${order.kodeOrder} dibuat`,
+      bits.length ? { duration: 10000 } : undefined
     )
     clearDraft()
     router.push({ name: 'pesanan' })
@@ -448,15 +500,21 @@ async function onSubmit() {
       </p>
       <div
         v-if="suggestedTier"
-        class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/25 bg-primary/5 p-2.5 text-sm"
+        class="rounded-md border border-primary/25 bg-primary/5 p-2.5 text-sm"
       >
-        <span>
-          Member ini punya <strong>{{ memberLookup.points }} poin</strong> — berhak diskon tier
-          <strong>{{ suggestedTier.discountPercent }}%</strong>.
+        Member ini punya <strong>{{ memberLookup.points }} poin</strong> — diskon
+        <strong>{{ suggestedTier.discountPercent }}%</strong> sudah diterapkan otomatis.
+        <span class="block text-xs text-muted-foreground">
+          Berlaku untuk metode bayar apa pun. Ubah kolom diskon di bawah kalau
+          mau memakai angka lain.
         </span>
-        <Button type="button" size="sm" variant="outline" @click="applyTierDiscount">
-          Pakai Diskon Ini
-        </Button>
+      </div>
+      <div
+        v-else-if="memberLookup"
+        class="rounded-md border p-2.5 text-sm text-muted-foreground"
+      >
+        Member ini punya <strong>{{ memberLookup.points }} poin</strong> — belum
+        cukup untuk tier diskon mana pun.
       </div>
     </div>
 
@@ -669,12 +727,62 @@ async function onSubmit() {
       </div>
     </div>
 
+    <!-- Cash only, and only once there's something to pay for. Split mode
+    has a payment method per part, so a single "uang diterima" wouldn't mean
+    anything there. -->
+    <div
+      v-if="metode === 'tunai' && !splitMode && lines.length > 0"
+      class="space-y-3 rounded-lg border p-3"
+    >
+      <div class="space-y-2">
+        <Label for="cash-received-manual">Uang Diterima (opsional)</Label>
+        <Input
+          id="cash-received-manual"
+          v-model="cashReceivedInput"
+          type="number"
+          inputmode="numeric"
+          min="0"
+          :placeholder="String(total)"
+        />
+        <div class="flex flex-wrap gap-1.5">
+          <button
+            v-for="amount in cashSuggestions"
+            :key="amount"
+            type="button"
+            class="rounded-full border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            @click="cashReceivedInput = String(amount)"
+          >
+            {{ formatRupiah(amount) }}
+          </button>
+        </div>
+      </div>
+
+      <div
+        v-if="changePreview !== null"
+        class="rounded-lg border px-3 py-2.5 text-sm"
+        :class="
+          changePreview < 0
+            ? 'border-destructive/40 bg-destructive/10 text-destructive'
+            : 'border-primary-strong/30 bg-primary/10'
+        "
+      >
+        <template v-if="changePreview < 0">
+          Uang diterima kurang {{ formatRupiah(Math.abs(changePreview)) }} dari total.
+        </template>
+        <template v-else>
+          <span class="text-muted-foreground">Kembalian ke customer</span>
+          <span class="ml-2 text-base font-semibold">{{ formatRupiah(changePreview) }}</span>
+        </template>
+      </div>
+    </div>
+
     <Button
       size="lg"
       class="h-12 w-full"
       :disabled="
         submitting ||
         lines.length === 0 ||
+        (changePreview !== null && changePreview < 0) ||
         (activeShiftStore.loaded && !activeShiftStore.hasActiveShift)
       "
       @click="onSubmit"

@@ -50,11 +50,13 @@ export const useOrdersStore = defineStore('orders', {
       this.replaceOrUpdate(data.order)
       return data.order
     },
-    async confirmPayment(id, cashReceived = null) {
-      const data = await api.post(
-        `/admin/orders/${id}/konfirmasi`,
-        cashReceived === null ? {} : { cashReceived }
-      )
+    // pin: wajib untuk order yang ditandai perluPinKonfirmasi (batas di
+    // Pengaturan) — server yang memutuskan dan menolak dengan PIN_DIPERLUKAN.
+    async confirmPayment(id, cashReceived = null, pin = null) {
+      const body = {}
+      if (cashReceived !== null) body.cashReceived = cashReceived
+      if (pin) body.pin = pin
+      const data = await api.post(`/admin/orders/${id}/konfirmasi`, body)
       this.replaceOrUpdate(data.order)
       return data.order
     },

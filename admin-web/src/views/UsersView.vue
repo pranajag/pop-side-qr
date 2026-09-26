@@ -43,7 +43,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { PlusIcon, PencilIcon, Trash2Icon, LoaderCircleIcon } from '@lucide/vue'
+import { PlusIcon, PencilIcon, Trash2Icon, LoaderCircleIcon, ShieldOffIcon } from '@lucide/vue'
 
 const store = useUsersStore()
 const auth = useAuthStore()
@@ -136,6 +136,32 @@ function openDelete(user) {
   pendingDelete = user
 }
 
+// Cabut 2FA — dialog sendiri (bukan AlertDialog) karena butuh isian PIN.
+const resetTarget = ref(null)
+const resetPin = ref('')
+const resetting = ref(false)
+
+function openReset2fa(user) {
+  resetTarget.value = user
+  resetPin.value = ''
+}
+
+async function onReset2faConfirm() {
+  const target = resetTarget.value
+  if (!target) return
+  resetting.value = true
+  try {
+    await store.reset2fa(target.id, resetPin.value)
+    toast.success(`2FA ${target.username} dicabut — wajib dipasang lagi saat login berikutnya.`)
+    resetTarget.value = null
+  } catch (err) {
+    toast.error(formatApiError(err))
+  } finally {
+    resetting.value = false
+    resetPin.value = ''
+  }
+}
+
 async function onDeleteConfirm() {
   const target = pendingDelete
   if (!target) return
@@ -176,13 +202,14 @@ async function onDeleteConfirm() {
             <TableHead class="w-28">Role</TableHead>
             <TableHead class="w-28">Status</TableHead>
             <TableHead class="w-24">PIN</TableHead>
+            <TableHead class="w-28">2FA</TableHead>
             <TableHead class="w-28 text-right">Aksi</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           <TableEmpty
             v-if="!store.loading && store.items.length === 0"
-            :colspan="5"
+            :colspan="6"
           >
             Belum ada akun.
           </TableEmpty>
@@ -209,9 +236,24 @@ async function onDeleteConfirm() {
               <span v-if="user.hasPin" class="text-xs text-status-completed">Sudah diset</span>
               <span v-else class="text-xs text-muted-foreground">Belum diset</span>
             </TableCell>
+            <TableCell data-label="2FA">
+              <span v-if="user.duaFaktorAktif" class="text-xs text-status-completed">Aktif</span>
+              <span v-else-if="user.role === 'admin'" class="text-xs text-muted-foreground">Dipasang saat login</span>
+              <span v-else class="text-xs text-muted-foreground">Tidak dipakai</span>
+            </TableCell>
             <TableCell class="text-right" data-label="Aksi">
               <Button variant="ghost" size="icon" @click="openEdit(user)">
                 <PencilIcon class="size-4" />
+              </Button>
+              <Button
+                v-if="user.duaFaktorAktif"
+                variant="ghost"
+                size="icon"
+                :aria-label="`Cabut 2FA ${user.username}`"
+                title="Cabut 2FA (HP hilang/ganti)"
+                @click="openReset2fa(user)"
+              >
+                <ShieldOffIcon class="size-4" />
               </Button>
               <Button
                 v-if="user.id !== auth.user?.id"
@@ -226,6 +268,34 @@ async function onDeleteConfirm() {
         </TableBody>
       </Table>
     </div>
+
+    <Dialog :open="resetTarget !== null" @update:open="(v) => { if (!v) resetTarget = null }">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cabut 2FA {{ resetTarget?.username }}?</DialogTitle>
+          <DialogDescription>
+            Pakai ini kalau HP authenticator akun tersebut hilang atau ganti.
+            Semua sesi login akun itu langsung berakhir, dan
+            {{ resetTarget?.role === 'admin' ? 'wajib memasang 2FA lagi' : 'bisa login tanpa 2FA' }}
+            saat masuk berikutnya.
+            <span v-if="resetTarget?.id === auth.user?.id" class="mt-1 block font-medium text-foreground">
+              Ini akunmu sendiri — kamu akan langsung keluar.
+            </span>
+          </DialogDescription>
+        </DialogHeader>
+        <form class="space-y-2" @submit.prevent="onReset2faConfirm">
+          <Label for="reset2faPin">PIN kamu (admin)</Label>
+          <Input id="reset2faPin" v-model="resetPin" type="password" inputmode="numeric" autocomplete="off" maxlength="6" required />
+          <DialogFooter class="pt-2">
+            <Button type="button" variant="outline" @click="resetTarget = null">Batal</Button>
+            <Button type="submit" variant="destructive" :disabled="resetting || resetPin.length < 4">
+              <LoaderCircleIcon v-if="resetting" class="size-4 animate-spin" />
+              Cabut 2FA
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
 
     <Dialog v-model:open="formOpen">
       <DialogContent>

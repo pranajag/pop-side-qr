@@ -4,6 +4,7 @@ import { toast } from 'vue-sonner'
 import { useCustomersStore } from '@/stores/customers'
 import { useLoyaltyTiersStore } from '@/stores/loyaltyTiers'
 import { useAuthStore } from '@/stores/auth'
+import { useSettingsStore } from '@/stores/settings'
 import { formatApiError } from '@/lib/api'
 import { formatRupiah, formatDateTime } from '@/lib/format'
 import { STATUS_LABEL, STATUS_BADGE_CLASS } from '@/lib/orderStatus'
@@ -11,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import {
   Table,
   TableBody,
@@ -57,9 +59,27 @@ function onSearchInput() {
   searchDebounce = setTimeout(() => store.fetchAll(searchQuery.value.trim() || undefined), 250)
 }
 
+// Same switch the dashboard shows — one setting, surfaced in both places
+// because this is where staff come when they're thinking about the loyalty
+// programme, and there when they're running a shift.
+const settings = useSettingsStore()
+const memberBusy = ref(false)
+async function onToggleMember(value) {
+  memberBusy.value = true
+  try {
+    await settings.setMemberEnabled(value)
+    toast.success(value ? 'Fitur member diaktifkan' : 'Fitur member dimatikan')
+  } catch (err) {
+    toast.error(formatApiError(err))
+  } finally {
+    memberBusy.value = false
+  }
+}
+
 onMounted(() => {
   store.fetchAll()
   tiersStore.fetchAll()
+  if (auth.isAdmin) settings.fetchSettings()
 })
 
 const detailId = ref(null)
@@ -162,14 +182,21 @@ async function onTierDeleteConfirm() {
       </p>
     </div>
 
-    <div class="relative max-w-sm">
-      <SearchIcon class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        v-model="searchQuery"
-        placeholder="Cari nomor HP atau nama..."
-        class="pl-8"
-        @input="onSearchInput"
-      />
+    <div class="max-w-sm space-y-1">
+      <div class="relative">
+        <SearchIcon class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          v-model="searchQuery"
+          placeholder="Nama, nomor HP lengkap, atau 4 digit terakhir"
+          class="pl-8"
+          @input="onSearchInput"
+        />
+      </div>
+      <!-- Nomor HP disimpan terenkripsi, jadi potongan awal/tengah nomor
+           ("0812") tidak bisa dicari — lihat api customer.service.js. -->
+      <p class="text-xs text-muted-foreground">
+        Nomor HP disimpan terenkripsi: cari dengan nomor lengkap atau 4 digit terakhirnya.
+      </p>
     </div>
 
     <div class="overflow-x-auto rounded-lg border bg-card">
@@ -257,12 +284,32 @@ async function onTierDeleteConfirm() {
       </DialogContent>
     </Dialog>
 
+    <div v-if="auth.isAdmin" class="space-y-2 rounded-lg border p-3">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <p class="text-sm font-medium">Fitur Member</p>
+          <p class="text-xs text-muted-foreground">
+            Dimatikan berarti kolom nomor HP hilang dari checkout customer, tidak
+            ada poin yang dikumpulkan, dan tidak ada diskon member yang berlaku —
+            baik lewat QR maupun Pesanan Manual. Data member di bawah tetap
+            tersimpan dan hidup lagi saat dinyalakan.
+          </p>
+        </div>
+        <Switch
+          :model-value="settings.memberEnabled"
+          :disabled="memberBusy"
+          @update:model-value="onToggleMember"
+        />
+      </div>
+    </div>
+
     <div class="flex items-center justify-between pt-2">
       <div>
         <h2 class="text-lg font-semibold tracking-tight">Tingkatan Diskon Poin</h2>
         <p class="text-sm text-muted-foreground">
-          Poin member bisa ditukar diskon secara opsional saat kasir membuat Pesanan Manual — kasir
-          yang memutuskan, bukan otomatis. Maksimal {{ MAX_TIER_DISCOUNT_PERCENT }}% per tingkatan.
+          Member yang poinnya mencapai tingkatan ini otomatis dapat diskon —
+          lewat QR maupun Pesanan Manual, metode bayar apa pun. Maksimal
+          {{ MAX_TIER_DISCOUNT_PERCENT }}% per tingkatan.
         </p>
       </div>
       <Button v-if="auth.isAdmin" class="gap-2" @click="openCreateTier">

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useTablesStore } from '@/stores/tables'
+import { useSettingsStore } from '@/stores/settings'
 import { api, formatApiError } from '@/lib/api'
 import { formatRupiah, formatDateTime } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -27,6 +28,7 @@ import {
   ClipboardListIcon,
   DoorOpenIcon,
   EraserIcon,
+  StarIcon,
 } from '@lucide/vue'
 
 const router = useRouter()
@@ -68,6 +70,20 @@ function goToPendingVerif() {
 }
 
 const activeTables = computed(() => tables.items.filter((t) => t.isActive))
+const settings = useSettingsStore()
+const memberBusy = ref(false)
+async function onToggleMember(value) {
+  memberBusy.value = true
+  try {
+    await settings.setMemberEnabled(value)
+    toast.success(value ? 'Fitur member diaktifkan' : 'Fitur member dimatikan')
+  } catch (err) {
+    toast.error(formatApiError(err))
+  } finally {
+    memberBusy.value = false
+  }
+}
+
 const billOpenBusyId = ref(null)
 async function onToggleBillOpen(table, value) {
   billOpenBusyId.value = table.id
@@ -114,6 +130,7 @@ async function onClearVisitConfirm() {
 onMounted(() => {
   load()
   tables.fetchAll()
+  settings.fetchSettings()
 })
 </script>
 
@@ -262,6 +279,39 @@ onMounted(() => {
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <h2 class="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <StarIcon class="size-4" />
+            Fitur Member
+          </h2>
+          <p class="mt-0.5 text-xs text-muted-foreground">
+            Kalau dimatikan, kolom nomor HP hilang dari checkout customer —
+            tidak ada poin yang dikumpulkan dan tidak ada diskon member yang
+            berlaku. Data member yang sudah ada tetap tersimpan.
+          </p>
+        </div>
+        <label
+          class="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
+        >
+          <span>
+            {{ settings.memberEnabled ? 'Aktif' : 'Nonaktif' }}
+            <span class="block text-xs text-muted-foreground">
+              {{
+                settings.memberEnabled
+                  ? 'Customer bisa isi nomor HP untuk kumpulkan poin & dapat diskon.'
+                  : 'Program poin & diskon member sedang berhenti.'
+              }}
+            </span>
+          </span>
+          <Switch
+            :model-value="settings.memberEnabled"
+            :disabled="memberBusy"
+            @update:model-value="onToggleMember"
+          />
+        </label>
       </div>
 
       <div class="space-y-3">

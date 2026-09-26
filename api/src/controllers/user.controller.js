@@ -20,4 +20,9 @@ async function remove(req, res) {
   res.status(204).end();
 }
 
-module.exports = { list, create, update, remove };
+async function reset2fa(req, res) {
+  await userService.reset2fa(req.params.id, req.session.user.id, req.body.pin);
+  res.json({ message: '2FA dicabut. Akun ini wajib memasang 2FA lagi saat login berikutnya.' });
+}
+
+module.exports = { list, create, update, remove, reset2fa };

@@ -26,9 +26,38 @@ import {
   Trash2Icon,
   PlusIcon,
   StoreIcon,
+  ShieldCheckIcon,
 } from '@lucide/vue'
+import { formatRupiah } from '@/lib/format'
 
 const store = useSettingsStore()
+
+// --- Keamanan pembayaran: batas PIN saat konfirmasi pembayaran ---
+// Tiga pilihan, disimpan sebagai satu angka di server: >= nominal (angka),
+// 'semua' (0), atau 'tidak' (null).
+const pinMode = ref('batas')
+const pinBatas = ref(200000)
+const savingPin = ref(false)
+
+function syncPinForm() {
+  const v = store.pinVerifikasiMinimal
+  pinMode.value = v === null ? 'tidak' : v === 0 ? 'semua' : 'batas'
+  pinBatas.value = v && v > 0 ? v : 200000
+}
+
+async function savePinVerifikasi() {
+  const minimal = pinMode.value === 'tidak' ? null : pinMode.value === 'semua' ? 0 : Math.max(1, Math.round(Number(pinBatas.value) || 0))
+  savingPin.value = true
+  try {
+    await store.updatePinVerifikasi(minimal)
+    syncPinForm()
+    toast.success('Aturan PIN konfirmasi pembayaran disimpan')
+  } catch (err) {
+    toast.error(formatApiError(err))
+  } finally {
+    savingPin.value = false
+  }
+}
 
 // --- Informasi Toko (identitas struk + pajak/service charge) ---
 const tokoForm = ref({
@@ -186,6 +215,7 @@ const saveConfirmOpen = ref(false)
 onMounted(async () => {
   await store.fetchSettings()
   syncTokoForm()
+  syncPinForm()
   loadIntegrations()
 })
 onBeforeUnmount(clearLocalPreview)
@@ -282,6 +312,42 @@ async function onSave() {
       <Button :disabled="savingToko" class="gap-1.5" @click="saveTokoInfo">
         <LoaderCircleIcon v-if="savingToko" class="size-4 animate-spin" />
         Simpan Informasi Toko
+      </Button>
+    </div>
+
+    <div class="space-y-4 rounded-lg border bg-card p-6">
+      <div>
+        <h2 class="flex items-center gap-2 text-sm font-semibold">
+          <ShieldCheckIcon class="size-4" />
+          Keamanan Pembayaran
+        </h2>
+        <p class="mt-1 text-xs text-muted-foreground">
+          Menandai pesanan "sudah dibayar" untuk nominal besar wajib memakai
+          PIN staff yang mengonfirmasi — sesi kasir yang tertinggal terbuka
+          tidak cukup. Salah PIN 3x mengunci akun itu 15 menit.
+        </p>
+      </div>
+      <div class="space-y-2 text-sm">
+        <label class="flex items-center gap-2">
+          <input v-model="pinMode" type="radio" value="batas" class="size-4 accent-primary" />
+          <span>Wajib PIN untuk pembayaran mulai</span>
+          <Input v-model.number="pinBatas" type="number" min="1" step="10000" class="h-8 w-32" :disabled="pinMode !== 'batas'" />
+        </label>
+        <p v-if="pinMode === 'batas' && pinBatas > 0" class="pl-6 text-xs text-muted-foreground">
+          Pesanan {{ formatRupiah(pinBatas) }} ke atas dikonfirmasi dengan PIN.
+        </p>
+        <label class="flex items-center gap-2">
+          <input v-model="pinMode" type="radio" value="semua" class="size-4 accent-primary" />
+          <span>Wajib PIN untuk setiap pembayaran</span>
+        </label>
+        <label class="flex items-center gap-2">
+          <input v-model="pinMode" type="radio" value="tidak" class="size-4 accent-primary" />
+          <span>Tidak pernah minta PIN <span class="text-muted-foreground">(tidak disarankan)</span></span>
+        </label>
+      </div>
+      <Button :disabled="savingPin" class="gap-1.5" @click="savePinVerifikasi">
+        <LoaderCircleIcon v-if="savingPin" class="size-4 animate-spin" />
+        Simpan Aturan PIN
       </Button>
     </div>
 

@@ -14,7 +14,7 @@ const locale = useLocaleStore()
   <div class="flex items-center gap-3">
     <button
       type="button"
-      class="flex size-11 shrink-0 items-center justify-center rounded-full border border-input active:bg-accent"
+      class="flex size-11 shrink-0 items-center justify-center rounded-full border border-input transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent"
       :aria-label="locale.t('kurangiJumlah')"
       @click="emit('update:qty', qty - 1)"
     >
@@ -25,7 +25,7 @@ const locale = useLocaleStore()
     }}</span>
     <button
       type="button"
-      class="flex size-11 shrink-0 items-center justify-center rounded-full border border-input active:bg-accent disabled:pointer-events-none disabled:opacity-40"
+      class="flex size-11 shrink-0 items-center justify-center rounded-full border border-input transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent disabled:pointer-events-none disabled:opacity-40"
       :aria-label="locale.t('tambahJumlah')"
       :disabled="max !== null && qty >= max"
       @click="emit('update:qty', qty + 1)"

@@ -8,7 +8,7 @@ const {
   createReservationSchema,
   updateReservationSchema,
   updateReservationStatusSchema,
-  setDepositPaidSchema,
+  catatPembayaranDpSchema,
 } = require('../validators/reservation.validator');
 
 const router = Router();
@@ -18,11 +18,14 @@ const router = Router();
 router.use(requireAuth, requireRole('admin', 'kasir'));
 
 router.get('/', reservationController.list);
+// Didaftarkan SEBELUM '/:id' — kalau tidak, 'aturan-dp' ditangkap sebagai
+// id dan ditolak validateIdParam.
+router.get('/aturan-dp', reservationController.aturanDp);
 router.get('/:id', validateIdParam, reservationController.get);
 router.post('/', validate(createReservationSchema), reservationController.create);
 router.put('/:id', validateIdParam, validate(updateReservationSchema), reservationController.update);
 router.patch('/:id/status', validateIdParam, validate(updateReservationStatusSchema), reservationController.updateStatus);
-router.patch('/:id/deposit-paid', validateIdParam, validate(setDepositPaidSchema), reservationController.setDepositPaid);
+router.post('/:id/pembayaran-dp', validateIdParam, validate(catatPembayaranDpSchema), reservationController.catatPembayaranDp);
 router.delete('/:id', validateIdParam, reservationController.remove);
 
 module.exports = router;

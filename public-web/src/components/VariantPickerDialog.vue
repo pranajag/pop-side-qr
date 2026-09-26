@@ -115,7 +115,7 @@ function onConfirm() {
             <label
               v-for="option in group.options"
               :key="option.id"
-              class="flex items-center gap-3 rounded-lg border px-3 py-2.5"
+              class="flex cursor-pointer items-center gap-3 rounded-2xl border px-3.5 py-3 transition-colors hover:border-primary/50 hover:bg-accent/40"
             >
               <Checkbox
                 :model-value="isSelected(group, option.id)"
@@ -135,11 +135,11 @@ function onConfirm() {
             <label
               v-for="option in group.options"
               :key="option.id"
-              class="flex items-center gap-3 rounded-lg border px-3 py-2.5"
+              class="flex cursor-pointer items-center gap-3 rounded-2xl border px-3.5 py-3 transition-colors hover:border-primary/50 hover:bg-accent/40"
             >
               <input
                 type="radio"
-                class="size-4 accent-brand-cta"
+                class="size-4 accent-primary-strong"
                 :name="`group-${group.id}`"
                 :checked="isSelected(group, option.id)"
                 @change="toggleOption(group, option.id)"
@@ -164,7 +164,7 @@ function onConfirm() {
 
       <DialogFooter>
         <Button
-          class="h-11 w-full bg-brand-cta text-heading hover:bg-brand-cta/90"
+          class="h-11 w-full bg-primary text-primary-foreground hover:bg-primary/90"
           :disabled="!canConfirm"
           @click="onConfirm"
         >

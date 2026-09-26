@@ -21,6 +21,7 @@ import {
 import logoUrl from '@/assets/pop-side-logo.jpg'
 import { playNotifySound } from '@/lib/notifySound'
 import { formatRupiah } from '@/lib/format'
+import { sambungRealtime, putuskanRealtime, dengarkan, realtimeTersambung } from '@/lib/realtime'
 import {
   ClipboardListIcon,
   TimerIcon,
@@ -30,6 +31,7 @@ import {
   QrCodeIcon,
   BarChart3Icon,
   HistoryIcon,
+  ScrollTextIcon,
   UsersIcon,
   SettingsIcon,
   LayoutDashboardIcon,
@@ -97,6 +99,7 @@ const navGroups = computed(() => {
           icon: HistoryIcon,
           badge: notifications.riwayatCount,
         },
+        { to: { name: 'log-audit' }, label: 'Log Audit', icon: ScrollTextIcon },
         { to: { name: 'akun' }, label: 'Akun Staff', icon: UsersIcon },
         { to: { name: 'pengaturan' }, label: 'Pengaturan', icon: SettingsIcon },
       ],
@@ -165,47 +168,88 @@ async function refreshNotificationBadges() {
 }
 
 const NEW_ORDER_POLL_MS = 8000
+// Selama notifikasi realtime tersambung (lib/realtime.js), polling hanya
+// cadangan — pesanan baru sudah datang lewat event dalam hitungan
+// milidetik, jadi jaraknya dilonggarkan.
+const POLL_CADANGAN_MS = 30000
 let newOrderTimer = null
+let sedangMemeriksa = false
+
+async function periksaNotifikasi() {
+  // Event realtime dan polling bisa datang bersamaan — satu pemeriksaan
+  // saja pada satu waktu, supaya pesanan yang sama tidak ditoast dua kali.
+  if (sedangMemeriksa) return
+  sedangMemeriksa = true
+  try {
+    await periksaSekali()
+  } finally {
+    sedangMemeriksa = false
+  }
+}
+
+async function periksaSekali() {
+  refreshNotificationBadges()
+
+  let fresh
+  try {
+    fresh = await orders.checkForNewOrders()
+  } catch {
+    return
+  }
+  for (const order of fresh) {
+    playNotifySound()
+    // Longer than sonner's ~4s default — this is the one toast on the
+    // whole dashboard a kasir genuinely must not miss mid-rush, so it
+    // gets a wider window and a manual close button rather than relying
+    // on being glanced at within a few seconds.
+    toast.success(`Pesanan baru: ${order.kodeOrder}`, {
+      description: `${order.nomorMeja ? `Meja ${order.nomorMeja}` : `Bawa Pulang${order.customerName ? ` · ${order.customerName}` : ''}`} · ${formatRupiah(order.totalHarga)}`,
+      duration: 10000,
+    })
+  }
+
+  let freshCalls
+  try {
+    freshCalls = await staffCalls.checkForNewCalls()
+  } catch {
+    return
+  }
+  for (const call of freshCalls) {
+    playNotifySound()
+    toast.warning(`Meja ${call.nomorMeja} memanggil staff`, {
+      description: call.catatan || undefined,
+      duration: 10000,
+    })
+  }
+}
+
+function jadwalkanPolling() {
+  clearInterval(newOrderTimer)
+  newOrderTimer = setInterval(periksaNotifikasi, realtimeTersambung.value ? POLL_CADANGAN_MS : NEW_ORDER_POLL_MS)
+}
+
+let berhentiDengar = []
 onMounted(() => {
   network.init()
   refreshNotificationBadges()
-  newOrderTimer = setInterval(async () => {
-    refreshNotificationBadges()
-
-    let fresh
-    try {
-      fresh = await orders.checkForNewOrders()
-    } catch {
-      return
-    }
-    for (const order of fresh) {
-      playNotifySound()
-      // Longer than sonner's ~4s default — this is the one toast on the
-      // whole dashboard a kasir genuinely must not miss mid-rush, so it
-      // gets a wider window and a manual close button rather than relying
-      // on being glanced at within a few seconds.
-      toast.success(`Pesanan baru: ${order.kodeOrder}`, {
-        description: `${order.nomorMeja ? `Meja ${order.nomorMeja}` : `Bawa Pulang${order.customerName ? ` · ${order.customerName}` : ''}`} · ${formatRupiah(order.totalHarga)}`,
-        duration: 10000,
-      })
-    }
-
-    let freshCalls
-    try {
-      freshCalls = await staffCalls.checkForNewCalls()
-    } catch {
-      return
-    }
-    for (const call of freshCalls) {
-      playNotifySound()
-      toast.warning(`Meja ${call.nomorMeja} memanggil staff`, {
-        description: call.catatan || undefined,
-        duration: 10000,
-      })
-    }
-  }, NEW_ORDER_POLL_MS)
+  sambungRealtime()
+  berhentiDengar = [
+    dengarkan('order:baru', periksaNotifikasi),
+    dengarkan('panggilan:baru', periksaNotifikasi),
+    dengarkan('order:berubah', refreshNotificationBadges),
+  ]
+  jadwalkanPolling()
 })
-onUnmounted(() => clearInterval(newOrderTimer))
+watch(realtimeTersambung, (tersambung) => {
+  jadwalkanPolling()
+  // Tersambung (lagi) setelah putus: kejar yang terlewat selama putus.
+  if (tersambung) periksaNotifikasi()
+})
+onUnmounted(() => {
+  clearInterval(newOrderTimer)
+  for (const berhenti of berhentiDengar) berhenti()
+  putuskanRealtime()
+})
 </script>
 
 <template>

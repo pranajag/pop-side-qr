@@ -1,7 +1,7 @@
 const { z } = require('zod');
 const { zBooleanish } = require('./common');
 
-const createTableSchema = z.object({
+const createTableSchema = z.strictObject({
   nomorMeja: z.string().trim().min(1).max(20),
   isActive: zBooleanish.default(true),
   kapasitas: z.coerce.number().int().min(1).max(999).default(4),
@@ -9,7 +9,7 @@ const createTableSchema = z.object({
 
 const updateTableSchema = createTableSchema.partial();
 
-const setBillOpenSchema = z.object({
+const setBillOpenSchema = z.strictObject({
   isBillOpen: zBooleanish,
 });
 

@@ -1,8 +1,10 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { useReservationsStore } from '@/stores/reservations'
 import { useTablesStore } from '@/stores/tables'
+import { useAuthStore } from '@/stores/auth'
+import { dengarkan } from '@/lib/realtime'
 import { formatApiError, API_URL } from '@/lib/api'
 import { formatDateTime, formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -50,10 +52,13 @@ import {
   LoaderCircleIcon,
   CalendarClockIcon,
   QrCodeIcon,
+  WalletIcon,
+  CircleCheckIcon,
 } from '@lucide/vue'
 
 const store = useReservationsStore()
 const tables = useTablesStore()
+const auth = useAuthStore()
 
 const formOpen = ref(false)
 const editingId = ref(null)
@@ -75,23 +80,132 @@ function qrImageUrl(tableId) {
   return `${API_URL}/admin/tables/${tableId}/qr`
 }
 
-// Deposit collected off-system (cash in hand, a transfer staff saw land) —
-// no QRIS-proof-upload step like an Order gets (see schema.prisma's
-// depositMetode comment), just staff confirming which method it came in
-// as before marking it settled.
-const depositTarget = ref(null)
-const depositMetode = ref('tunai')
-const markingDeposit = ref(false)
-async function onConfirmDepositPaid() {
-  markingDeposit.value = true
+const METODE_LABEL = { tunai: 'Tunai', qris: 'QRIS', debit: 'Debit' }
+
+// ---------- Aturan DP toko ----------
+// Mengisi DP wajib otomatis saat reservasi baru dibuat. Diubah admin saja
+// (server menolak kasir); kasir tetap melihatnya dan tetap bisa
+// menyesuaikan DP wajib satu reservasi tertentu di form.
+function dpDariAturan(jumlahTamu) {
+  const a = store.aturanDp
+  return a.perTamu ? a.nominal * (Number(jumlahTamu) || 0) : a.nominal
+}
+const aturanDpLabel = computed(() => {
+  const a = store.aturanDp
+  if (!a.nominal) return 'Belum diatur — reservasi baru tidak meminta DP, kecuali diisi manual.'
+  return a.perTamu
+    ? `${formatRupiah(a.nominal)} per tamu`
+    : `${formatRupiah(a.nominal)} per reservasi`
+})
+const aturanOpen = ref(false)
+const aturanForm = reactive({ nominal: '', perTamu: false })
+const savingAturan = ref(false)
+function openAturan() {
+  aturanForm.nominal = store.aturanDp.nominal ? String(store.aturanDp.nominal) : ''
+  aturanForm.perTamu = store.aturanDp.perTamu
+  aturanOpen.value = true
+}
+async function onSaveAturan() {
+  savingAturan.value = true
   try {
-    await store.setDepositPaid(depositTarget.value.id, depositMetode.value)
-    toast.success('DP ditandai lunas')
-    depositTarget.value = null
+    await store.updateAturanDp({
+      nominal: Number(aturanForm.nominal) || 0,
+      perTamu: aturanForm.perTamu,
+    })
+    toast.success('Aturan DP disimpan')
+    aturanOpen.value = false
   } catch (err) {
     toast.error(formatApiError(err))
   } finally {
-    markingDeposit.value = false
+    savingAturan.value = false
+  }
+}
+
+// ---------- Ringkasan DP per reservasi ----------
+function dpInfo(r) {
+  const dp = r.dp
+  if (!dp || dp.status === 'tidak_perlu') return null
+  if (dp.status === 'lunas')
+    return { teks: `DP ${formatRupiah(dp.wajib)} · lunas`, kelas: 'text-status-completed' }
+  if (dp.status === 'sebagian')
+    return {
+      teks: `DP ${formatRupiah(dp.dibayar)} / ${formatRupiah(dp.wajib)}`,
+      sub: `kurang ${formatRupiah(dp.kurang)}`,
+      kelas: 'text-status-waiting-verif',
+    }
+  return { teks: `DP ${formatRupiah(dp.wajib)} · belum dibayar`, kelas: 'text-muted-foreground' }
+}
+
+// ---------- Konfirmasi lunas (dipakai form & dialog pembayaran) ----------
+// Same non-reactive-target pattern as pendingDelete below: AlertDialogAction
+// closes (and would null a ref) before its own @click runs.
+const konfirmasiLunas = ref(null)
+let aksiSetelahLunas = null
+function mintaKonfirmasiLunas(info, aksi) {
+  aksiSetelahLunas = aksi
+  konfirmasiLunas.value = info
+}
+function onKonfirmasiLunas() {
+  const aksi = aksiSetelahLunas
+  aksiSetelahLunas = null
+  aksi?.()
+}
+
+// ---------- Catat pembayaran DP (bisa dicicil) ----------
+const bayarTarget = ref(null)
+const bayarForm = reactive({ amount: '', metode: 'tunai' })
+const savingBayar = ref(false)
+function openBayar(r) {
+  bayarTarget.value = r
+  bayarForm.amount = String(r.dp.kurang)
+  bayarForm.metode = 'tunai'
+}
+const bayarAmount = computed(() => Number(bayarForm.amount) || 0)
+const bayarSisa = computed(() =>
+  bayarTarget.value ? Math.max(0, bayarTarget.value.dp.kurang - bayarAmount.value) : 0
+)
+const bayarMelebihi = computed(
+  () => !!bayarTarget.value && bayarAmount.value > bayarTarget.value.dp.kurang
+)
+const bayarMelunasi = computed(
+  () =>
+    !!bayarTarget.value &&
+    bayarAmount.value > 0 &&
+    bayarAmount.value === bayarTarget.value.dp.kurang
+)
+function onBayarClick() {
+  const r = bayarTarget.value
+  if (bayarMelunasi.value) {
+    mintaKonfirmasiLunas(
+      { nama: r.namaCustomer, total: r.dp.wajib, pending: r.status === 'pending' },
+      kirimBayar
+    )
+    return
+  }
+  kirimBayar()
+}
+async function kirimBayar() {
+  const r = bayarTarget.value
+  if (!r) return
+  const amount = bayarAmount.value
+  savingBayar.value = true
+  try {
+    const hasil = await store.catatPembayaranDp(r.id, { amount, metode: bayarForm.metode })
+    if (hasil.baruLunas) {
+      toast.success(
+        `DP ${r.namaCustomer} lunas${hasil.dikonfirmasiOtomatis ? ' — reservasi dikonfirmasi' : ''}`,
+        { description: 'Uangnya sudah tercatat di DP reservasi shift yang sedang berjalan.' }
+      )
+    } else {
+      toast.success(`Pembayaran DP ${formatRupiah(amount)} dicatat`, {
+        description: `Kurang ${formatRupiah(hasil.kurang)} lagi. Sudah tercatat di DP reservasi shift ini.`,
+      })
+    }
+    bayarTarget.value = null
+  } catch (err) {
+    toast.error(formatApiError(err))
+  } finally {
+    savingBayar.value = false
   }
 }
 
@@ -139,7 +253,51 @@ const form = reactive({
   tableId: 'none',
   catatan: '',
   depositAmount: '',
+  // Wajib (dan hanya admin yang boleh) kalau DP wajib di bawah aturan toko.
+  alasanDp: '',
+  // Hanya dipakai saat MEMBUAT reservasi: DP yang dibayar customer saat itu.
+  dpDibayarSekarang: '',
+  metodeDp: 'tunai',
 })
+
+// DP wajib ikut aturan toko dan jumlah tamu — sampai staff mengetik
+// angkanya sendiri; setelah itu tidak lagi ditimpa.
+const dpManual = ref(false)
+watch(
+  () => form.jumlahTamu,
+  (n) => {
+    if (editingId.value !== null || dpManual.value || restoringDraft) return
+    const wajib = dpDariAturan(n)
+    form.depositAmount = wajib > 0 ? String(wajib) : ''
+  }
+)
+const dpWajibForm = computed(() => Number(form.depositAmount) || 0)
+// DP di bawah aturan toko = memotong/membebaskan DP: keputusan admin, wajib
+// alasan. Server yang menentukan (reservation.service.js); layar ini
+// menjelaskannya lebih dulu supaya tidak ada yang kaget ditolak.
+const dpAturanForm = computed(() => dpDariAturan(form.jumlahTamu))
+// Saat mengedit, DP/jumlah tamu yang TIDAK diubah tidak diperiksa ulang
+// (dan tidak dikirim) — kasir tetap bisa mengubah catatan/jam reservasi
+// lama yang DP-nya kebetulan di bawah aturan yang baru.
+const asliEdit = reactive({ depositAmount: 0, jumlahTamu: 0 })
+const dpAtauTamuBerubah = computed(
+  () =>
+    editingId.value === null ||
+    dpWajibForm.value !== asliEdit.depositAmount ||
+    Number(form.jumlahTamu) !== asliEdit.jumlahTamu
+)
+const dpDiBawahAturan = computed(() => dpAtauTamuBerubah.value && dpWajibForm.value < dpAturanForm.value)
+const dpDitolakUntukKasir = computed(() => dpDiBawahAturan.value && !auth.isAdmin)
+const dpBayarForm = computed(() => Number(form.dpDibayarSekarang) || 0)
+const dpBayarMelebihi = computed(() => dpBayarForm.value > dpWajibForm.value)
+const dpSisaForm = computed(() => Math.max(0, dpWajibForm.value - dpBayarForm.value))
+const dpAkanLunas = computed(
+  () =>
+    editingId.value === null &&
+    dpWajibForm.value > 0 &&
+    dpBayarForm.value >= dpWajibForm.value &&
+    !dpBayarMelebihi.value
+)
 
 // reka-ui's SelectItem forbids value="" (reserved to mean "cleared"), so
 // "no table assigned" uses this sentinel instead — translated to null right
@@ -191,9 +349,22 @@ watch(
   { deep: true }
 )
 
+// Reservasi yang dibuat/diubah staff lain (atau DP yang baru dibayar)
+// langsung muncul di layar ini juga.
+let tundaMuat = null
+const berhentiDengar = dengarkan('reservasi:berubah', () => {
+  clearTimeout(tundaMuat)
+  tundaMuat = setTimeout(() => store.fetchAll(), 250)
+})
+onUnmounted(() => {
+  clearTimeout(tundaMuat)
+  berhentiDengar()
+})
+
 onMounted(() => {
   store.fetchAll()
   tables.fetchAll()
+  store.fetchAturanDp().catch(() => {})
 })
 
 // Native datetime-local inputs always read/write in the browser's own local
@@ -265,6 +436,15 @@ function openCreate() {
   form.tableId = draft?.tableId ?? NO_TABLE
   form.catatan = draft?.catatan ?? ''
   form.depositAmount = draft?.depositAmount ?? ''
+  form.alasanDp = draft?.alasanDp ?? ''
+  form.dpDibayarSekarang = draft?.dpDibayarSekarang ?? ''
+  form.metodeDp = draft?.metodeDp ?? 'tunai'
+  // Draf yang sudah membawa angka DP wajib dianggap isian staff sendiri.
+  dpManual.value = !!draft?.depositAmount
+  if (!dpManual.value) {
+    const wajib = dpDariAturan(form.jumlahTamu)
+    form.depositAmount = wajib > 0 ? String(wajib) : ''
+  }
   restoringDraft = false
   formOpen.value = true
   if (draft) {
@@ -282,23 +462,59 @@ function openEdit(r) {
   form.tableId = r.tableId ? String(r.tableId) : NO_TABLE
   form.catatan = r.catatan || ''
   form.depositAmount = r.depositAmount > 0 ? String(r.depositAmount) : ''
+  form.alasanDp = r.alasanDp || ''
+  form.dpDibayarSekarang = ''
+  asliEdit.depositAmount = r.depositAmount || 0
+  asliEdit.jumlahTamu = r.jumlahTamu
+  dpManual.value = true
   formOpen.value = true
 }
 
-async function onSubmit() {
+function onSubmit() {
+  if (dpAkanLunas.value) {
+    mintaKonfirmasiLunas(
+      { nama: form.namaCustomer || 'customer', total: dpWajibForm.value, pending: true },
+      kirimForm
+    )
+    return
+  }
+  kirimForm()
+}
+
+async function kirimForm() {
   submitting.value = true
   try {
+    const { dpDibayarSekarang, metodeDp, ...isi } = form
     const payload = {
-      ...form,
+      ...isi,
       tableId: form.tableId === NO_TABLE ? '' : form.tableId,
       tanggalReservasi: localInputToIso(form.tanggalReservasi),
+      // Kosong = 0: reservasi tanpa DP wajib, dikirim eksplisit supaya
+      // server tidak mengisinya dari aturan toko.
+      depositAmount: form.depositAmount === '' ? 0 : form.depositAmount,
     }
     if (editingId.value) {
+      if (!dpAtauTamuBerubah.value) {
+        delete payload.depositAmount
+        delete payload.jumlahTamu
+      }
       await store.update(editingId.value, payload)
       toast.success('Reservasi diperbarui')
     } else {
-      await store.create(payload)
-      toast.success('Reservasi ditambahkan')
+      const bayar = Number(dpDibayarSekarang) || 0
+      if (bayar > 0) Object.assign(payload, { dpDibayarSekarang: bayar, metodeDp })
+      const hasil = await store.create(payload)
+      if (hasil.baruLunas) {
+        toast.success('Reservasi ditambahkan — DP lunas', {
+          description: `${hasil.dikonfirmasiOtomatis ? 'Reservasi langsung dikonfirmasi. ' : ''}Uang DP sudah tercatat di shift yang sedang berjalan.`,
+        })
+      } else if (bayar > 0) {
+        toast.success(`Reservasi ditambahkan — DP ${formatRupiah(bayar)} dicatat`, {
+          description: `Kurang ${formatRupiah(hasil.kurang)} lagi. Uangnya sudah tercatat di shift ini.`,
+        })
+      } else {
+        toast.success('Reservasi ditambahkan')
+      }
       clearDraft()
     }
     formOpen.value = false
@@ -374,114 +590,140 @@ async function onDeleteConfirm() {
       </Button>
     </div>
 
+    <div
+      class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3"
+    >
+      <div class="flex min-w-0 items-start gap-3">
+        <WalletIcon class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div class="min-w-0">
+          <p class="text-sm font-medium">Aturan DP reservasi</p>
+          <p class="text-xs text-muted-foreground">{{ aturanDpLabel }}</p>
+        </div>
+      </div>
+      <Button v-if="auth.isAdmin" size="sm" variant="outline" @click="openAturan">
+        Atur DP
+      </Button>
+    </div>
+
     <div class="rounded-lg border bg-card">
       <Table>
         <TableHeader>
           <TableRow>
+            <!-- Empat kolom: dulu tujuh kolom + lima tombol aksi berjajar
+            butuh ~1080px, sementara di 1059px (sidebar 272px) ruang tabelnya
+            cuma ~655px — kolom Status terjepit dan Aksi tersembunyi di
+            balik scroll samping. Acara ikut ke Customer; tanggal, tamu, dan
+            meja jadi satu kolom Jadwal; tombol aksi boleh melipat. -->
             <TableHead>Customer</TableHead>
-            <TableHead>Acara</TableHead>
-            <TableHead>Tanggal &amp; Jam</TableHead>
-            <TableHead class="w-24">Tamu</TableHead>
-            <TableHead class="w-28">Meja</TableHead>
-            <TableHead class="w-32">Status</TableHead>
-            <TableHead class="w-44 text-right">Aksi</TableHead>
+            <TableHead>Jadwal</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead class="w-[14.5rem] text-right">Aksi</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           <TableEmpty
             v-if="!store.loading && visibleItems.length === 0"
-            :colspan="7"
+            :colspan="4"
           >
             Belum ada reservasi.
           </TableEmpty>
           <TableRow v-for="r in visibleItems" :key="r.id">
-            <TableCell class="font-medium" data-label="Customer">
-              {{ r.namaCustomer }}
-              <span
-                v-if="r.telepon"
-                class="block text-xs font-normal text-muted-foreground"
-                >{{ r.telepon }}</span
-              >
+            <TableCell class="whitespace-normal" data-label="Customer">
+              <div class="flex flex-col items-end gap-0.5 sm:items-start">
+                <span class="font-medium">{{ r.namaCustomer }}</span>
+                <span v-if="r.telepon" class="text-xs text-muted-foreground">{{
+                  r.telepon
+                }}</span>
+                <span v-if="r.namaAcara" class="text-xs text-muted-foreground">{{
+                  r.namaAcara
+                }}</span>
+              </div>
             </TableCell>
-            <TableCell class="text-muted-foreground" data-label="Acara">{{
-              r.namaAcara || '—'
-            }}</TableCell>
-            <TableCell class="text-muted-foreground" data-label="Tanggal &amp; Jam">{{
-              formatDateTime(r.tanggalReservasi)
-            }}</TableCell>
-            <TableCell data-label="Tamu">{{ r.jumlahTamu }} orang</TableCell>
-            <TableCell class="text-muted-foreground" data-label="Meja">
-              <span v-if="r.nomorMeja">Meja {{ r.nomorMeja }}</span>
-              <span v-else>—</span>
+            <TableCell class="text-sm" data-label="Jadwal">
+              <div class="flex flex-col items-end gap-0.5 sm:items-start">
+                <span class="whitespace-nowrap">{{ formatDateTime(r.tanggalReservasi) }}</span>
+                <span class="text-xs text-muted-foreground"
+                  >{{ r.jumlahTamu }} orang ·
+                  {{ r.nomorMeja ? `Meja ${r.nomorMeja}` : 'tanpa meja' }}</span
+                >
+              </div>
             </TableCell>
-            <TableCell data-label="Status">
-              <Badge :variant="STATUS_VARIANT[r.status]">{{
-                STATUS_LABEL[r.status]
-              }}</Badge>
-              <span
-                v-if="r.depositAmount > 0"
-                class="mt-1 block text-xs"
-                :class="r.depositPaid ? 'text-status-completed' : 'text-muted-foreground'"
-              >
-                DP {{ formatRupiah(r.depositAmount) }}{{ r.depositPaid ? ' — lunas' : ' — belum bayar' }}
-              </span>
+            <TableCell class="whitespace-normal" data-label="Status">
+              <div class="flex flex-col items-end gap-1 sm:items-start">
+                <Badge :variant="STATUS_VARIANT[r.status]">{{
+                  STATUS_LABEL[r.status]
+                }}</Badge>
+                <span
+                  v-if="dpInfo(r)"
+                  class="text-xs font-medium"
+                  :class="dpInfo(r).kelas"
+                  >{{ dpInfo(r).teks
+                  }}<span v-if="dpInfo(r).sub" class="block">{{ dpInfo(r).sub }}</span></span
+                >
+                <span v-if="r.alasanDp" class="text-xs text-muted-foreground" :title="r.alasanDp">
+                  DP di bawah aturan: {{ r.alasanDp }}
+                </span>
+              </div>
             </TableCell>
-            <TableCell class="text-right" data-label="Aksi">
-              <Button
-                v-if="r.depositAmount > 0 && !r.depositPaid"
-                size="sm"
-                variant="outline"
-                class="mr-1"
-                @click="depositTarget = r"
-              >
-                Tandai DP Dibayar
-              </Button>
-              <Button
-                v-if="r.status === 'pending'"
-                size="sm"
-                variant="outline"
-                class="mr-1"
-                :disabled="statusBusyId === r.id"
-                @click="onChangeStatus(r, 'confirmed')"
-              >
-                Konfirmasi
-              </Button>
-              <Button
-                v-if="r.status === 'confirmed' && r.tableId"
-                size="sm"
-                variant="outline"
-                class="mr-1 gap-1.5"
-                @click="qrReservation = r"
-              >
-                <QrCodeIcon class="size-3.5" />
-                Mulai Pesanan
-              </Button>
-              <Button
-                v-if="r.status === 'confirmed'"
-                size="sm"
-                variant="outline"
-                class="mr-1"
-                :disabled="statusBusyId === r.id"
-                @click="onChangeStatus(r, 'completed')"
-              >
-                Selesai
-              </Button>
-              <Button
-                v-if="r.status === 'pending' || r.status === 'confirmed'"
-                size="sm"
-                variant="ghost"
-                class="mr-1 text-destructive hover:text-destructive"
-                :disabled="statusBusyId === r.id"
-                @click="onChangeStatus(r, 'cancelled')"
-              >
-                Batalkan
-              </Button>
-              <Button variant="ghost" size="icon" @click="openEdit(r)">
-                <PencilIcon class="size-4" />
-              </Button>
-              <Button variant="ghost" size="icon" @click="openDelete(r)">
-                <Trash2Icon class="size-4" />
-              </Button>
+            <TableCell class="whitespace-normal text-right" data-label="Aksi">
+              <div class="flex flex-wrap items-center justify-end gap-1">
+                <Button
+                  v-if="r.dp?.kurang > 0 && r.status !== 'cancelled'"
+                  size="sm"
+                  variant="outline"
+                  class="gap-1.5"
+                  @click="openBayar(r)"
+                >
+                  <WalletIcon class="size-3.5" />
+                  Bayar DP
+                </Button>
+                <Button
+                  v-if="r.status === 'pending'"
+                  size="sm"
+                  variant="outline"
+                 
+                  :disabled="statusBusyId === r.id"
+                  @click="onChangeStatus(r, 'confirmed')"
+                >
+                  Konfirmasi
+                </Button>
+                <Button
+                  v-if="r.status === 'confirmed' && r.tableId"
+                  size="sm"
+                  variant="outline"
+                  class="gap-1.5"
+                  @click="qrReservation = r"
+                >
+                  <QrCodeIcon class="size-3.5" />
+                  Mulai Pesanan
+                </Button>
+                <Button
+                  v-if="r.status === 'confirmed'"
+                  size="sm"
+                  variant="outline"
+                 
+                  :disabled="statusBusyId === r.id"
+                  @click="onChangeStatus(r, 'completed')"
+                >
+                  Selesai
+                </Button>
+                <Button
+                  v-if="r.status === 'pending' || r.status === 'confirmed'"
+                  size="sm"
+                  variant="ghost"
+                  class="text-destructive hover:text-destructive"
+                  :disabled="statusBusyId === r.id"
+                  @click="onChangeStatus(r, 'cancelled')"
+                >
+                  Batalkan
+                </Button>
+                <Button variant="ghost" size="icon" @click="openEdit(r)">
+                  <PencilIcon class="size-4" />
+                </Button>
+                <Button variant="ghost" size="icon" @click="openDelete(r)">
+                  <Trash2Icon class="size-4" />
+                </Button>
+              </div>
             </TableCell>
           </TableRow>
         </TableBody>
@@ -583,7 +825,7 @@ async function onDeleteConfirm() {
             />
           </div>
           <div class="space-y-2">
-            <Label for="depositAmount">Deposit/DP (opsional)</Label>
+            <Label for="depositAmount">DP wajib</Label>
             <Input
               id="depositAmount"
               v-model="form.depositAmount"
@@ -591,14 +833,91 @@ async function onDeleteConfirm() {
               min="0"
               step="1000"
               placeholder="0"
+              @input="dpManual = true"
             />
             <p class="text-xs text-muted-foreground">
-              Kosongkan kalau reservasi ini tidak perlu DP.
+              <template v-if="editingId === null && !dpManual && store.aturanDp.nominal">
+                Otomatis dari aturan:
+                {{
+                  store.aturanDp.perTamu
+                    ? `${formatRupiah(store.aturanDp.nominal)} × ${form.jumlahTamu || 0} tamu`
+                    : `${formatRupiah(store.aturanDp.nominal)} per reservasi`
+                }}. Boleh diubah untuk reservasi ini.
+              </template>
+              <template v-else-if="!store.aturanDp.nominal">Isi 0 atau kosongkan kalau reservasi ini tidak perlu DP.</template>
+            </p>
+            <p v-if="dpDitolakUntukKasir" class="text-xs text-destructive">
+              Di bawah aturan toko ({{ formatRupiah(dpAturanForm) }}). Hanya admin yang bisa
+              mengurangi atau membebaskan DP.
+            </p>
+          </div>
+          <div v-if="dpDiBawahAturan && auth.isAdmin" class="space-y-2">
+            <Label for="alasanDp">Alasan DP di bawah aturan toko (wajib)</Label>
+            <Input
+              id="alasanDp"
+              v-model="form.alasanDp"
+              maxlength="200"
+              placeholder="Mis. pelanggan tetap, acara kantor rekanan"
+            />
+            <p class="text-xs text-muted-foreground">
+              Aturan toko {{ formatRupiah(dpAturanForm) }}. Alasan ini dicatat di reservasi dan log audit.
+            </p>
+          </div>
+          <div
+            v-if="editingId === null && dpWajibForm > 0"
+            class="space-y-3 rounded-md border p-3"
+          >
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div class="space-y-2">
+                <Label for="dpDibayarSekarang">DP dibayar sekarang</Label>
+                <Input
+                  id="dpDibayarSekarang"
+                  v-model="form.dpDibayarSekarang"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  placeholder="0"
+                />
+              </div>
+              <div class="space-y-2">
+                <Label for="metodeDp">Diterima lewat</Label>
+                <Select v-model="form.metodeDp">
+                  <SelectTrigger id="metodeDp" class="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="tunai">Tunai</SelectItem>
+                    <SelectItem value="qris">QRIS</SelectItem>
+                    <SelectItem value="debit">Debit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <p v-if="dpBayarMelebihi" class="text-xs font-medium text-destructive">
+              Melebihi DP wajib {{ formatRupiah(dpWajibForm) }}.
+            </p>
+            <p
+              v-else-if="dpAkanLunas"
+              class="flex items-center gap-1.5 text-xs font-medium text-status-completed"
+            >
+              <CircleCheckIcon class="size-3.5 shrink-0" />
+              Lunas — reservasi langsung dikonfirmasi.
+            </p>
+            <p v-else-if="dpBayarForm > 0" class="text-xs font-medium text-status-waiting-verif">
+              Kurang {{ formatRupiah(dpSisaForm) }} — bisa dilunasi nanti lewat tombol Bayar DP.
+            </p>
+            <p v-else class="text-xs text-muted-foreground">
+              Kosongkan kalau customer belum membayar DP. Uang yang dicatat di
+              sini langsung masuk DP reservasi di shift yang sedang berjalan.
             </p>
           </div>
         </form>
         <DialogFooter>
-          <Button type="submit" form="reservation-form" :disabled="submitting">
+          <Button
+            type="submit"
+            form="reservation-form"
+            :disabled="submitting || (editingId === null && dpBayarMelebihi) || dpDitolakUntukKasir || (dpDiBawahAturan && form.alasanDp.trim().length < 3)"
+          >
             <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
             Simpan
           </Button>
@@ -647,34 +966,173 @@ async function onDeleteConfirm() {
       </DialogContent>
     </Dialog>
 
-    <AlertDialog :open="!!depositTarget" @update:open="(v) => !v && (depositTarget = null)">
+    <!-- Catat pembayaran DP — bisa dicicil sampai lunas. -->
+    <Dialog :open="!!bayarTarget" @update:open="(v) => !v && (bayarTarget = null)">
+      <DialogContent class="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Bayar DP — {{ bayarTarget?.namaCustomer }}</DialogTitle>
+          <DialogDescription>
+            Catat uang DP yang diterima sekarang. Uangnya langsung masuk DP
+            reservasi di shift yang sedang berjalan.
+          </DialogDescription>
+        </DialogHeader>
+        <div v-if="bayarTarget" class="space-y-4">
+          <dl class="space-y-1 rounded-md border p-3 text-sm">
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted-foreground">DP wajib</dt>
+              <dd>{{ formatRupiah(bayarTarget.dp.wajib) }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted-foreground">Sudah dibayar</dt>
+              <dd>{{ formatRupiah(bayarTarget.dp.dibayar) }}</dd>
+            </div>
+            <div class="flex justify-between gap-3 border-t pt-1 font-semibold">
+              <dt>Kurang</dt>
+              <dd class="text-status-waiting-verif">
+                {{ formatRupiah(bayarTarget.dp.kurang) }}
+              </dd>
+            </div>
+          </dl>
+          <ul
+            v-if="bayarTarget.pembayaranDp.length > 0"
+            class="space-y-1 text-xs text-muted-foreground"
+          >
+            <li
+              v-for="pb in bayarTarget.pembayaranDp"
+              :key="pb.id"
+              class="flex justify-between gap-3"
+            >
+              <span>{{ formatDateTime(pb.paidAt) }} · {{ METODE_LABEL[pb.metode] }}</span>
+              <span class="font-medium text-foreground">{{ formatRupiah(pb.amount) }}</span>
+            </li>
+          </ul>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div class="space-y-2">
+              <Label for="bayarAmount">Jumlah dibayar</Label>
+              <Input
+                id="bayarAmount"
+                v-model="bayarForm.amount"
+                type="number"
+                min="1"
+                step="1000"
+              />
+            </div>
+            <div class="space-y-2">
+              <Label for="bayarMetode">Diterima lewat</Label>
+              <Select v-model="bayarForm.metode">
+                <SelectTrigger id="bayarMetode" class="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tunai">Tunai</SelectItem>
+                  <SelectItem value="qris">QRIS</SelectItem>
+                  <SelectItem value="debit">Debit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <p v-if="bayarMelebihi" class="text-xs font-medium text-destructive">
+            Melebihi kekurangan DP — maksimal {{ formatRupiah(bayarTarget.dp.kurang) }}.
+          </p>
+          <p
+            v-else-if="bayarMelunasi"
+            class="flex items-center gap-1.5 text-xs font-medium text-status-completed"
+          >
+            <CircleCheckIcon class="size-3.5 shrink-0" />
+            Pembayaran ini melunasi DP.
+          </p>
+          <p v-else-if="bayarAmount > 0" class="text-xs font-medium text-status-waiting-verif">
+            Setelah ini masih kurang {{ formatRupiah(bayarSisa) }}.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" :disabled="savingBayar" @click="bayarTarget = null">
+            Batal
+          </Button>
+          <Button :disabled="savingBayar || bayarAmount <= 0 || bayarMelebihi" @click="onBayarClick">
+            <LoaderCircleIcon v-if="savingBayar" class="size-4 animate-spin" />
+            Catat Pembayaran
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Konfirmasi saat sebuah pembayaran melunasi DP. -->
+    <AlertDialog :open="!!konfirmasiLunas" @update:open="(v) => !v && (konfirmasiLunas = null)">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Tandai DP {{ depositTarget?.namaCustomer }} lunas?</AlertDialogTitle>
+          <AlertDialogTitle>DP {{ konfirmasiLunas?.nama }} sudah lunas?</AlertDialogTitle>
           <AlertDialogDescription>
-            Pastikan sudah benar-benar terima {{ formatRupiah(depositTarget?.depositAmount) }} dari customer.
+            Pastikan customer benar-benar sudah membayar total
+            {{ formatRupiah(konfirmasiLunas?.total ?? 0) }}. Setelah dikonfirmasi:
+            DP ditandai lunas,
+            <template v-if="konfirmasiLunas?.pending">reservasi langsung dikonfirmasi,</template>
+            dan uangnya masuk DP reservasi di shift yang sedang berjalan.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <div class="space-y-2">
-          <Label for="depositMetode">Diterima lewat</Label>
-          <Select v-model="depositMetode">
-            <SelectTrigger id="depositMetode">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="tunai">Tunai</SelectItem>
-              <SelectItem value="qris">QRIS</SelectItem>
-              <SelectItem value="debit">Debit</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
-          <AlertDialogAction :disabled="markingDeposit" @click="onConfirmDepositPaid">
-            Ya, Sudah Lunas
-          </AlertDialogAction>
+          <AlertDialogAction @click="onKonfirmasiLunas">Ya, DP Lunas</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    <!-- Aturan DP toko (admin). -->
+    <Dialog :open="aturanOpen" @update:open="(v) => (aturanOpen = v)">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Aturan DP reservasi</DialogTitle>
+          <DialogDescription>
+            Berapa yang wajib dibayar untuk membuka reservasi. Dipakai sebagai
+            DP wajib otomatis setiap reservasi baru — tetap bisa disesuaikan
+            per reservasi.
+          </DialogDescription>
+        </DialogHeader>
+        <div class="space-y-4">
+          <div class="space-y-2">
+            <Label for="aturanNominal">Nominal DP</Label>
+            <Input
+              id="aturanNominal"
+              v-model="aturanForm.nominal"
+              type="number"
+              min="0"
+              step="1000"
+              placeholder="0 = tidak ada DP wajib"
+            />
+          </div>
+          <div class="space-y-2">
+            <Label for="aturanTipe">Dihitung</Label>
+            <Select
+              :model-value="aturanForm.perTamu ? 'tamu' : 'reservasi'"
+              @update:model-value="(v) => (aturanForm.perTamu = v === 'tamu')"
+            >
+              <SelectTrigger id="aturanTipe" class="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="reservasi">Per reservasi (nominal tetap)</SelectItem>
+                <SelectItem value="tamu">Per tamu (nominal × jumlah tamu)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <p class="text-xs text-muted-foreground">
+            Contoh: {{
+              aturanForm.perTamu
+                ? `${formatRupiah(Number(aturanForm.nominal) || 0)} × 6 tamu = ${formatRupiah((Number(aturanForm.nominal) || 0) * 6)}`
+                : `${formatRupiah(Number(aturanForm.nominal) || 0)} untuk setiap reservasi`
+            }}. Reservasi yang sudah ada tidak berubah.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" :disabled="savingAturan" @click="aturanOpen = false">
+            Batal
+          </Button>
+          <Button :disabled="savingAturan" @click="onSaveAturan">
+            <LoaderCircleIcon v-if="savingAturan" class="size-4 animate-spin" />
+            Simpan Aturan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

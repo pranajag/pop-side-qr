@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useOrdersStore } from '@/stores/orders'
@@ -41,6 +41,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import logoUrl from '@/assets/pop-side-logo.jpg'
+import { dengarkan, realtimeTersambung } from '@/lib/realtime'
 import {
   LoaderCircleIcon,
   CheckIcon,
@@ -59,6 +60,9 @@ import {
 } from '@lucide/vue'
 
 const POLL_MS = 8000
+// Selama realtime tersambung (lib/realtime.js), daftar ini disegarkan oleh
+// event begitu ada perubahan; polling tinggal cadangan.
+const POLL_CADANGAN_MS = 30000
 
 const router = useRouter()
 const route = useRoute()
@@ -212,18 +216,45 @@ onMounted(() => {
   products.fetchAll()
   settings.fetchSettings()
   activeShiftStore.fetch()
-  pollTimer = setInterval(() => {
-    store.fetchAll()
-    calls.fetchPending()
-    products.fetchAll()
-  }, POLL_MS)
+  jadwalkanPolling()
+  berhentiDengar = [
+    dengarkan('order:baru', segarkanPesanan),
+    dengarkan('order:berubah', segarkanPesanan),
+    dengarkan('panggilan:baru', () => calls.fetchPending()),
+    dengarkan('panggilan:berubah', () => calls.fetchPending()),
+  ]
   clockTimer = setInterval(() => {
     now.value = Date.now()
   }, 30000)
 })
+
+function jadwalkanPolling() {
+  clearInterval(pollTimer)
+  pollTimer = setInterval(() => {
+    store.fetchAll()
+    calls.fetchPending()
+    products.fetchAll()
+  }, realtimeTersambung.value ? POLL_CADANGAN_MS : POLL_MS)
+}
+watch(realtimeTersambung, jadwalkanPolling)
+
+// Beberapa event bisa datang beruntun (mis. dua kasir mengonfirmasi
+// bersamaan) — cukup satu kali muat ulang untuk semuanya.
+let tundaSegarkan = null
+let berhentiDengar = []
+function segarkanPesanan() {
+  clearTimeout(tundaSegarkan)
+  tundaSegarkan = setTimeout(() => {
+    store.fetchAll()
+    products.fetchAll()
+  }, 250)
+}
+
 onUnmounted(() => {
   clearInterval(pollTimer)
   clearInterval(clockTimer)
+  clearTimeout(tundaSegarkan)
+  for (const berhenti of berhentiDengar) berhenti()
 })
 
 function needsPaymentConfirm(order) {
@@ -283,11 +314,24 @@ const cashSuggestions = computed(() => {
   return [...new Set([total, ceil, ...rounded])].slice(0, 4)
 })
 
-function openConfirm(order) {
+// PIN konfirmasi: diminta sejak awal untuk order yang ditandai server
+// (total >= batas di Pengaturan), atau begitu server menolak dengan
+// PIN_DIPERLUKAN (mis. batasnya baru diubah admin).
+const confirmPin = ref('')
+const confirmPinError = ref('')
+const paksaPin = ref(false)
+const butuhPin = computed(() => Boolean(confirmTarget.value?.perluPinKonfirmasi) || paksaPin.value)
+
+function openConfirm(order, { pertahankanIsian = false } = {}) {
   confirmTarget.value = order
   confirmOpen.value = true
   pendingConfirm = order
-  cashReceivedInput.value = ''
+  if (!pertahankanIsian) {
+    cashReceivedInput.value = ''
+    paksaPin.value = false
+    confirmPinError.value = ''
+  }
+  confirmPin.value = ''
 }
 
 async function onConfirm() {
@@ -296,9 +340,11 @@ async function onConfirm() {
   // Only ever sent for cash — the server rejects it on any other method
   // rather than silently recording something meaningless.
   const cash = target.metode === 'tunai' ? cashReceivedNumber.value : null
+  const pin = butuhPin.value ? confirmPin.value : null
   busyId.value = target.id
   try {
-    const order = await store.confirmPayment(target.id, cash)
+    const order = await store.confirmPayment(target.id, cash, pin)
+    confirmPinError.value = ''
     if (order?.changeAmount !== null && order?.changeAmount !== undefined) {
       toast.success(`${target.kodeOrder} dikonfirmasi`, {
         description: `Kembalian untuk customer: ${formatRupiah(order.changeAmount)}`,
@@ -308,11 +354,19 @@ async function onConfirm() {
       toast.success(`${target.kodeOrder} dikonfirmasi`)
     }
   } catch (err) {
+    if (err.code === 'PIN_DIPERLUKAN') {
+      // Dialog sudah tertutup sendiri — buka lagi, isian uang dipertahankan.
+      paksaPin.value = true
+      confirmPinError.value = pin ? err.message : 'Pembayaran sebesar ini perlu PIN kamu.'
+      busyId.value = null
+      openConfirm(target, { pertahankanIsian: true })
+      return
+    }
     toast.error(formatApiError(err))
     store.fetchAll()
   } finally {
     busyId.value = null
-    pendingConfirm = null
+    if (!confirmOpen.value) pendingConfirm = null
   }
 }
 
@@ -765,12 +819,30 @@ async function onCancelConfirm() {
           </div>
         </div>
 
+        <div v-if="butuhPin" class="space-y-1.5">
+          <Label for="confirm-pin">PIN kamu</Label>
+          <Input
+            id="confirm-pin"
+            v-model="confirmPin"
+            type="password"
+            inputmode="numeric"
+            autocomplete="off"
+            maxlength="6"
+            placeholder="4-6 digit"
+          />
+          <p v-if="confirmPinError" class="text-xs text-destructive">{{ confirmPinError }}</p>
+          <p v-else class="text-xs text-muted-foreground">
+            Pembayaran sebesar ini dikonfirmasi dengan PIN (aturan di Pengaturan).
+          </p>
+        </div>
+
         <AlertDialogFooter>
           <AlertDialogCancel>Batal</AlertDialogCancel>
           <AlertDialogAction
             :disabled="
               busyId === confirmTarget?.id ||
-              (changePreview !== null && changePreview < 0)
+              (changePreview !== null && changePreview < 0) ||
+              (butuhPin && confirmPin.length < 4)
             "
             @click="onConfirm"
             >Ya, Konfirmasi</AlertDialogAction

@@ -1,7 +1,7 @@
 const { z } = require('zod');
 const { usernameSchema, passwordSchema, pinSchema } = require('./common');
 
-const createUserSchema = z.object({
+const createUserSchema = z.strictObject({
   username: usernameSchema,
   password: passwordSchema,
   role: z.enum(['admin', 'kasir']),
@@ -11,7 +11,7 @@ const createUserSchema = z.object({
 
 // password/pin are optional on update — omitting either leaves its existing
 // hash untouched, since most edits here are just a role or isActive change.
-const updateUserSchema = z.object({
+const updateUserSchema = z.strictObject({
   username: usernameSchema.optional(),
   password: passwordSchema.optional(),
   role: z.enum(['admin', 'kasir']).optional(),
@@ -19,4 +19,6 @@ const updateUserSchema = z.object({
   pin: pinSchema.optional(),
 });
 
-module.exports = { createUserSchema, updateUserSchema };
+const reset2faSchema = z.strictObject({ pin: pinSchema });
+
+module.exports = { createUserSchema, updateUserSchema, reset2faSchema };

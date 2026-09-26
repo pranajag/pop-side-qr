@@ -4,7 +4,12 @@ generator client {
 
 datasource db {
   provider = "mysql"
-  url      = env("DATABASE_URL")
+  // Aplikasi yang berjalan memakai akun popside_app — cuma boleh
+  // SELECT/INSERT/UPDATE/DELETE, jadi celah injeksi sekalipun tidak bisa
+  // DROP/ALTER tabel. Perintah prisma migrate otomatis memakai directUrl
+  // (akun popside_migrate) yang memang punya hak mengubah struktur.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum OrderStatus {
@@ -101,7 +106,14 @@ model Reservation {
   id               Int               @id @default(autoincrement())
   namaCustomer     String            @map("nama_customer")
   namaAcara        String?           @map("nama_acara")
-  telepon          String?
+  // Nomor HP customer reservasi, terenkripsi AES-256-GCM (utils/kripto.js)
+  // — tidak pernah disimpan polos. Hanya untuk ditampilkan ke staff, jadi
+  // tidak perlu sidik pencarian seperti customers.
+  teleponEnc       String?           @map("telepon_enc") @db.VarChar(255)
+  // Alasan DP wajib dikurangi/dibebaskan di bawah aturan toko — wajib
+  // diisi setiap kali itu terjadi, dan hanya admin yang boleh
+  // (reservation.service.js).
+  alasanDp         String?           @map("alasan_dp") @db.VarChar(200)
   jumlahTamu       Int               @map("jumlah_tamu")
   tanggalReservasi DateTime          @map("tanggal_reservasi")
   tableId          Int?              @map("table_id")
@@ -117,6 +129,13 @@ model Reservation {
   // 0/null depositAmount means no deposit required for this reservation,
   // which is every reservation before this feature existed and stays the
   // default for a new one unless staff sets one.
+  //
+  // Sejak 2026-09-23 artinya "DP WAJIB" — yang harus dibayar, terisi
+  // otomatis dari aturan DP toko (StoreSetting.reservasiDp*) dan tetap bisa
+  // disesuaikan per reservasi. Uang yang benar-benar diterima dicatat per
+  // pembayaran di ReservationDepositPayment, jadi DP bisa dicicil; field
+  // depositPaid/depositPaidAt/depositMetode di bawah ini sekarang ringkasan
+  // "sudah lunas atau belum", dihitung ulang setiap ada pembayaran.
   depositAmount    Decimal?          @default(0) @map("deposit_amount")
   depositPaid      Boolean           @default(false) @map("deposit_paid")
   // Staff-recorded, not customer-self-service — there's no public booking
@@ -129,6 +148,7 @@ model Reservation {
   depositPaidAt    DateTime?         @map("deposit_paid_at")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
+  depositPayments  ReservationDepositPayment[]
 
   @@index([status])
   @@index([tanggalReservasi])
@@ -152,9 +172,53 @@ model StoreSetting {
   telepon             String?
   pajakPersen         Decimal  @default(0) @map("pajak_persen")
   serviceChargePersen Decimal  @default(0) @map("service_charge_persen")
+  // Master switch for the whole loyalty feature, flipped by staff from the
+  // dashboard. Off means the public checkout stops asking for a phone
+  // number at all, and the server ignores one even if it's sent: no member
+  // is created, no points are earned, no tier discount is applied. Existing
+  // members and their balances are left untouched, so turning it back on
+  // resumes exactly where it stopped. Defaults on — a store that never
+  // touches this sees no change.
+  memberEnabled       Boolean  @default(true) @map("member_enabled")
+  // Aturan DP reservasi: berapa yang wajib dibayar untuk membuka reservasi.
+  // reservasiDpPerTamu = false -> nominal ini per reservasi; true -> nominal
+  // dikali jumlah tamu. 0 = tidak ada DP wajib (perilaku sebelum aturan ini
+  // ada). Hanya mengisi nilai awal DP wajib saat reservasi dibuat; staff
+  // tetap bisa menyesuaikannya per reservasi.
+  reservasiDpNominal  Decimal  @default(0) @map("reservasi_dp_nominal")
+  reservasiDpPerTamu  Boolean  @default(false) @map("reservasi_dp_per_tamu")
+  // Konfirmasi pembayaran order dengan total >= nominal ini wajib memakai
+  // PIN staff (orderManagement.service.js confirmPayment). 0 = semua order;
+  // null = PIN tidak pernah diminta saat konfirmasi.
+  pinVerifikasiMinimal Int?    @default(200000) @map("pin_verifikasi_minimal")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
   @@map("store_settings")
+}
+
+// Satu baris per uang DP yang benar-benar diterima — DP boleh dicicil, dan
+// setiap cicilan masuk rekap shift yang sedang berjalan saat uangnya
+// diterima (shift.service.js menjumlahkan berdasarkan paidAt), sama seperti
+// order dihitung ke shift saat dibuat. Kalau baru dihitung saat lunas, uang
+// cicilan yang sudah ada di laci shift pagi akan membuat kas shift pagi dan
+// shift pelunasannya sama-sama selisih.
+//
+// onDelete Restrict ke reservasi: reservasi yang sudah menerima uang tidak
+// boleh dihapus (batalkan saja) — menghapusnya diam-diam akan mengubah
+// rekap shift yang sudah ditutup.
+model ReservationDepositPayment {
+  id             Int           @id @default(autoincrement())
+  reservationId  Int           @map("reservation_id")
+  reservation    Reservation   @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+  amount         Decimal
+  metode         PaymentMethod
+  paidAt         DateTime      @default(now()) @map("paid_at")
+  recordedBy     Int?          @map("recorded_by")
+  recordedByUser User?         @relation(fields: [recordedBy], references: [id], onDelete: SetNull)
+
+  @@index([reservationId])
+  @@index([paidAt])
+  @@map("reservation_deposit_payments")
 }
 
 // External integrations (v1) — a small read-only API + outbound webhooks
@@ -342,6 +406,11 @@ model Order {
   // back, instead of the cash-reconciliation view only ever guessing from
   // the order total. Null for every other order, forever.
   refundAmount        Decimal?         @map("refund_amount")
+  // Sidik (HMAC) perangkat yang membuat order lewat web publik — isi cookie
+  // httpOnly yang tidak bisa dibaca JavaScript. Melacak status order dan
+  // mengirim bukti bayar hanya bisa dari perangkat itu; kode order saja
+  // tidak cukup. Null untuk order buatan staff.
+  deviceHash          String?          @map("device_hash") @db.Char(64)
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
   items               OrderItem[]
@@ -421,12 +490,92 @@ model User {
   pinHash      String?          @map("pin_hash")
   role         UserRole
   isActive     Boolean          @default(true) @map("is_active")
+  // 2FA TOTP (utils/totp.js). Rahasianya terenkripsi AES-256-GCM, bukan
+  // polos. totpLangkahTerakhir = langkah waktu (30 detik) kode terakhir
+  // yang diterima — kode yang sama tidak bisa dipakai dua kali.
+  totpSecretEnc       String?   @map("totp_secret_enc") @db.VarChar(255)
+  totpAktifSejak      DateTime? @map("totp_aktif_sejak")
+  totpLangkahTerakhir BigInt?   @map("totp_langkah_terakhir")
   statusLogs   OrderStatusLog[]
   payments     Payment[]
   staffCalls   StaffCall[]
   shifts       Shift[]
+  depositPaymentsRecorded ReservationDepositPayment[]
+  kodePemulihan KodePemulihan[]
+  auditLogs    AuditLog[]
 
   @@map("users")
+}
+
+// Kode cadangan 2FA — dipakai sekali kalau HP authenticator hilang. Hanya
+// HMAC-nya yang disimpan.
+model KodePemulihan {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kodeHash  String    @map("kode_hash") @db.Char(64)
+  dipakaiAt DateTime? @map("dipakai_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@unique([userId, kodeHash])
+  @@map("kode_pemulihan_2fa")
+}
+
+// Jejak setiap aksi staff yang mengubah data (middleware/auditLog.js).
+// APPEND-ONLY di tingkat database: trigger menolak UPDATE, dan DELETE
+// kecuali oleh akun perawatan (migrasi 20260926093000_audit_log_append_only).
+// username/role disalin saat kejadian, supaya jejaknya tetap terbaca walau
+// akunnya kelak dihapus (userId jadi null lewat foreign key).
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now()) @map("created_at")
+  userId    Int?     @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  username  String?  @db.VarChar(50)
+  role      String?  @db.VarChar(10)
+  aksi      String   @db.VarChar(120)
+  status    Int
+  detail    String?  @db.Text
+  ip        String?  @db.VarChar(45)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_log")
+}
+
+// Isi file upload (foto produk, gambar QRIS, bukti bayar) kalau
+// UPLOAD_DRIVER=database — untuk hosting yang disk-nya tidak permanen
+// (Render gratis menghapus disk setiap restart/deploy). Mode bawaan (disk)
+// tidak memakai tabel ini. Aturan upload sama persis di kedua mode
+// (lib/imageStore.js): tanda tangan file diperiksa, maks 2 MB, nama acak.
+model BerkasUpload {
+  nama      String   @id @db.VarChar(64)
+  kategori  String   @db.VarChar(20)
+  jenis     String   @db.VarChar(30)
+  isi       Bytes    @db.MediumBlob
+  ukuran    Int
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([kategori])
+  @@map("berkas_upload")
+}
+
+// Kode OTP verifikasi nomor member di checkout publik
+// (services/memberOtp.service.js). Nomor HP hanya disimpan sebagai sidik
+// (HMAC), kodenya pun hanya HMAC — tabel ini bocor sekalipun, tidak ada
+// nomor atau kode yang terbaca.
+model MemberOtp {
+  id          Int       @id @default(autoincrement())
+  teleponHash String    @map("telepon_hash") @db.Char(64)
+  kodeHash    String    @map("kode_hash") @db.Char(64)
+  percobaan   Int       @default(0)
+  expiresAt   DateTime  @map("expires_at")
+  dipakaiAt   DateTime? @map("dipakai_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([teleponHash, createdAt])
+  @@index([createdAt])
+  @@map("member_otp")
 }
 
 // Loyalty member, identified by phone number (matches how Moka POS's own
@@ -439,7 +588,13 @@ model User {
 // reason) rather than a separate automated mechanism, at least for now.
 model Customer {
   id        Int      @id @default(autoincrement())
-  telepon   String   @unique
+  // Nomor HP terenkripsi AES-256-GCM (utils/kripto.js) — tidak pernah
+  // disimpan polos. Pencarian persis lewat teleponHash (HMAC — "blind
+  // index"), bukan lewat nomornya; teleponAkhir (4 digit terakhir) untuk
+  // pencarian staff "…7890".
+  teleponEnc   String   @map("telepon_enc") @db.VarChar(255)
+  teleponHash  String   @unique @map("telepon_hash") @db.Char(64)
+  teleponAkhir String   @map("telepon_akhir") @db.VarChar(4)
   nama      String?
   points    Int      @default(0)
   createdAt DateTime @default(now()) @map("created_at")
@@ -541,4 +696,16 @@ model Payment {
 
   @@index([orderId])
   @@map("payments")
+}
+
+// Sesi login admin/kasir (utils/sessionStore.js) — di MySQL, bukan di
+// memori proses, supaya staff tidak ter-logout setiap API restart dan
+// memori server tidak bocor di produksi.
+model Session {
+  sid       String   @id @db.VarChar(128)
+  data      String   @db.Text
+  expiresAt DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("sessions")
 }

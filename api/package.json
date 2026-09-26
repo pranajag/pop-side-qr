@@ -4,16 +4,22 @@
   "private": true,
   "type": "commonjs",
   "engines": {
-    "node": ">=24"
+    "node": ">=22"
   },
   "scripts": {
+    "test": "node --test tests/*.test.js",
+    "db:audit": "node scripts/audit-db.js",
     "dev": "node --watch --watch-preserve-output src/server.js",
     "start": "node src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "create-admin": "node scripts/create-admin.js",
-    "pentest": "node scripts/pentest.js"
+    "pentest": "node scripts/pentest.js",
+    "db:enkripsi-telepon": "node scripts/enkripsi-telepon.js",
+    "reset-2fa": "node scripts/reset-2fa.js",
+    "ekspor-data-demo": "node scripts/ekspor-data-demo.js",
+    "siapkan-produksi": "node scripts/siapkan-produksi.js"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
@@ -32,10 +38,13 @@
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
     "qrcode": "^1.5.4",
+    "socket.io": "^4.8.4",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "mysql2": "^3.24.4",
     "pino-pretty": "^13.0.0",
-    "prisma": "6.19.3"
+    "prisma": "6.19.3",
+    "socket.io-client": "^4.8.4"
   }
 }

@@ -12,7 +12,7 @@ const tableIdSchema = z.preprocess(
   z.coerce.number().int().positive().nullable()
 );
 
-const createReservationSchema = z.object({
+const reservationFields = z.strictObject({
   namaCustomer: z.string().trim().min(1).max(100),
   namaAcara: z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(100).optional()),
   telepon: z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(20).optional()),
@@ -27,22 +27,50 @@ const createReservationSchema = z.object({
     (v) => (v === '' || v === undefined ? undefined : v),
     z.coerce.number().int().min(0).max(999999999).optional()
   ),
+  // Wajib (dan hanya admin yang boleh) kalau DP wajib di bawah aturan toko —
+  // reservation.service.js yang menentukan, karena hanya ia yang tahu
+  // aturan DP-nya.
+  alasanDp: z.preprocess((v) => (v === '' || v === null ? undefined : v), z.string().trim().min(3).max(200).optional()),
 });
 
-const updateReservationSchema = createReservationSchema.partial();
+const METODE = ['qris', 'tunai', 'debit'];
 
-const updateReservationStatusSchema = z.object({
+// Saat membuat reservasi, staff boleh langsung mencatat DP yang dibayar
+// customer saat itu juga (kasus paling umum: pesan meja sekaligus bayar DP).
+// Hanya di create — pembayaran berikutnya lewat POST /:id/pembayaran-dp,
+// supaya edit data reservasi tidak pernah diam-diam menambah uang masuk.
+const createReservationSchema = reservationFields
+  .extend({
+    dpDibayarSekarang: z.preprocess(
+      (v) => (v === '' || v === undefined || v === null ? undefined : v),
+      z.coerce.number().int().min(0).max(999999999).optional()
+    ),
+    metodeDp: z.preprocess(
+      (v) => (v === '' || v === null ? undefined : v),
+      z.enum(METODE).optional()
+    ),
+  })
+  .superRefine((val, ctx) => {
+    if ((val.dpDibayarSekarang ?? 0) > 0 && !val.metodeDp) {
+      ctx.addIssue({ code: 'custom', path: ['metodeDp'], message: 'Pilih metode pembayaran DP' });
+    }
+  });
+
+const updateReservationSchema = reservationFields.partial();
+
+const updateReservationStatusSchema = z.strictObject({
   status: z.enum(RESERVATION_STATUSES),
 });
 
-const setDepositPaidSchema = z.object({
-  metode: z.enum(['qris', 'tunai', 'debit']),
+const catatPembayaranDpSchema = z.strictObject({
+  amount: z.coerce.number().int().min(1).max(999999999),
+  metode: z.enum(METODE),
 });
 
 module.exports = {
   createReservationSchema,
   updateReservationSchema,
   updateReservationStatusSchema,
-  setDepositPaidSchema,
+  catatPembayaranDpSchema,
   RESERVATION_STATUSES,
 };

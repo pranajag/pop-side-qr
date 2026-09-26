@@ -10,7 +10,60 @@ function toShaped(settings) {
     telepon: settings?.telepon ?? null,
     pajakPersen: settings ? Number(settings.pajakPersen) : 0,
     serviceChargePersen: settings ? Number(settings.serviceChargePersen) : 0,
+    // Defaults to on for a store row that predates this column.
+    memberEnabled: settings?.memberEnabled ?? true,
   };
+}
+
+// Read on the order/checkout path, where the only question is whether the
+// loyalty feature is live at all. Its own function rather than a getSettings
+// call so it can run inside an order's transaction.
+async function isMemberEnabled(client) {
+  const settings = await client.storeSetting.findUnique({ where: { id: 1 } });
+  return settings?.memberEnabled ?? true;
+}
+
+// Aturan DP reservasi — dibaca terpisah dari toShaped() di atas, karena
+// toShaped juga dikirim apa adanya ke publik lewat GET /public/settings.
+// Aturan DP cuma urusan staff; tidak ada gunanya ikut terbaca siapa saja.
+async function getAturanDp(client = prisma) {
+  const s = await client.storeSetting.findUnique({
+    where: { id: 1 },
+    select: { reservasiDpNominal: true, reservasiDpPerTamu: true },
+  });
+  return {
+    nominal: s ? Number(s.reservasiDpNominal) : 0,
+    perTamu: s?.reservasiDpPerTamu ?? false,
+  };
+}
+
+async function updateAturanDp({ nominal, perTamu }) {
+  await prisma.storeSetting.upsert({
+    where: { id: 1 },
+    create: { id: 1, reservasiDpNominal: nominal, reservasiDpPerTamu: perTamu },
+    update: { reservasiDpNominal: nominal, reservasiDpPerTamu: perTamu },
+  });
+  return getAturanDp();
+}
+
+// Batas PIN konfirmasi pembayaran — urusan staff, sama seperti aturan DP:
+// tidak ikut toShaped() yang juga dikirim ke publik. Order dengan total >=
+// batas ini hanya bisa dikonfirmasi lunas dengan PIN staff yang
+// mengonfirmasi (orderManagement.service.js). null = PIN tidak diminta.
+const BATAS_PIN_BAWAAN = 200000;
+
+async function getPinVerifikasiMinimal(client = prisma) {
+  const s = await client.storeSetting.findUnique({ where: { id: 1 }, select: { pinVerifikasiMinimal: true } });
+  return s ? s.pinVerifikasiMinimal : BATAS_PIN_BAWAAN;
+}
+
+async function updatePinVerifikasi(minimal) {
+  await prisma.storeSetting.upsert({
+    where: { id: 1 },
+    create: { id: 1, pinVerifikasiMinimal: minimal },
+    update: { pinVerifikasiMinimal: minimal },
+  });
+  return { minimal: await getPinVerifikasiMinimal() };
 }
 
 async function getSettings() {
@@ -72,4 +125,14 @@ async function computeTaxAndService(client, baseAmount) {
   return { taxAmount, serviceChargeAmount, totalHarga: baseAmount + taxAmount + serviceChargeAmount };
 }
 
-module.exports = { getSettings, updateStoreInfo, updateQrisImage, computeTaxAndService };
+module.exports = {
+  getAturanDp,
+  updateAturanDp,
+  getSettings,
+  isMemberEnabled,
+  updateStoreInfo,
+  updateQrisImage,
+  computeTaxAndService,
+  getPinVerifikasiMinimal,
+  updatePinVerifikasi,
+};

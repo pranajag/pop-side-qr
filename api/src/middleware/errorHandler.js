@@ -11,7 +11,12 @@ function errorHandler(err, req, res, next) {
       error: 'Validation failed',
       details: err.issues.map((issue) => ({
         field: issue.path.join('.'),
-        message: issue.message,
+        // Semua schema request strict (field asing ditolak, bukan dibuang)
+        // — pesan bawaan zod-nya berbahasa Inggris, jadi dijelaskan di sini.
+        message:
+          issue.code === 'unrecognized_keys'
+            ? `Field tidak dikenal: ${issue.keys.join(', ')}`
+            : issue.message,
       })),
     });
   }
@@ -30,7 +35,9 @@ function errorHandler(err, req, res, next) {
   }
 
   if (err instanceof AppError) {
-    return res.status(err.statusCode).json({ error: err.message });
+    return res
+      .status(err.statusCode)
+      .json(err.code ? { error: err.message, code: err.code } : { error: err.message });
   }
 
   logger.error({ err }, 'Unhandled error');

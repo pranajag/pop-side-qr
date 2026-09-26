@@ -63,4 +63,16 @@ async function applicableTier(client, points) {
   return tier ? toShaped(tier) : null;
 }
 
-module.exports = { list, create, update, remove, applicableTier };
+// Tingkatan terdekat DI ATAS saldo sekarang — dipakai checkout untuk bilang
+// "kurang N poin lagi untuk diskon X%". Tanpa ini customer yang sudah pernah
+// pesan cuma melihat "poin belum cukup" dan tidak tahu kenapa diskonnya
+// belum muncul di pesanan keduanya.
+async function nextTier(client, points) {
+  const tier = await client.loyaltyTier.findFirst({
+    where: { minPoints: { gt: points } },
+    orderBy: { minPoints: 'asc' },
+  });
+  return tier ? toShaped(tier) : null;
+}
+
+module.exports = { list, create, update, remove, applicableTier, nextTier };

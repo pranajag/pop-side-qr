@@ -4,32 +4,17 @@
 // updateStatus, not behind its own route, so a route-level rate limiter
 // can't gate just this one case without also throttling every ordinary
 // status change on the same endpoint.
-const MAX_ATTEMPTS = 5;
-const WINDOW_MS = 5 * 60 * 1000;
+//
+// 3x salah dalam 15 menit -> terkunci 15 menit penuh terhitung dari salah
+// yang ketiga (bukan dari salah pertama). PIN cuma 4-6 digit, jadi batas
+// ketat inilah yang sebenarnya melindunginya: 3 tebakan per 15 menit
+// membuat mencoba semua kombinasi 4 digit butuh berbulan-bulan.
+const { buatPenghitung } = require('./penghitungGagal');
 
-const attempts = new Map(); // userId -> { count, windowStart }
+const MAX_ATTEMPTS = 3;
+const WINDOW_MS = 15 * 60 * 1000;
+const LOCK_MS = 15 * 60 * 1000;
 
-function isLocked(userId) {
-  const entry = attempts.get(userId);
-  if (!entry) return false;
-  if (Date.now() - entry.windowStart > WINDOW_MS) {
-    attempts.delete(userId);
-    return false;
-  }
-  return entry.count >= MAX_ATTEMPTS;
-}
+const { isLocked, recordFailure, recordSuccess } = buatPenghitung({ maks: MAX_ATTEMPTS, jendelaMs: WINDOW_MS, kunciMs: LOCK_MS });
 
-function recordFailure(userId) {
-  const entry = attempts.get(userId);
-  if (!entry || Date.now() - entry.windowStart > WINDOW_MS) {
-    attempts.set(userId, { count: 1, windowStart: Date.now() });
-    return;
-  }
-  entry.count += 1;
-}
-
-function recordSuccess(userId) {
-  attempts.delete(userId);
-}
-
-module.exports = { isLocked, recordFailure, recordSuccess, MAX_ATTEMPTS };
+module.exports = { isLocked, recordFailure, recordSuccess, MAX_ATTEMPTS, LOCK_MS };

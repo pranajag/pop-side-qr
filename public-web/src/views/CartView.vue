@@ -1,11 +1,12 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useTableStore } from '@/stores/table'
 import { useCartStore } from '@/stores/cart'
 import { useMenuStore } from '@/stores/menu'
 import { useLocaleStore } from '@/stores/locale'
+import { useCafeStatusStore } from '@/stores/cafeStatus'
 import { api, formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -23,7 +24,14 @@ const table = useTableStore()
 const cart = useCartStore()
 const menu = useMenuStore()
 const locale = useLocaleStore()
+const cafeStatus = useCafeStatusStore()
 const router = useRouter()
+
+// Keranjang yang sudah terisi (dibuat waktu kafe masih buka, atau dibuka
+// lewat tombol back) tidak boleh jadi jalan pintas ke checkout saat tidak
+// ada staff yang jaga. Isinya tetap disimpan — begitu staff mulai shift,
+// customer tinggal lanjut tanpa mengulang dari awal.
+const tutup = computed(() => cafeStatus.tutup)
 
 const summary = ref(null) // last server response: { items, total, issues }
 const loading = ref(false)
@@ -67,6 +75,7 @@ function refreshTotal() {
 onMounted(() => {
   if (!menu.loaded) menu.fetchMenu()
   refreshTotal()
+  cafeStatus.fetch()
 })
 watch(() => cart.items, refreshTotal, { deep: true })
 
@@ -100,6 +109,7 @@ function unitPrice(item) {
 }
 
 function onCheckout() {
+  if (tutup.value) return
   router.push({ name: 'checkout' })
 }
 </script>
@@ -112,13 +122,13 @@ function onCheckout() {
     {{ locale.t('scanQrDulu') }}
   </div>
 
-  <div v-else class="mx-auto min-h-svh max-w-md pb-32 sm:max-w-lg md:max-w-xl">
+  <div v-else class="mx-auto min-h-svh max-w-md pb-32 sm:max-w-xl lg:max-w-2xl">
     <header
       class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/95 px-3 py-3 backdrop-blur"
     >
       <button
         type="button"
-        class="flex size-11 shrink-0 items-center justify-center rounded-full active:bg-accent"
+        class="flex size-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-accent active:bg-accent"
         :aria-label="locale.t('kembaliKeMenuLabel')"
         @click="router.push({ name: 'menu' })"
       >
@@ -128,6 +138,18 @@ function onCheckout() {
     </header>
 
     <main class="px-4 py-4">
+      <div
+        v-if="tutup"
+        class="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5"
+      >
+        <p class="text-sm font-semibold text-destructive">
+          {{ locale.t('kafeTutup') }}
+        </p>
+        <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {{ locale.t('kafeTutupKeranjang') }}
+        </p>
+      </div>
+
       <p
         v-if="cart.isEmpty"
         class="py-10 text-center text-sm text-muted-foreground"
@@ -145,11 +167,11 @@ function onCheckout() {
             v-if="photoUrl(menu.findProduct(item.productId)?.foto)"
             :src="photoUrl(menu.findProduct(item.productId)?.foto)"
             :alt="menu.findProduct(item.productId)?.nama"
-            class="size-16 shrink-0 rounded-lg border object-cover"
+            class="size-20 shrink-0 rounded-2xl object-cover"
           />
           <div
             v-else
-            class="flex size-16 shrink-0 items-center justify-center rounded-lg border bg-muted"
+            class="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-muted"
           >
             <ImageOffIcon class="size-5 text-muted-foreground" />
           </div>
@@ -181,7 +203,7 @@ function onCheckout() {
             />
             <QtyStepper
               :qty="item.qty"
-              :max="menu.maxQty(item.productId)"
+              :max="tutup ? item.qty : menu.maxQty(item.productId)"
               @update:qty="
                 (q) => cart.setQty(item.productId, item.variantOptionIds, q)
               "
@@ -204,7 +226,7 @@ function onCheckout() {
 
     <div
       v-if="!cart.isEmpty"
-      class="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md space-y-3 border-t bg-background p-3 sm:max-w-lg md:max-w-xl"
+      class="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md space-y-3 border-t bg-background p-3 sm:max-w-xl lg:max-w-2xl"
     >
       <div class="flex items-center justify-between px-1 text-sm">
         <span class="text-muted-foreground">{{ locale.t('total') }}</span>
@@ -218,11 +240,11 @@ function onCheckout() {
       </div>
       <Button
         size="lg"
-        class="h-12 w-full bg-brand-cta text-heading hover:bg-brand-cta/90"
-        :disabled="(summary?.issues?.length ?? 0) > 0"
+        class="h-12 w-full bg-primary text-primary-foreground hover:bg-primary/90"
+        :disabled="tutup || (summary?.issues?.length ?? 0) > 0"
         @click="onCheckout"
       >
-        {{ locale.t('lanjutKePembayaran') }}
+        {{ tutup ? locale.t('kafeTutupTombol') : locale.t('lanjutKePembayaran') }}
       </Button>
     </div>
   </div>

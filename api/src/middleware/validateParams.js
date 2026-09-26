@@ -1,6 +1,6 @@
 const { z } = require('zod');
 
-const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
+const idParamSchema = z.strictObject({ id: z.coerce.number().int().positive() });
 
 function validateIdParam(req, res, next) {
   const result = idParamSchema.safeParse(req.params);

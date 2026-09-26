@@ -40,6 +40,15 @@ import {
 const auth = useAuthStore()
 const activeShiftStore = useActiveShiftStore()
 const active = ref(null)
+// DP yang masuk lewat QRIS/debit: tercatat di total uang masuk, tapi bukan
+// uang fisik di laci — disebut terpisah di dialog Akhiri Shift supaya kasir
+// tidak mencarinya saat menghitung laci.
+const METODE_LABEL = { tunai: 'Tunai', qris: 'QRIS', debit: 'Debit' }
+
+const depositNonTunai = computed(() => {
+  const d = active.value?.depositByMetode
+  return d ? (d.qris ?? 0) + (d.debit ?? 0) : 0
+})
 const shifts = ref([])
 const loading = ref(false)
 const busy = ref(false)
@@ -286,45 +295,38 @@ const staleOtherShifts = computed(() =>
       </AlertDescription>
     </Alert>
 
-    <div class="rounded-lg border bg-card p-4">
-      <div
-        v-if="active"
-        class="flex flex-wrap items-center justify-between gap-4"
-      >
-        <div class="flex items-center gap-3">
-          <span
-            class="flex size-10 shrink-0 items-center justify-center rounded-full bg-status-confirmed/15 text-status-confirmed"
-          >
+    <!-- @container: kartu ini menyesuaikan LEBARNYA SENDIRI, bukan lebar
+    layar. Di 1059px sidebar memakan 272px, jadi breakpoint layar mengira
+    ruangnya lega padahal isi kartu cuma ~620px — dulu ringkasan dan tombol
+    Akhiri Shift terlempar ke baris kedua dengan perataan berantakan. -->
+    <div class="@container rounded-lg border bg-card p-4">
+      <div v-if="active" class="space-y-4">
+        <div
+          class="flex flex-col gap-3 @md:flex-row @md:items-center @md:justify-between"
+        >
+          <div class="flex min-w-0 items-center gap-3">
             <span
-              class="size-2.5 animate-pulse rounded-full bg-status-confirmed"
-            ></span>
-          </span>
-          <div>
-            <p class="text-sm font-semibold">
-              Shift {{ active?.namaStaff || auth.user?.username }} sedang berjalan
-              <span class="font-normal text-muted-foreground"
-                >· {{ activeDuration }}</span
-              >
-            </p>
-            <p class="text-xs text-muted-foreground">
-              Mulai {{ formatDateTime(active.startedAt) }}
-            </p>
-          </div>
-        </div>
-        <div class="flex items-center gap-4">
-          <div class="text-right text-sm">
-            <p class="font-semibold">
-              {{ active.orderCount }} order &middot;
-              {{ formatRupiah(active.revenue) }}
-            </p>
-            <p class="text-xs text-muted-foreground">
-              Kas awal {{ formatRupiah(active.cashStart ?? 0) }} &middot;
-              seharusnya di laci {{ formatRupiah(active.expectedCash) }}
-            </p>
+              class="flex size-10 shrink-0 items-center justify-center rounded-full bg-status-confirmed/15 text-status-confirmed"
+            >
+              <span
+                class="size-2.5 animate-pulse rounded-full bg-status-confirmed"
+              ></span>
+            </span>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold">
+                Shift {{ active?.namaStaff || auth.user?.username }} sedang berjalan
+                <span class="font-normal text-muted-foreground"
+                  >· {{ activeDuration }}</span
+                >
+              </p>
+              <p class="text-xs text-muted-foreground">
+                Mulai {{ formatDateTime(active.startedAt) }}
+              </p>
+            </div>
           </div>
           <Button
             variant="destructive"
-            class="gap-2"
+            class="w-full shrink-0 gap-2 @md:w-auto"
             :disabled="busy"
             @click="openEndDialog"
           >
@@ -332,15 +334,48 @@ const staleOtherShifts = computed(() =>
             Akhiri Shift
           </Button>
         </div>
+        <dl class="grid grid-cols-2 gap-2 text-sm @xl:grid-cols-4">
+          <div class="rounded-md border p-2.5">
+            <dt class="text-xs text-muted-foreground">Order</dt>
+            <dd class="font-semibold">{{ active.orderCount }}</dd>
+          </div>
+          <div class="rounded-md border p-2.5">
+            <dt class="text-xs text-muted-foreground">Penjualan</dt>
+            <dd class="font-semibold">{{ formatRupiah(active.revenue) }}</dd>
+          </div>
+          <div class="rounded-md border p-2.5">
+            <dt class="text-xs text-muted-foreground">DP reservasi</dt>
+            <dd class="font-semibold">
+              {{ formatRupiah(active.depositTotal ?? 0) }}
+            </dd>
+            <dd v-if="active.depositCount" class="text-xs text-muted-foreground">
+              {{ active.depositCount }} pembayaran
+            </dd>
+          </div>
+          <div class="rounded-md border p-2.5">
+            <dt class="text-xs text-muted-foreground">Seharusnya di laci</dt>
+            <dd class="font-semibold">{{ formatRupiah(active.expectedCash) }}</dd>
+            <dd class="text-xs text-muted-foreground">
+              kas awal {{ formatRupiah(active.cashStart ?? 0) }}
+            </dd>
+          </div>
+        </dl>
       </div>
-      <div v-else class="flex flex-wrap items-center justify-between gap-4">
+      <div
+        v-else
+        class="flex flex-col gap-3 @md:flex-row @md:items-center @md:justify-between"
+      >
         <div>
           <p class="text-sm font-semibold">Kamu belum mulai shift</p>
           <p class="text-xs text-muted-foreground">
             Mulai shift supaya order yang masuk tercatat di hasil shift ini.
           </p>
         </div>
-        <Button class="gap-2" :disabled="busy" @click="openStartDialog">
+        <Button
+          class="w-full shrink-0 gap-2 @md:w-auto"
+          :disabled="busy"
+          @click="openStartDialog"
+        >
           <LoaderCircleIcon v-if="busy" class="size-4 animate-spin" />
           <PlayIcon v-else class="size-4" />
           Mulai Shift
@@ -352,43 +387,61 @@ const staleOtherShifts = computed(() =>
       <Table>
         <TableHeader>
           <TableRow>
+            <!-- Lima kolom tanpa lebar tetap: Mulai+Selesai jadi satu
+            kolom Waktu, jumlah order jadi baris kecil di bawah pendapatan.
+            Dulu tujuh kolom berlebar tetap butuh ~820px, sementara ruang
+            tabel di 1059px (dengan sidebar) cuma ~655px — kolom Kas Tunai
+            terpotong dan tombol Detail tersembunyi di balik scroll samping. -->
             <TableHead>Staff</TableHead>
-            <TableHead class="w-44">Mulai</TableHead>
-            <TableHead class="w-44">Selesai</TableHead>
-            <TableHead class="w-24">Order</TableHead>
-            <TableHead class="w-36">Pendapatan</TableHead>
-            <TableHead v-if="auth.isAdmin" class="w-40">Kas Tunai</TableHead>
-            <TableHead v-if="auth.isAdmin" class="w-24"></TableHead>
+            <TableHead>Waktu</TableHead>
+            <TableHead>Pendapatan</TableHead>
+            <TableHead v-if="auth.isAdmin">Kas Tunai</TableHead>
+            <TableHead v-if="auth.isAdmin" class="w-20"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           <TableEmpty
             v-if="!loading && shifts.length === 0"
-            :colspan="auth.isAdmin ? 7 : 5"
+            :colspan="auth.isAdmin ? 5 : 3"
             >Belum ada shift.</TableEmpty
           >
           <TableRow v-for="s in shifts" :key="s.id">
-            <TableCell class="font-medium" data-label="Staff">
+            <!-- whitespace-normal: sel tabel shadcn bawaannya nowrap, jadi
+            nama panjang ("Ardan Kurniawan Putra") memaksa tabel melebar. -->
+            <TableCell class="font-medium whitespace-normal" data-label="Staff">
               {{ s.namaStaff || s.username }}
               <span v-if="s.namaStaff" class="block text-xs font-normal text-muted-foreground"
                 >akun {{ s.username }}</span
               >
             </TableCell>
-            <TableCell class="text-sm text-muted-foreground" data-label="Mulai">{{
-              formatDateTime(s.startedAt)
-            }}</TableCell>
-            <TableCell class="text-sm text-muted-foreground" data-label="Selesai">
-              <Badge
-                v-if="s.isActive"
-                class="bg-status-confirmed text-status-confirmed-foreground"
-                >Sedang Berjalan</Badge
-              >
-              <span v-else>{{ formatDateTime(s.endedAt) }}</span>
+            <TableCell class="text-xs text-muted-foreground" data-label="Waktu">
+              <div class="flex flex-col items-end gap-0.5 sm:items-start">
+                <span class="whitespace-nowrap">{{ formatDateTime(s.startedAt) }}</span>
+                <Badge
+                  v-if="s.isActive"
+                  class="bg-status-confirmed text-status-confirmed-foreground"
+                  >Sedang Berjalan</Badge
+                >
+                <span v-else class="whitespace-nowrap"
+                  >s/d {{ formatDateTime(s.endedAt) }}</span
+                >
+              </div>
             </TableCell>
-            <TableCell class="text-sm" data-label="Order">{{ s.orderCount }}</TableCell>
-            <TableCell class="text-sm font-medium" data-label="Pendapatan">{{
-              formatRupiah(s.revenue)
-            }}</TableCell>
+            <TableCell class="text-sm" data-label="Pendapatan">
+              <div class="flex flex-col items-end gap-0.5 sm:items-start">
+                <span class="whitespace-nowrap font-medium">{{
+                  formatRupiah(s.revenue)
+                }}</span>
+                <span class="text-xs text-muted-foreground"
+                  >{{ s.orderCount }} order</span
+                >
+                <span
+                  v-if="s.depositTotal > 0"
+                  class="whitespace-nowrap text-xs text-muted-foreground"
+                  >DP {{ formatRupiah(s.depositTotal) }}</span
+                >
+              </div>
+            </TableCell>
             <TableCell v-if="auth.isAdmin" class="text-sm" data-label="Kas Tunai">
               <Badge
                 v-if="s.cashDifference !== null"
@@ -463,21 +516,75 @@ const staleOtherShifts = computed(() =>
     </Dialog>
 
     <Dialog :open="endDialogOpen" @update:open="(v) => (endDialogOpen = v)">
-      <DialogContent>
+      <!-- Lebih lebar dari bawaan (384px) supaya dua kolom ojol tidak
+      terjepit, dan bisa di-scroll sendiri kalau layarnya pendek. -->
+      <DialogContent class="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Akhiri Shift</DialogTitle>
           <DialogDescription>
             Hitung uang tunai fisik di laci sekarang, lalu masukkan jumlahnya.
-            Kas awal
-            <strong>{{ formatRupiah(active?.cashStart ?? 0) }}</strong> + tunai
-            terjual
-            <strong>{{ formatRupiah(active?.byMetode?.tunai ?? 0) }}</strong> —
-            sistem mencatat seharusnya ada
-            <strong>{{ formatRupiah(active?.expectedCash ?? 0) }}</strong> di
-            laci.
           </DialogDescription>
         </DialogHeader>
         <div class="space-y-4">
+          <dl class="space-y-1 rounded-md border p-3 text-sm">
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted-foreground">Kas awal</dt>
+              <dd>{{ formatRupiah(active?.cashStart ?? 0) }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted-foreground">Tunai terjual</dt>
+              <dd>{{ formatRupiah(active?.byMetode?.tunai ?? 0) }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted-foreground">DP reservasi tunai</dt>
+              <dd>{{ formatRupiah(active?.depositByMetode?.tunai ?? 0) }}</dd>
+            </div>
+            <div class="flex justify-between gap-3 border-t pt-1 font-semibold">
+              <dt>Seharusnya di laci</dt>
+              <dd>{{ formatRupiah(active?.expectedCash ?? 0) }}</dd>
+            </div>
+          </dl>
+          <div
+            class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md bg-muted px-3 py-2 text-sm"
+          >
+            <span class="text-muted-foreground"
+              >Total uang masuk shift (penjualan + DP)</span
+            >
+            <span class="font-semibold">{{
+              formatRupiah(active?.totalMasuk ?? 0)
+            }}</span>
+          </div>
+          <p v-if="depositNonTunai > 0" class="-mt-2 text-xs text-muted-foreground">
+            DP lewat QRIS/debit {{ formatRupiah(depositNonTunai) }} tidak masuk
+            laci, tapi tetap terhitung di total uang masuk shift ini.
+          </p>
+          <div
+            v-if="active?.depositList?.length"
+            class="space-y-2 rounded-md border p-3 text-xs"
+          >
+            <p class="font-medium text-muted-foreground">
+              Rincian DP reservasi di shift ini
+            </p>
+            <div
+              v-for="(d, i) in active.depositList"
+              :key="i"
+              class="flex items-start justify-between gap-3"
+            >
+              <span class="min-w-0">
+                <span class="font-medium text-foreground">{{ d.namaCustomer }}</span
+                ><template v-if="d.nomorMeja"> · meja {{ d.nomorMeja }}</template>
+                <span class="block text-muted-foreground">
+                  {{ formatDateTime(d.paidAt) }} · {{ METODE_LABEL[d.metode] }} ·
+                  <span :class="d.lunas ? 'text-status-completed' : 'text-status-waiting-verif'">{{
+                    d.lunas ? 'DP lunas' : 'DP belum lunas'
+                  }}</span>
+                </span>
+              </span>
+              <span class="shrink-0 font-semibold text-foreground">{{
+                formatRupiah(d.amount)
+              }}</span>
+            </div>
+          </div>
           <div class="space-y-2">
             <Label for="cash-counted">Uang Tunai di Laci</Label>
             <Input
@@ -490,7 +597,7 @@ const staleOtherShifts = computed(() =>
               autofocus
             />
           </div>
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div class="space-y-2">
               <Label for="gojek-amount">Uang Gojek (opsional)</Label>
               <Input
@@ -499,7 +606,7 @@ const staleOtherShifts = computed(() =>
                 type="number"
                 min="0"
                 step="500"
-                placeholder="Kosongkan kalau tidak ada"
+                placeholder="0"
               />
             </div>
             <div class="space-y-2">
@@ -510,7 +617,7 @@ const staleOtherShifts = computed(() =>
                 type="number"
                 min="0"
                 step="500"
-                placeholder="Kosongkan kalau tidak ada"
+                placeholder="0"
               />
             </div>
           </div>
@@ -559,7 +666,7 @@ const staleOtherShifts = computed(() =>
       :open="!!detailShiftId"
       @update:open="(v) => !v && (detailShiftId = null)"
     >
-      <DialogContent class="sm:max-w-lg">
+      <DialogContent class="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Detail Shift {{ detailData?.namaStaff || detailData?.username }}</DialogTitle>
           <DialogDescription class="sr-only">
@@ -637,6 +744,57 @@ const staleOtherShifts = computed(() =>
             }}</span>
           </div>
 
+          <div class="space-y-1 rounded-md border p-3 text-sm">
+            <p class="text-xs font-medium text-muted-foreground">
+              DP reservasi diterima ({{ detailData.depositCount ?? 0 }} reservasi)
+            </p>
+            <div class="flex justify-between">
+              <span class="text-muted-foreground">QRIS</span>
+              <span>{{ formatRupiah(detailData.depositByMetode?.qris ?? 0) }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted-foreground">Tunai</span>
+              <span>{{ formatRupiah(detailData.depositByMetode?.tunai ?? 0) }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted-foreground">Debit</span>
+              <span>{{ formatRupiah(detailData.depositByMetode?.debit ?? 0) }}</span>
+            </div>
+          </div>
+<div
+            v-if="detailData?.depositList?.length"
+            class="space-y-2 rounded-md border p-3 text-xs"
+          >
+            <p class="font-medium text-muted-foreground">
+              Rincian DP reservasi di shift ini
+            </p>
+            <div
+              v-for="(d, i) in detailData.depositList"
+              :key="i"
+              class="flex items-start justify-between gap-3"
+            >
+              <span class="min-w-0">
+                <span class="font-medium text-foreground">{{ d.namaCustomer }}</span
+                ><template v-if="d.nomorMeja"> · meja {{ d.nomorMeja }}</template>
+                <span class="block text-muted-foreground">
+                  {{ formatDateTime(d.paidAt) }} · {{ METODE_LABEL[d.metode] }} ·
+                  <span :class="d.lunas ? 'text-status-completed' : 'text-status-waiting-verif'">{{
+                    d.lunas ? 'DP lunas' : 'DP belum lunas'
+                  }}</span>
+                </span>
+              </span>
+              <span class="shrink-0 font-semibold text-foreground">{{
+                formatRupiah(d.amount)
+              }}</span>
+            </div>
+          </div>
+          <div
+            class="flex justify-between rounded-md bg-muted p-2.5 text-sm font-semibold"
+          >
+            <span>Total uang masuk shift</span>
+            <span>{{ formatRupiah(detailData.totalMasuk ?? 0) }}</span>
+          </div>
+
           <div
             v-if="detailData.cashCounted !== null"
             class="space-y-1 rounded-md border p-3 text-sm"
@@ -652,6 +810,10 @@ const staleOtherShifts = computed(() =>
             <div class="flex justify-between">
               <span class="text-muted-foreground">Tunai terjual</span>
               <span>{{ formatRupiah(detailData.byMetode.tunai) }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted-foreground">DP reservasi tunai</span>
+              <span>{{ formatRupiah(detailData.depositByMetode?.tunai ?? 0) }}</span>
             </div>
             <div class="flex justify-between">
               <span class="text-muted-foreground">Seharusnya di laci</span>

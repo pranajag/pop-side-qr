@@ -4,7 +4,7 @@ const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 const validate = require('../middleware/validate');
 const { validateIdParam } = require('../middleware/validateParams');
-const { createUserSchema, updateUserSchema } = require('../validators/user.validator');
+const { createUserSchema, updateUserSchema, reset2faSchema } = require('../validators/user.validator');
 
 const router = Router();
 
@@ -16,5 +16,6 @@ router.get('/', userController.list);
 router.post('/', validate(createUserSchema), userController.create);
 router.put('/:id', validateIdParam, validate(updateUserSchema), userController.update);
 router.delete('/:id', validateIdParam, userController.remove);
+router.post('/:id/reset-2fa', validateIdParam, validate(reset2faSchema), userController.reset2fa);
 
 module.exports = router;

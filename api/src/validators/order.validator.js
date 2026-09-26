@@ -1,8 +1,9 @@
 const { z } = require('zod');
+const { memberPhoneSchema } = require('./common');
 
 const orderItemsSchema = z
   .array(
-    z.object({
+    z.strictObject({
       productId: z.coerce.number().int().positive(),
       qty: z.coerce.number().int().positive().max(99),
       variantOptionIds: z.array(z.coerce.number().int().positive()).max(20).optional(),
@@ -12,7 +13,7 @@ const orderItemsSchema = z
   .min(1)
   .max(50);
 
-const createOrderSchema = z.object({
+const createOrderSchema = z.strictObject({
   token: z.string().regex(/^[0-9a-f]{64}$/, 'Token meja tidak valid'),
   metode: z.enum(['qris', 'tunai', 'debit']),
   catatan: z.string().trim().max(200).optional(),
@@ -36,11 +37,11 @@ const createOrderSchema = z.object({
   // tier now pays off here too, not just when staff apply it in Pesanan
   // Manual. Points are a threshold, not a currency: a tier discount does
   // not spend them.
-  customerPhone: z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(20).optional()),
+  customerPhone: memberPhoneSchema,
 });
 
 const createManualOrderSchema = z
-  .object({
+  .strictObject({
     customerName: z.string().trim().max(100).optional(),
     metode: z.enum(['qris', 'tunai', 'debit']),
     catatan: z.string().trim().max(200).optional(),
@@ -52,7 +53,12 @@ const createManualOrderSchema = z
     discountAmount: z.coerce.number().int().min(0).max(999999999).optional(),
     discountReason: z.string().trim().max(200).optional(),
     // Loyalty — optional, staff-entered here only (see customer.service.js).
-    customerPhone: z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(20).optional()),
+    customerPhone: memberPhoneSchema,
+    // Cash the customer handed over, tunai only. Optional — a kasir who
+    // already counted the change isn't forced through the field. The
+    // service (not this schema) rejects an amount below the order total and
+    // an amount on a non-cash sale, since only it knows the final price.
+    cashReceived: z.coerce.number().min(0).max(999999999).optional(),
   })
   .refine((data) => !data.discountAmount || data.discountReason, {
     message: 'Alasan diskon wajib diisi kalau ada potongan',

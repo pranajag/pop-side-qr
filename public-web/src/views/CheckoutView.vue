@@ -11,7 +11,9 @@ import { useCafeStatusStore } from '@/stores/cafeStatus'
 import { api, formatApiError } from '@/lib/api'
 import { formatRupiah } from '@/lib/format'
 import { savePendingOrder } from '@/lib/offlineQueue'
-import { loadJSON, saveJSON } from '@/lib/persist'
+import { normalisasiTelepon, statusTelepon } from '@/lib/phone'
+import { hapusDraft, muatDraft, simpanDraft } from '@/lib/checkoutDraft'
+import ReservasiNotice from '@/components/ReservasiNotice.vue'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
@@ -33,6 +35,7 @@ import {
   CreditCardIcon,
   BadgeCheckIcon,
   StarIcon,
+  ShieldCheckIcon,
 } from '@lucide/vue'
 
 const table = useTableStore()
@@ -89,21 +92,13 @@ const customerPhone = ref('')
 // Cart items already survive navigation (cart.js persists to localStorage)
 // — this covers the two free-text fields on THIS page that don't: losing a
 // typed note or member phone number to an accidental back-tap/reload would
-// mean retyping it from scratch. sessionStorage (not localStorage, unlike
-// the cart) since this is this-visit-only scratch state, not something
-// that should still be sitting there a week later. metode is deliberately
-// left out — it's a single tap to redo, not worth persisting.
-const DRAFT_KEY = 'popside.checkoutDraft'
+// mean retyping it from scratch. metode is deliberately left out — it's a
+// single tap to redo, not worth persisting. Why the draft is tied to the
+// table: lib/checkoutDraft.js.
 watch([catatan, customerPhone], ([c, p]) => {
-  saveJSON(sessionStorage, DRAFT_KEY, { catatan: c, customerPhone: p })
+  simpanDraft(table.id, { catatan: c, customerPhone: p })
 })
-function clearCheckoutDraft() {
-  try {
-    sessionStorage.removeItem(DRAFT_KEY)
-  } catch {
-    // Nothing to clean up if storage was never reachable in the first place.
-  }
-}
+const clearCheckoutDraft = hapusDraft
 
 // Cafe closed = no staff on shift. Server refuses the order either way
 // (order.service.js); this just stops the customer filling in a whole
@@ -135,12 +130,15 @@ onMounted(async () => {
     router.replace({ name: 'menu' })
     return
   }
-  const draft = loadJSON(sessionStorage, DRAFT_KEY, null)
+  const draft = muatDraft(table.id)
   if (draft) {
     catatan.value = draft.catatan ?? ''
     customerPhone.value = draft.customerPhone ?? ''
   }
   cafeStatus.fetch()
+  // Titik terakhir sebelum pesanan dikirim — kalau meja ini baru saja masuk
+  // jendela reservasi selagi customer memilih menu, di sinilah dia tahu.
+  table.perbaruiReservasi()
   await refreshSummary()
 })
 
@@ -168,15 +166,21 @@ async function refreshSummary() {
   }
 }
 
-// Only a plausibly-complete number is worth asking the server about. Half
-// a number can never match anyone, and every partial lookup would burn a
-// slot of the member-lookup rate limit for no result.
-const MIN_PHONE_DIGITS = 9
-const lookupPhone = computed(() => {
-  const trimmed = customerPhone.value.trim()
-  const digits = trimmed.replace(/\D/g, '')
-  return digits.length >= MIN_PHONE_DIGITS ? trimmed : undefined
-})
+// Only a complete, valid number is worth asking the server about. Half a
+// number can never match anyone, and every partial lookup would burn a slot
+// of the member-lookup rate limit for no result. Sent in its baku form
+// (lib/phone.js) — the same key the server stores it under, so "0812 3456"
+// typed today finds the member "0812-3456" created last week.
+const statusNomor = computed(() => statusTelepon(customerPhone.value))
+const lookupPhone = computed(() =>
+  statusNomor.value === 'valid' ? normalisasiTelepon(customerPhone.value) : undefined
+)
+// Kolomnya opsional, tapi kalau diisi harus benar: nomor setengah jadi
+// atau salah ketik yang tetap dikirim akan ditolak server, dan diam-diam
+// membuangnya berarti poin customer hilang tanpa dia tahu.
+const teleponBermasalah = computed(
+  () => statusNomor.value === 'belum-lengkap' || statusNomor.value === 'tidak-valid'
+)
 
 // Debounced: a phone number is typed a digit at a time, and only the
 // finished number is worth a lookup. Short enough that the discount still
@@ -193,6 +197,66 @@ watch(lookupPhone, () => {
 })
 onUnmounted(() => clearTimeout(memberDebounce))
 
+// ---------- Verifikasi OTP nomor member ----------
+// Diskon member baru berlaku setelah kode yang dikirim ke nomor itu
+// dimasukkan di sini — tahu nomor HP member lain tidak cukup untuk memakai
+// diskonnya. Server tidak memberi tahu apakah sebuah nomor member atau
+// bukan sebelum itu (api memberOtp.service.js), jadi layar ini pun tidak.
+// Tanda "sudah terverifikasi" disimpan server sebagai cookie httpOnly —
+// tidak ada apa pun yang disimpan di browser dari sini.
+const verifikasi = computed(() => summary.value?.verifikasiMember ?? { tersedia: false, terverifikasi: false })
+const otp = ref({ terkirim: false, kode: '', mengirim: false, memeriksa: false, error: '', tungguDetik: 0 })
+let otpTimer = null
+
+function resetOtp() {
+  clearInterval(otpTimer)
+  otp.value = { terkirim: false, kode: '', mengirim: false, memeriksa: false, error: '', tungguDetik: 0 }
+}
+watch(lookupPhone, resetOtp)
+onUnmounted(() => clearInterval(otpTimer))
+
+function mulaiTunggu(detik) {
+  clearInterval(otpTimer)
+  otp.value.tungguDetik = detik
+  otpTimer = setInterval(() => {
+    otp.value.tungguDetik -= 1
+    if (otp.value.tungguDetik <= 0) clearInterval(otpTimer)
+  }, 1000)
+}
+
+async function kirimKodeOtp() {
+  if (!lookupPhone.value || otp.value.mengirim || otp.value.tungguDetik > 0) return
+  otp.value.mengirim = true
+  otp.value.error = ''
+  try {
+    await api.post('/public/member/otp', { token: table.token, customerPhone: lookupPhone.value })
+    otp.value.terkirim = true
+    otp.value.kode = ''
+    mulaiTunggu(60)
+  } catch (err) {
+    otp.value.error = formatApiError(err)
+  } finally {
+    otp.value.mengirim = false
+  }
+}
+
+async function verifikasiKodeOtp() {
+  const kode = otp.value.kode.replace(/\D/g, '')
+  if (kode.length !== 6 || otp.value.memeriksa) return
+  otp.value.memeriksa = true
+  otp.value.error = ''
+  try {
+    await api.post('/public/member/otp/verifikasi', { token: table.token, customerPhone: lookupPhone.value, kode })
+    resetOtp()
+    await refreshSummary()
+  } catch (err) {
+    otp.value.error = formatApiError(err)
+    otp.value.kode = ''
+  } finally {
+    otp.value.memeriksa = false
+  }
+}
+
 const hasIssues = computed(() => (summary.value?.issues?.length ?? 0) > 0)
 const confirmOpen = ref(false)
 const selectedMethod = computed(() =>
@@ -200,6 +264,9 @@ const selectedMethod = computed(() =>
 )
 
 async function onSubmit() {
+  // Status bisa berubah selagi dialog konfirmasi terbuka — tombol yang
+  // membukanya sudah dimatikan, ini penjaga untuk jeda di antaranya.
+  if (tutup.value || teleponBermasalah.value) return
   submitting.value = true
   const payload = {
     token: table.token,
@@ -212,13 +279,13 @@ async function onSubmit() {
       catatan: i.catatan || undefined,
     })),
     idempotencyKey,
-    customerPhone: customerPhone.value.trim() || undefined,
+    customerPhone: lookupPhone.value,
   }
   try {
     const { order } = await api.post('/public/orders', payload)
     cart.clear()
     clearCheckoutDraft()
-    recentOrders.add(order.kodeOrder)
+    recentOrders.add(order.kodeOrder, order.createdAt)
     router.replace({ name: 'order', params: { kodeOrder: order.kodeOrder } })
   } catch (err) {
     // err.status is only ever set once a real HTTP response came back
@@ -234,6 +301,13 @@ async function onSubmit() {
       toast.warning(locale.t('checkoutOfflineQueued'))
       router.replace({ name: 'menu' })
     } else {
+      // The cafe can close while the customer is still filling this form —
+      // cafeStatus is only fetched when the page loads, so until now the
+      // button stayed enabled and every further tap failed the same way,
+      // burning a createOrder rate-limit slot until the error turned into a
+      // misleading "too many attempts". Reflect the refusal locally so the
+      // screen locks itself, exactly as if they had arrived after closing.
+      if (err?.code === 'CAFE_CLOSED') cafeStatus.sedangBuka = false
       toast.error(formatApiError(err))
     }
   } finally {
@@ -250,13 +324,13 @@ async function onSubmit() {
     {{ locale.t('scanQrDulu') }}
   </div>
 
-  <div v-else class="mx-auto min-h-svh max-w-md pb-28 sm:max-w-lg md:max-w-xl">
+  <div v-else class="mx-auto min-h-svh max-w-md pb-28 sm:max-w-xl lg:max-w-2xl">
     <header
       class="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/95 px-3 py-3 backdrop-blur"
     >
       <button
         type="button"
-        class="flex size-11 shrink-0 items-center justify-center rounded-full active:bg-accent"
+        class="flex size-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-accent active:bg-accent"
         :aria-label="locale.t('kembaliKeKeranjangLabel')"
         @click="router.push({ name: 'cart' })"
       >
@@ -266,6 +340,7 @@ async function onSubmit() {
     </header>
 
     <main class="space-y-6 px-4 py-4">
+      <ReservasiNotice />
       <Alert v-if="hasIssues" variant="destructive">
         <TriangleAlertIcon class="size-4" />
         <AlertTitle>{{ locale.t('keranjangPerluDiperbarui') }}</AlertTitle>
@@ -283,7 +358,7 @@ async function onSubmit() {
             v-for="m in METHODS"
             :key="m.value"
             type="button"
-            class="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors"
+            class="flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left transition-colors hover:border-primary/50 hover:bg-accent/40"
             :class="
               metode === m.value
                 ? 'border-primary bg-primary/5'
@@ -295,7 +370,7 @@ async function onSubmit() {
               :is="m.icon"
               class="size-5 shrink-0"
               :class="
-                metode === m.value ? 'text-primary' : 'text-muted-foreground'
+                metode === m.value ? 'text-primary-strong' : 'text-muted-foreground'
               "
             />
             <span class="min-w-0 flex-1">
@@ -325,11 +400,14 @@ async function onSubmit() {
           rows="2"
           maxlength="200"
           :placeholder="locale.t('catatanPesananPlaceholder')"
-          class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          class="w-full rounded-xl border border-input bg-card px-3.5 py-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         />
       </section>
 
-      <section>
+      <!-- Hidden entirely while the store has loyalty switched off: asking
+      for a phone number that earns nothing would be collecting personal
+      data for no reason. The server ignores one sent anyway. -->
+      <section v-if="cafeStatus.memberEnabled">
         <h2 class="mb-2 text-sm font-semibold text-muted-foreground">
           {{ locale.t('memberLabel') }}
         </h2>
@@ -339,9 +417,21 @@ async function onSubmit() {
           inputmode="numeric"
           maxlength="20"
           :placeholder="locale.t('memberPlaceholder')"
-          class="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          class="w-full rounded-xl border border-input bg-card px-3.5 py-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         />
-        <p class="mt-1.5 text-xs text-muted-foreground">
+        <p
+          v-if="statusNomor === 'tidak-valid'"
+          class="mt-1.5 text-xs font-medium text-destructive"
+        >
+          {{ locale.t('teleponTidakValid') }}
+        </p>
+        <p
+          v-else-if="statusNomor === 'belum-lengkap'"
+          class="mt-1.5 text-xs text-muted-foreground"
+        >
+          {{ locale.t('teleponBelumLengkap') }}
+        </p>
+        <p v-else class="mt-1.5 text-xs text-muted-foreground">
           {{ locale.t('memberDesc') }}
         </p>
 
@@ -355,16 +445,16 @@ async function onSubmit() {
 
         <div
           v-else-if="member"
-          class="mt-2 rounded-lg border p-3"
+          class="mt-2 rounded-2xl border p-3.5"
           :class="
             memberTier
-              ? 'border-brand-primary/50 bg-brand-primary/10'
+              ? 'border-primary bg-primary/10'
               : 'border-border bg-muted/40'
           "
         >
           <p class="flex items-center gap-1.5 text-xs font-medium">
             <BadgeCheckIcon class="size-3.5 shrink-0" />
-            {{ locale.t('memberDikenali') }}
+            {{ verifikasi.terverifikasi ? locale.t('memberTerverifikasi') : locale.t('memberDikenali') }}
           </p>
           <p class="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
             <StarIcon class="size-3 shrink-0 fill-current" />
@@ -389,7 +479,25 @@ async function onSubmit() {
             </p>
           </template>
           <p v-else class="mt-2 text-xs text-muted-foreground">
-            {{ locale.t('memberBelumCukupPoin') }}
+            {{
+              summary?.nextTier
+                ? locale.t('memberKurangPoin', {
+                    n: summary.nextTier.kurangPoin,
+                    percent: summary.nextTier.discountPercent,
+                  })
+                : locale.t('memberBelumCukupPoin')
+            }}
+          </p>
+          <p
+            v-if="memberTier && summary?.nextTier"
+            class="mt-1 text-xs text-muted-foreground"
+          >
+            {{
+              locale.t('memberKurangPoinNaik', {
+                n: summary.nextTier.kurangPoin,
+                percent: summary.nextTier.discountPercent,
+              })
+            }}
           </p>
           <p
             v-if="summary?.pointsToEarn > 0"
@@ -399,19 +507,66 @@ async function onSubmit() {
           </p>
         </div>
 
-        <p
+        <!-- Nomor valid, belum diverifikasi: poinnya tetap masuk ke nomor
+        itu; diskonnya menunggu verifikasi OTP. Sama persis untuk nomor apa
+        pun — member atau bukan. -->
+        <div
           v-else-if="lookupPhone && summary"
-          class="mt-2 text-xs text-muted-foreground"
+          class="mt-2 space-y-2 rounded-2xl border border-border bg-muted/40 p-3.5 text-xs"
         >
-          {{ locale.t('memberTidakDitemukan') }}
-        </p>
+          <p class="text-muted-foreground">
+            {{ locale.t('memberPoinKeNomor') }}
+            <template v-if="summary.pointsToEarn > 0">
+              {{ locale.t('memberAkanDapatPoin', { n: summary.pointsToEarn }) }}
+            </template>
+          </p>
+          <template v-if="verifikasi.tersedia">
+            <p class="font-medium text-foreground">{{ locale.t('memberVerifikasiAjak') }}</p>
+            <p v-if="otp.terkirim" class="text-muted-foreground">{{ locale.t('memberKodeTerkirim') }}</p>
+            <form v-if="otp.terkirim" class="flex gap-2" @submit.prevent="verifikasiKodeOtp">
+              <label class="sr-only" for="kode-otp">{{ locale.t('memberKodeLabel') }}</label>
+              <input
+                id="kode-otp"
+                v-model="otp.kode"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="6"
+                placeholder="000000"
+                class="w-28 rounded-xl border border-input bg-card px-3 py-2 text-center font-mono text-sm tracking-widest outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              />
+              <Button type="submit" size="sm" :disabled="otp.memeriksa || otp.kode.replace(/\D/g, '').length !== 6">
+                <LoaderCircleIcon v-if="otp.memeriksa" class="size-3.5 animate-spin" />
+                {{ locale.t('memberVerifikasiTombol') }}
+              </Button>
+            </form>
+            <p v-if="otp.error" class="font-medium text-destructive">{{ otp.error }}</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              :disabled="otp.mengirim || otp.tungguDetik > 0"
+              @click="kirimKodeOtp"
+            >
+              <LoaderCircleIcon v-if="otp.mengirim" class="size-3.5 animate-spin" />
+              <ShieldCheckIcon v-else class="size-3.5" />
+              {{
+                otp.tungguDetik > 0
+                  ? locale.t('memberKirimUlangDalam', { n: otp.tungguDetik })
+                  : otp.terkirim
+                    ? locale.t('memberKirimUlang')
+                    : locale.t('memberKirimKode')
+              }}
+            </Button>
+          </template>
+          <p v-else class="text-muted-foreground">{{ locale.t('memberVerifikasiTidakTersedia') }}</p>
+        </div>
       </section>
 
       <section>
         <h2 class="mb-2 text-sm font-semibold text-muted-foreground">
           {{ locale.t('ringkasan') }}
         </h2>
-        <div class="space-y-1 rounded-lg border p-3 text-sm">
+        <div class="space-y-1 rounded-2xl bg-card shadow-[0_1px_2px_rgba(13,15,20,0.04)] p-3.5 text-sm">
           <div
             v-for="(item, idx) in summary?.items ?? []"
             :key="idx"
@@ -435,7 +590,7 @@ async function onSubmit() {
             </div>
             <div
               v-if="summary?.discountAmount > 0"
-              class="flex justify-between gap-2 font-medium text-brand-cta"
+              class="flex justify-between gap-2 font-medium text-primary-strong"
             >
               <span>
                 {{ locale.t('diskon') }}
@@ -475,18 +630,18 @@ async function onSubmit() {
     </main>
 
     <div
-      class="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md border-t bg-background p-3 sm:max-w-lg md:max-w-xl"
+      class="fixed inset-x-0 bottom-0 z-10 mx-auto max-w-md border-t bg-background p-3 sm:max-w-xl lg:max-w-2xl"
     >
       <p
         v-if="tutup"
-        class="mb-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive"
+        class="mb-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive"
       >
         {{ locale.t('kafeTutup') }} — {{ locale.t('kafeTutupDesc') }}
       </p>
       <Button
         size="lg"
         class="h-12 w-full"
-        :disabled="submitting || hasIssues || loadingSummary || tutup"
+        :disabled="submitting || hasIssues || loadingSummary || tutup || teleponBermasalah"
         @click="confirmOpen = true"
       >
         <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
@@ -505,6 +660,9 @@ async function onSubmit() {
                 metode: selectedMethod?.label,
               })
             }}
+            <span v-if="table.reservasi" class="mt-2 block font-medium text-foreground">
+              {{ locale.t('reservasiKonfirmasi', { meja: table.nomorMeja }) }}
+            </span>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

@@ -73,10 +73,10 @@ async function call(reason) {
           :key="reason.label"
           type="button"
           :disabled="submitting"
-          class="flex flex-col items-center gap-2 rounded-lg border p-4 text-center text-sm font-medium transition-colors active:bg-accent disabled:opacity-50"
+          class="flex flex-col items-center gap-2 rounded-2xl border p-4 text-center text-sm font-medium transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent disabled:opacity-50 disabled:hover:border-border disabled:hover:bg-transparent"
           @click="call(reason)"
         >
-          <component :is="reason.icon" class="size-5 text-brand-cta" />
+          <component :is="reason.icon" class="size-5 text-primary-strong" />
           {{ reason.label }}
         </button>
       </div>

@@ -1,13 +1,18 @@
 const { Router } = require('express');
+const cookieParser = require('cookie-parser');
 const menuController = require('../controllers/menu.controller');
 const cartController = require('../controllers/cart.controller');
 const tableController = require('../controllers/table.controller');
 const orderController = require('../controllers/order.controller');
+const memberOtpController = require('../controllers/memberOtp.controller');
 const validate = require('../middleware/validate');
 const { cartTotalSchema } = require('../validators/cart.validator');
 const { createOrderSchema } = require('../validators/order.validator');
+const { mintaOtpSchema, verifikasiOtpSchema } = require('../validators/memberOtp.validator');
 const {
   createOrderLimiter,
+  createOrderMejaLimiter,
+  staffCallMejaLimiter,
   orderStatusLimiter,
   orderStatusIpLimiter,
   confirmPaymentLimiter,
@@ -17,6 +22,10 @@ const {
   publicReadLimiter,
   memberLookupLimiter,
   publicImageLimiter,
+  otpMintaNomorLimiter,
+  otpMintaHarianLimiter,
+  otpMintaIpLimiter,
+  otpVerifikasiLimiter,
 } = require('../middleware/rateLimit');
 const productPhoto = require('../services/productPhoto.service');
 const settingsImage = require('../services/settingsImage.service');
@@ -26,6 +35,11 @@ const { createStaffCallSchema } = require('../validators/staffCall.validator');
 const { upload } = require('../middleware/upload');
 
 const router = Router();
+
+// Cookie web publik (utils/cookiePublik.js): perangkat pemesan (pelacakan
+// order) dan tanda verifikasi OTP member. Tanpa secret — isinya sudah
+// ditandatangani/di-hash sendiri oleh kripto.js.
+router.use(cookieParser());
 
 // Intentionally unauthenticated: product photos and the store's QRIS image
 // are shown on the public, no-login menu/checkout — this is the one
@@ -51,7 +65,18 @@ router.post(
   cartController.total
 );
 
-router.post('/orders', createOrderLimiter, validate(createOrderSchema), orderController.create);
+router.post('/orders', createOrderLimiter, createOrderMejaLimiter, validate(createOrderSchema), orderController.create);
+
+// OTP member — diskon tier baru berlaku setelah nomor terverifikasi.
+router.post(
+  '/member/otp',
+  otpMintaIpLimiter,
+  otpMintaNomorLimiter,
+  otpMintaHarianLimiter,
+  validate(mintaOtpSchema),
+  memberOtpController.minta
+);
+router.post('/member/otp/verifikasi', otpVerifikasiLimiter, validate(verifikasiOtpSchema), memberOtpController.verifikasi);
 router.post(
   '/orders/:kodeOrder/bayar',
   confirmPaymentIpLimiter,
@@ -60,6 +85,8 @@ router.post(
   orderController.confirmPayment
 );
 router.get('/orders/:kodeOrder', orderStatusIpLimiter, orderStatusLimiter, orderController.track);
-router.post('/call-staff', staffCallLimiter, validate(createStaffCallSchema), staffCallController.create);
+// Token berlangganan status order realtime — hanya untuk perangkat pemesan.
+router.get('/orders/:kodeOrder/realtime', orderStatusIpLimiter, orderStatusLimiter, orderController.realtimeToken);
+router.post('/call-staff', staffCallLimiter, staffCallMejaLimiter, validate(createStaffCallSchema), staffCallController.create);
 
 module.exports = router;

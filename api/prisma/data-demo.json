@@ -1,0 +1,128 @@
+{
+  "versi": 1,
+  "kategori": [
+    {
+      "kunci": 1,
+      "nama": "Minuman",
+      "urutan": 1,
+      "isActive": true,
+      "estimasiMenit": 7
+    },
+    {
+      "kunci": 5,
+      "nama": "Snack",
+      "urutan": 2,
+      "isActive": true,
+      "estimasiMenit": 10
+    }
+  ],
+  "produk": [
+    {
+      "kategori": 1,
+      "nama": "Black Peach",
+      "harga": 18000,
+      "stok": 0,
+      "trackStock": false,
+      "isAvailable": true,
+      "foto": "4971b8ff-a1e1-4785-9d4b-54de33f0c69d.png",
+      "varian": []
+    },
+    {
+      "kategori": 1,
+      "nama": "Pop Blue",
+      "harga": 15000,
+      "stok": 0,
+      "trackStock": false,
+      "isAvailable": true,
+      "foto": null,
+      "varian": []
+    },
+    {
+      "kategori": 1,
+      "nama": "Choco Berry",
+      "harga": 18000,
+      "stok": 795,
+      "trackStock": false,
+      "isAvailable": true,
+      "foto": null,
+      "varian": []
+    },
+    {
+      "kategori": 5,
+      "nama": "French Fries",
+      "harga": 18000,
+      "stok": 61,
+      "trackStock": true,
+      "isAvailable": true,
+      "foto": null,
+      "varian": []
+    },
+    {
+      "kategori": 1,
+      "nama": "Passion Blue",
+      "harga": 15000,
+      "stok": 0,
+      "trackStock": false,
+      "isAvailable": true,
+      "foto": null,
+      "varian": []
+    }
+  ],
+  "tier": [
+    {
+      "minPoints": 50,
+      "discountPercent": 5
+    },
+    {
+      "minPoints": 150,
+      "discountPercent": 10
+    },
+    {
+      "minPoints": 300,
+      "discountPercent": 15
+    }
+  ],
+  "meja": [
+    {
+      "nomorMeja": "1",
+      "isActive": true,
+      "kapasitas": 6
+    },
+    {
+      "nomorMeja": "2",
+      "isActive": true,
+      "kapasitas": 6
+    },
+    {
+      "nomorMeja": "3",
+      "isActive": true,
+      "kapasitas": 6
+    }
+  ],
+  "toko": {
+    "namaToko": "Popside Street Caffe",
+    "alamat": "Jl blabalabala",
+    "telepon": "098828728626",
+    "pajakPersen": 0,
+    "serviceChargePersen": 0,
+    "memberEnabled": true,
+    "reservasiDpNominal": 0,
+    "reservasiDpPerTamu": false,
+    "pinVerifikasiMinimal": 200000,
+    "qrisImage": "f28ca993-9e39-4eb6-852a-8f4b7025f68e.png"
+  },
+  "berkas": [
+    {
+      "nama": "4971b8ff-a1e1-4785-9d4b-54de33f0c69d.png",
+      "kategori": "products",
+      "jenis": "image/png",
+      "isiBase64": "iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAAAAACIM/FCAAAByElEQVR4nO3PeWsPAAAA0B/ayJaj2UKOHLE2y5ajjZAjrNFm7WhkEzLCQkaORkNMpiHkyMhkE9bIERPLEXI0hDYaQkxYyNGs/OVbvPcNXiDQqnWboOC27dqHhHbo2KlzWJfwiK7duvfo2at3n779+g8YGBkVPShmcGzckKHDhscnjBg5avSYsePGT5g4aXJi0pSpySnTUtPSMzKzps+YmZ0za/acufNy5y9YuGhx3pKly5bnr1i5avWatQXr1hdu2Lhp85airduKt5fs2Llr9569+/YfOHio9PCRo2XHjpdXnDh56nRl1Zmz585fuHjpcvWVq9dqrt+4eev2nbv37j94WPvo8ZOnz57X1b942fDq9Zu3795/+Nj46fOXr03fvv/4+ev3n+a/LQERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERkf+RfzICJpzAvTuAAAAAAElFTkSuQmCC"
+    },
+    {
+      "nama": "f28ca993-9e39-4eb6-852a-8f4b7025f68e.png",
+      "kategori": "settings",
+      "jenis": "image/png",
+      "isiBase64": "iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAAAAACIM/FCAAAByElEQVR4nO3PeWsPAAAA0B/ayJaj2UKOHLE2y5ajjZAjrNFm7WhkEzLCQkaORkNMpiHkyMhkE9bIERPLEXI0hDYaQkxYyNGs/OVbvPcNXiDQqnWboOC27dqHhHbo2KlzWJfwiK7duvfo2at3n779+g8YGBkVPShmcGzckKHDhscnjBg5avSYsePGT5g4aXJi0pSpySnTUtPSMzKzps+YmZ0za/acufNy5y9YuGhx3pKly5bnr1i5avWatQXr1hdu2Lhp85airduKt5fs2Llr9569+/YfOHio9PCRo2XHjpdXnDh56nRl1Zmz585fuHjpcvWVq9dqrt+4eev2nbv37j94WPvo8ZOnz57X1b942fDq9Zu3795/+Nj46fOXr03fvv/4+ev3n+a/LQERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERERkf+RfzICJpzAvTuAAAAAAElFTkSuQmCC"
+    }
+  ]
+}

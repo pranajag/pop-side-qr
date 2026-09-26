@@ -9,6 +9,10 @@ export const useSettingsStore = defineStore('settings', {
     telepon: null,
     pajakPersen: 0,
     serviceChargePersen: 0,
+    memberEnabled: true,
+    // Konfirmasi pembayaran order dengan total >= ini wajib PIN staff.
+    // null = PIN tidak pernah diminta; 0 = setiap pembayaran.
+    pinVerifikasiMinimal: 200000,
     loading: false,
   }),
   actions: {
@@ -19,6 +23,19 @@ export const useSettingsStore = defineStore('settings', {
       this.telepon = settings.telepon
       this.pajakPersen = settings.pajakPersen
       this.serviceChargePersen = settings.serviceChargePersen
+      this.memberEnabled = settings.memberEnabled !== false
+      if (settings.pinVerifikasiMinimal !== undefined) this.pinVerifikasiMinimal = settings.pinVerifikasiMinimal
+    },
+    async updatePinVerifikasi(minimal) {
+      const data = await api.patch('/admin/settings/pin-verifikasi', { minimal })
+      this.pinVerifikasiMinimal = data.pinVerifikasi.minimal
+    },
+    // Its own endpoint, not part of the store-info form — flipping this
+    // must not resend (and risk overwriting) the receipt header and tax
+    // rates that happen to be loaded on another screen.
+    async setMemberEnabled(memberEnabled) {
+      const data = await api.patch('/admin/settings/member', { memberEnabled })
+      this.applySettings(data.settings)
     },
     async fetchSettings() {
       this.loading = true

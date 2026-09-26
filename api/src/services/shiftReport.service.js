@@ -65,8 +65,27 @@ async function generateExcel(shiftId) {
   sheet.addRow(['Debit', rupiah(shift.byMetode.debit)]);
   sheet.addRow(['Gojek', shift.gojekAmount === null ? '—' : rupiah(shift.gojekAmount)]);
   sheet.addRow(['GrabFood', shift.grabfoodAmount === null ? '—' : rupiah(shift.grabfoodAmount)]);
-  const totalRow = sheet.addRow(['Total Pendapatan', rupiah(shift.totalRevenueWithOnline)]);
+  const totalRow = sheet.addRow(['Total Penjualan', rupiah(shift.totalRevenueWithOnline)]);
   totalRow.font = { bold: true };
+  sheet.addRow([]);
+
+  // DP reservasi terpisah dari penjualan — ini uang muka acara, bukan
+  // barang yang sudah terjual — lalu dijumlah ke Total Uang Masuk.
+  const depositHeader = sheet.addRow([`DP Reservasi Diterima (${shift.depositCount} reservasi)`, '']);
+  depositHeader.font = { bold: true };
+  sheet.addRow(['QRIS', rupiah(shift.depositByMetode.qris)]);
+  sheet.addRow(['Tunai', rupiah(shift.depositByMetode.tunai)]);
+  sheet.addRow(['Debit', rupiah(shift.depositByMetode.debit)]);
+  sheet.addRow(['Total DP', rupiah(shift.depositTotal)]);
+  for (const d of shift.depositList) {
+    sheet.addRow([
+      `  ${dateTime(d.paidAt)} · ${d.namaCustomer}${d.nomorMeja ? ` (meja ${d.nomorMeja})` : ''} · ${d.metode.toUpperCase()}${d.lunas ? ' · lunas' : ' · belum lunas'}`,
+      rupiah(d.amount),
+    ]);
+  }
+  sheet.addRow([]);
+  const masukRow = sheet.addRow(['Total Uang Masuk Shift', rupiah(shift.totalMasuk)]);
+  masukRow.font = { bold: true };
   sheet.addRow([]);
 
   if (shift.cashCounted !== null) {
@@ -74,6 +93,7 @@ async function generateExcel(shiftId) {
     cashHeader.font = { bold: true };
     sheet.addRow(['Kas awal', shift.cashStart === null ? '—' : rupiah(shift.cashStart)]);
     sheet.addRow(['Tunai terjual', rupiah(shift.byMetode.tunai)]);
+    sheet.addRow(['DP reservasi tunai', rupiah(shift.depositByMetode.tunai)]);
     sheet.addRow(['Seharusnya di laci', rupiah(shift.expectedCash)]);
     sheet.addRow(['Dihitung kasir', rupiah(shift.cashCounted)]);
     const diffRow = sheet.addRow(['Selisih', reconLabel(shift.cashDifference)]);
@@ -124,7 +144,24 @@ function generatePdf(shiftId) {
         doc.text(`Debit: ${rupiah(shift.byMetode.debit)}`);
         doc.text(`Gojek: ${shift.gojekAmount === null ? '—' : rupiah(shift.gojekAmount)}`);
         doc.text(`GrabFood: ${shift.grabfoodAmount === null ? '—' : rupiah(shift.grabfoodAmount)}`);
-        doc.fontSize(12).text(`Total Pendapatan: ${rupiah(shift.totalRevenueWithOnline)}`, { continued: false });
+        doc.fontSize(12).text(`Total Penjualan: ${rupiah(shift.totalRevenueWithOnline)}`, { continued: false });
+        doc.moveDown();
+
+        doc.fontSize(13).text(`DP Reservasi Diterima (${shift.depositCount} reservasi)`, { underline: true });
+        doc.fontSize(11);
+        doc.text(`QRIS: ${rupiah(shift.depositByMetode.qris)}`);
+        doc.text(`Tunai: ${rupiah(shift.depositByMetode.tunai)}`);
+        doc.text(`Debit: ${rupiah(shift.depositByMetode.debit)}`);
+        doc.text(`Total DP: ${rupiah(shift.depositTotal)}`);
+        doc.fontSize(9);
+        for (const d of shift.depositList) {
+          doc.text(
+            `  ${dateTime(d.paidAt)} · ${d.namaCustomer}${d.nomorMeja ? ` (meja ${d.nomorMeja})` : ''} · ${d.metode.toUpperCase()} · ${rupiah(d.amount)}${d.lunas ? ' · lunas' : ' · belum lunas'}`
+          );
+        }
+        doc.fontSize(11);
+        doc.moveDown();
+        doc.fontSize(12).text(`Total Uang Masuk Shift: ${rupiah(shift.totalMasuk)}`);
         doc.moveDown();
 
         if (shift.cashCounted !== null) {
@@ -132,6 +169,7 @@ function generatePdf(shiftId) {
           doc.fontSize(11);
           doc.text(`Kas awal: ${shift.cashStart === null ? '—' : rupiah(shift.cashStart)}`);
           doc.text(`Tunai terjual: ${rupiah(shift.byMetode.tunai)}`);
+          doc.text(`DP reservasi tunai: ${rupiah(shift.depositByMetode.tunai)}`);
           doc.text(`Seharusnya di laci: ${rupiah(shift.expectedCash)}`);
           doc.text(`Dihitung kasir: ${rupiah(shift.cashCounted)}`);
           if (shift.isMinus) doc.fillColor('red');

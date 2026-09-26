@@ -1,4 +1,5 @@
 const tableService = require('../services/table.service');
+const reservationService = require('../services/reservation.service');
 const AppError = require('../utils/AppError');
 
 async function list(req, res) {
@@ -54,7 +55,8 @@ async function verifyToken(req, res) {
   if (!table) {
     throw new AppError(404, 'QR tidak valid atau meja tidak aktif. Coba scan ulang atau panggil staff.');
   }
-  res.json({ table });
+  const reservasi = await reservationService.reservasiUntukMejaPublik(table.id);
+  res.json({ table: { ...table, reservasi } });
 }
 
 module.exports = { list, create, update, remove, resetToken, setBillOpen, clearVisit, qrImage, verifyToken };

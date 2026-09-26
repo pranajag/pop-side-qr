@@ -1,15 +1,13 @@
 const orderManagementService = require('../services/orderManagement.service');
 const productService = require('../services/product.service');
-const AppError = require('../utils/AppError');
 
 const MAX_LIMIT = 200;
 
 async function orders(req, res) {
-  const since = req.query.since ? new Date(req.query.since) : new Date(0);
-  if (Number.isNaN(since.getTime())) {
-    throw new AppError(400, 'Parameter since harus tanggal ISO 8601 yang valid');
-  }
-  const limit = Math.min(Number(req.query.limit) || MAX_LIMIT, MAX_LIMIT);
+  // Sudah divalidasi zod (validators/external.validator.js).
+  const { since: sinceTeks, limit: limitAngka } = req.validQuery;
+  const since = sinceTeks ? new Date(sinceTeks) : new Date(0);
+  const limit = Math.min(limitAngka || MAX_LIMIT, MAX_LIMIT);
   const data = await orderManagementService.listSince(since, limit);
   res.json({ orders: data });
 }

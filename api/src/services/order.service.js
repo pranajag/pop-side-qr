@@ -11,9 +11,24 @@ const customerService = require('./customer.service');
 const settingsService = require('./settings.service');
 const webhookService = require('./webhook.service');
 const shiftService = require('./shift.service');
+const { samaAman } = require('../utils/kripto');
+const realtime = require('../realtime');
+
+// Order publik hanya bisa dilihat/diurus dari perangkat yang membuatnya:
+// deviceHash = sidik cookie httpOnly perangkat itu (utils/cookiePublik.js).
+// Order tanpa deviceHash (buatan staff, atau dari sebelum aturan ini ada)
+// tidak bisa dilacak dari web publik sama sekali. Tidak cocok dijawab
+// "tidak ditemukan" — sama persis dengan kode yang memang tidak ada, jadi
+// tidak ada yang bisa dipelajari dengan menebak kode.
+function milikPerangkat(order, deviceHash) {
+  return Boolean(order?.deviceHash && deviceHash && samaAman(order.deviceHash, deviceHash));
+}
 
 const MAX_CODE_ATTEMPTS = 5;
-const KODE_ORDER_PATTERN = /^ORD-\d{8}-[A-Z0-9]{4}$/;
+// Akhiran meja (-M1 / -MA2 / -TA) opsional: kode yang dibuat sebelum
+// akhiran itu ada harus tetap bisa dilacak dan dibayar, bukan ditolak di
+// gerbang ini. Bentuk lengkapnya dijelaskan di utils/orderCode.js.
+const KODE_ORDER_PATTERN = /^ORD-\d{8}-[A-Z0-9]{4}(?:-(?:M[A-Z0-9]{1,4}|TA))?$/;
 
 // A table's "visit" is the run of orders from one seating, with no schema
 // concept of its own — approximated here as "since the last time this table
@@ -111,7 +126,7 @@ async function buildOrderItems(tx, items) {
 // with the checkout preview so both quote the same total.
 const { computeTaxAndService } = settingsService;
 
-async function createOrder({ token, metode, catatan, items, idempotencyKey, customerPhone }) {
+async function createOrder({ token, metode, catatan, items, idempotencyKey, customerPhone }, { deviceHash = null, memberTerverifikasi = false } = {}) {
   const table = await tableService.verifyToken(token);
   if (!table) {
     throw new AppError(404, 'Meja tidak valid. Coba scan ulang QR.');
@@ -125,9 +140,14 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
   // the counter. public-web shows a closed state from GET /public/settings
   // so it rarely gets this far; this is the boundary that actually holds.
   if (!(await shiftService.isAnyShiftActive())) {
+    // Tagged so the checkout screen can lock itself instead of leaving the
+    // customer tapping a button that will keep failing — the cafe can close
+    // while they are still filling the form, and public-web only learns the
+    // status when the page loads.
     throw new AppError(
       409,
-      'Kafe sedang tutup — belum ada staff yang mulai shift. Pesanan belum bisa dibuat.'
+      'Kafe sedang tutup — belum ada staff yang mulai shift. Pesanan belum bisa dibuat.',
+      'CAFE_CLOSED'
     );
   }
 
@@ -136,11 +156,16 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
   // that order as-is instead of taking payment/stock twice for one tap.
   if (idempotencyKey) {
     const existing = await prisma.order.findUnique({ where: { idempotencyKey }, include: { items: true } });
+    // Kunci yang sama dari perangkat LAIN bukan percobaan ulang — jangan
+    // pernah mengembalikan order orang lain hanya karena kuncinya ditebak.
+    if (existing && !milikPerangkat(existing, deviceHash)) {
+      throw new AppError(409, 'Permintaan ini sudah pernah dipakai. Muat ulang halaman lalu coba lagi.');
+    }
     if (existing) return existing;
   }
 
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
-    const kodeOrder = generateOrderCode();
+    const kodeOrder = generateOrderCode(table.nomorMeja);
     try {
       // Interactive transaction: every read+conditional-write below runs
       // in one DB transaction, so a thrown error (bad item, stock race
@@ -161,11 +186,14 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
         // checkout screen, in the same order (discount first, then tax and
         // service on the remainder), so what was previewed is what gets
         // charged.
-        const { tier, discountAmount } = await customerService.resolveMemberDiscount(
-          tx,
-          customerPhone,
-          subtotal
-        );
+        //
+        // Diskon tier hanya kalau nomor itu sudah diverifikasi OTP oleh
+        // pemesan ini (memberOtp.service.js) — tahu nomor HP member orang
+        // lain tidak cukup untuk memakai diskonnya. Tanpa verifikasi, order
+        // tetap jalan tanpa diskon, dan poinnya tetap masuk ke pemilik nomor.
+        const { tier, discountAmount } = memberTerverifikasi
+          ? await customerService.resolveMemberDiscount(tx, customerPhone, subtotal)
+          : { tier: null, discountAmount: 0 };
         const afterDiscount = subtotal - discountAmount;
         const { taxAmount, serviceChargeAmount, totalHarga } = await computeTaxAndService(tx, afterDiscount);
 
@@ -183,9 +211,13 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
         // standing benefit of the balance, so the balance is untouched here
         // and keeps earning below, exactly as Pesanan Manual already
         // behaves for the same customer.
+        // Gated on the same master switch as the discount above: with
+        // loyalty off, a phone number that slips through (an older app
+        // build, a direct API call) must not quietly enrol anyone or bank
+        // points against a programme the store has turned off.
         let customer = null;
         let pointsEarned = 0;
-        if (customerPhone) {
+        if (customerPhone && (await settingsService.isMemberEnabled(tx))) {
           customer = await customerService.findOrCreateByPhone(tx, customerPhone, null);
           pointsEarned = customerService.pointsFor(totalHarga);
         }
@@ -209,6 +241,7 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
             serviceChargeAmount,
             catatan,
             idempotencyKey: idempotencyKey ?? undefined,
+            deviceHash,
             items: { create: orderItemsData },
             payment: { create: { metode, amount: totalHarga } },
           },
@@ -219,6 +252,7 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
       // real network I/O that must not hold the DB transaction open, and
       // must never fire for a creation that then rolled back.
       webhookService.dispatch('order.created', { kodeOrder: created.kodeOrder, metode, totalHarga: Number(created.totalHarga), source: 'qr' });
+      realtime.keStaff('order:baru', { id: created.id, kodeOrder: created.kodeOrder });
       return created;
     } catch (err) {
       if (isUniqueConstraintError(err)) {
@@ -256,6 +290,7 @@ async function createManualOrder({
   discountAmount,
   discountReason,
   customerPhone,
+  cashReceived,
 }) {
   // Same shift-accountability gate as orderManagement.service.js's
   // confirmPayment/updateStatus — a manual counter sale is cash-handling
@@ -268,27 +303,56 @@ async function createManualOrder({
   }
 
   for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt++) {
-    const kodeOrder = generateOrderCode();
+    // null, bukan nomor meja: pesanan manual adalah penjualan di kasir yang
+    // memang tidak menempel ke meja mana pun (tableId-nya juga null), jadi
+    // kodenya berakhiran -TA.
+    const kodeOrder = generateOrderCode(null);
     try {
       const created = await prisma.$transaction(async (tx) => {
         const { orderItemsData, totalHarga: subtotal } = await buildOrderItems(tx, items);
-        // Discount is staff-entered here only — createOrder (public
-        // checkout) never accepts one, which would let a customer set
-        // their own price. Capped at the subtotal so totalHarga can never
-        // go negative; validator.js already requires discountReason
-        // whenever discountAmount > 0, so this can't collect an
-        // unexplained deduction.
-        const discount = Math.min(discountAmount ?? 0, subtotal);
+        // Two sources, and only one ever wins. A staff-entered discount is
+        // an explicit override with its own audited reason, so it takes
+        // precedence and is never stacked on top of anything. With no such
+        // override, a member's own tier discount applies by itself — a
+        // regular paying cash at the counter gets exactly the benefit they
+        // would get scanning the QR, without staff having to remember a
+        // button. Capped at the subtotal either way so totalHarga can never
+        // go negative.
+        let discount = Math.min(discountAmount ?? 0, subtotal);
+        let resolvedDiscountReason = discount > 0 ? discountReason : null;
+        if (discount === 0 && customerPhone) {
+          const member = await customerService.resolveMemberDiscount(tx, customerPhone, subtotal);
+          if (member.tier && member.discountAmount > 0) {
+            discount = member.discountAmount;
+            resolvedDiscountReason = `Member ${member.tier.discountPercent}% (≥ ${member.tier.minPoints} poin)`;
+          }
+        }
         const afterDiscount = subtotal - discount;
         const { taxAmount, serviceChargeAmount, totalHarga } = await computeTaxAndService(tx, afterDiscount);
 
-        // Loyalty: optional, staff-entered here only (same reasoning as
-        // discount above — the public QR flow doesn't collect a phone
-        // number). Earns points on what was actually paid, post-discount
-        // and post-tax/service.
+        // Cash handed over at the counter, so the screen can tell the kasir
+        // the change to give back. Validated here rather than in the
+        // validator because only this point knows what the order finally
+        // costs, once discount, tax and service have all been applied.
+        if (cashReceived !== undefined && cashReceived !== null) {
+          if (metode !== 'tunai') {
+            throw new AppError(400, 'Uang diterima hanya berlaku untuk pembayaran tunai.');
+          }
+          if (cashReceived < totalHarga) {
+            throw new AppError(
+              400,
+              `Uang diterima (${cashReceived}) kurang dari total pesanan (${totalHarga}).`
+            );
+          }
+        }
+
+        // Loyalty: optional, staff-entered here. Earns points on what was
+        // actually paid, post-discount and post-tax/service. Skipped
+        // entirely while the store has the member feature switched off, so
+        // staff can't half-enrol someone into a dormant programme.
         let customer = null;
         let pointsEarned = 0;
-        if (customerPhone) {
+        if (customerPhone && (await settingsService.isMemberEnabled(tx))) {
           customer = await customerService.findOrCreateByPhone(tx, customerPhone, customerName);
           pointsEarned = customerService.pointsFor(totalHarga);
           await customerService.awardPoints(tx, customer.id, pointsEarned);
@@ -307,10 +371,10 @@ async function createManualOrder({
             taxAmount,
             serviceChargeAmount,
             discountAmount: discount,
-            discountReason: discount > 0 ? discountReason : null,
+            discountReason: resolvedDiscountReason,
             catatan,
             items: { create: orderItemsData },
-            payment: { create: { metode, amount: totalHarga } },
+            payment: { create: { metode, amount: totalHarga, cashReceived } },
           },
           include: { items: true },
         });
@@ -325,7 +389,18 @@ async function createManualOrder({
         totalHarga: Number(created.totalHarga),
         source: 'manual',
       });
-      return created;
+      realtime.keStaff('order:berubah', { id: created.id });
+      // The change owed is what the kasir needs on screen the moment this
+      // returns, and this endpoint hands back the raw order row rather than
+      // orderManagement.service.js's shaped one — so the two cash fields
+      // are appended here. Derived, never stored twice: same rule as the
+      // confirm-payment path.
+      const cash = cashReceived ?? null;
+      return {
+        ...created,
+        cashReceived: cash,
+        changeAmount: cash === null ? null : cash - Number(created.totalHarga),
+      };
     } catch (err) {
       if (isUniqueConstraintError(err)) {
         continue;
@@ -337,13 +412,13 @@ async function createManualOrder({
   throw new AppError(500, 'Gagal membuat kode order, coba lagi.');
 }
 
-async function confirmQrisPayment(kodeOrder, fileBuffer) {
+async function confirmQrisPayment(kodeOrder, fileBuffer, deviceHash) {
   if (!KODE_ORDER_PATTERN.test(kodeOrder)) {
     throw new AppError(404, 'Order tidak ditemukan');
   }
 
   const order = await prisma.order.findUnique({ where: { kodeOrder } });
-  if (!order) {
+  if (!order || !milikPerangkat(order, deviceHash)) {
     throw new AppError(404, 'Order tidak ditemukan');
   }
   if (order.metode !== 'qris') {
@@ -362,7 +437,7 @@ async function confirmQrisPayment(kodeOrder, fileBuffer) {
   const buktiFile = await paymentProof.save(fileBuffer);
 
   try {
-    return await prisma.$transaction(async (tx) => {
+    const hasil = await prisma.$transaction(async (tx) => {
       // Optimistic lock: only succeeds if status is still 'pending' at the
       // moment of the write, so a double-tap of "sudah bayar" can't log two
       // transitions for the same order.
@@ -383,13 +458,25 @@ async function confirmQrisPayment(kodeOrder, fileBuffer) {
 
       return tx.order.findUnique({ where: { kodeOrder } });
     });
+    realtime.keStaff('order:berubah', { id: order.id, status: 'waiting_verif' });
+    realtime.keOrder(order.id, 'order:status', { kodeOrder: order.kodeOrder, status: 'waiting_verif' });
+    return hasil;
   } catch (err) {
     await paymentProof.remove(buktiFile);
     throw err;
   }
 }
 
-async function getByCode(kodeOrder) {
+// Id order untuk token realtime (realtime.js) — aturannya sama persis
+// dengan pelacakan: hanya perangkat pemesan, selain itu "tidak ditemukan".
+async function idMilikPerangkat(kodeOrder, deviceHash) {
+  if (!KODE_ORDER_PATTERN.test(kodeOrder)) throw new AppError(404, 'Order tidak ditemukan');
+  const order = await prisma.order.findUnique({ where: { kodeOrder }, select: { id: true, deviceHash: true } });
+  if (!order || !milikPerangkat(order, deviceHash)) throw new AppError(404, 'Order tidak ditemukan');
+  return order.id;
+}
+
+async function getByCode(kodeOrder, deviceHash) {
   if (!KODE_ORDER_PATTERN.test(kodeOrder)) {
     throw new AppError(404, 'Order tidak ditemukan');
   }
@@ -403,7 +490,7 @@ async function getByCode(kodeOrder) {
       table: { select: { nomorMeja: true } },
     },
   });
-  if (!order) {
+  if (!order || !milikPerangkat(order, deviceHash)) {
     throw new AppError(404, 'Order tidak ditemukan');
   }
 
@@ -486,4 +573,4 @@ async function getTableBill(token) {
   return { nomorMeja: table.nomorMeja, orders: shaped, total };
 }
 
-module.exports = { createOrder, createManualOrder, confirmQrisPayment, getByCode, getTableBill };
+module.exports = { createOrder, createManualOrder, confirmQrisPayment, getByCode, idMilikPerangkat, getTableBill };
