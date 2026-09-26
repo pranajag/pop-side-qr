@@ -84,12 +84,15 @@ function urlPrisma(user, password, host, port) {
   return `mysql://${user}:${encodeURIComponent(password)}@${host}:${port}/${DB}?${ssl}connection_limit=5`;
 }
 
+// CLI Prisma dijalankan langsung lewat node (bukan `npx` + shell): tanpa
+// shell, argumen tidak pernah ditafsirkan ulang, dan sama di semua OS.
+const PRISMA_CLI = require.resolve('prisma/build/index.js', { paths: [API] });
+
 function npxPrisma(args, env, { wajibBerhasil = true } = {}) {
-  const r = spawnSync('npx', ['prisma', ...args], {
+  const r = spawnSync(process.execPath, [PRISMA_CLI, ...args], {
     cwd: API,
     env: { ...process.env, ...env },
     stdio: 'inherit',
-    shell: process.platform === 'win32',
   });
   if (wajibBerhasil && r.status !== 0) throw new Error(`prisma ${args.join(' ')} gagal`);
   return r.status === 0;
@@ -128,14 +131,18 @@ async function main() {
     ssl: UJI_LOKAL ? undefined : { ca: fs.readFileSync(CA), rejectUnauthorized: true },
   });
 
-  // 1. Database + akun berhak terbatas, password acak baru.
+  // 1. Database + akun berhak terbatas, password acak baru. Akun aplikasi
+  //    dibuat ulang dari nol setiap kali, jadi tidak pernah membawa sisa hak
+  //    lama — tanpa `REVOKE ALL`, yang ditolak MySQL terkelola dengan
+  //    partial revokes (Aiven: avnadmin tidak boleh menyentuh database
+  //    sistem `mysql`).
   await admin.query('CREATE DATABASE IF NOT EXISTS ?? CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci', [DB]);
   const sandiApp = crypto.randomBytes(24).toString('base64url');
   const sandiMigrate = crypto.randomBytes(24).toString('base64url');
-  for (const [nama, pw] of [[AKUN_APP, sandiApp], [AKUN_MIGRATE, sandiMigrate]]) {
-    await admin.query('CREATE USER IF NOT EXISTS ?@? IDENTIFIED BY ?', [nama, '%', pw]);
-    await admin.query('ALTER USER ?@? IDENTIFIED BY ?', [nama, '%', pw]);
-  }
+  await admin.query('DROP USER IF EXISTS ?@?', [AKUN_APP, '%']);
+  await admin.query('CREATE USER ?@? IDENTIFIED BY ?', [AKUN_APP, '%', sandiApp]);
+  await admin.query('CREATE USER IF NOT EXISTS ?@? IDENTIFIED BY ?', [AKUN_MIGRATE, '%', sandiMigrate]);
+  await admin.query('ALTER USER ?@? IDENTIFIED BY ?', [AKUN_MIGRATE, '%', sandiMigrate]);
   await admin.query('GRANT ALL PRIVILEGES ON ??.* TO ?@?', [DB, AKUN_MIGRATE, '%']);
   console.log('✓ database & akun popside_app / popside_migrate');
 
@@ -156,8 +163,8 @@ async function main() {
   npxPrisma(['migrate', 'deploy'], env);
   console.log('✓ migrasi (append-only lewat hak akses tabel)');
 
-  // 3. Hak akses popside_app per tabel.
-  await admin.query('REVOKE ALL PRIVILEGES, GRANT OPTION FROM ?@?', [AKUN_APP, '%']);
+  // 3. Hak akses popside_app per tabel (akunnya baru dibuat di langkah 1,
+  //    jadi belum punya hak apa pun sebelum ini).
   const [tabel] = await admin.query(
     'SELECT table_name AS nama FROM information_schema.tables WHERE table_schema = ? AND table_type = ?',
     [DB, 'BASE TABLE']
