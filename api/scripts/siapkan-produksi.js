@@ -2,6 +2,7 @@
 // pemilik, dari laptop, di terminalnya sendiri:
 //
 //   npm run siapkan-produksi
+//   node scripts/siapkan-produksi.js   (sama; untuk PowerShell yang memblokir npm.ps1)
 //
 // Password admin database hanya diketik di terminal ini (tidak tampil, tidak
 // tersimpan di file mana pun). Yang dikerjakan:
@@ -18,7 +19,8 @@
 //      (hanya kalau database belum punya produk);
 //   5. membuat akun admin pertama + PIN (opsional); 2FA dipasang saat
 //      login pertama;
-//   6. mencetak DATABASE_URL untuk diisikan di Render.
+//   6. menyalin isian environment Render (DATABASE_URL + rahasia aplikasi
+//      acak) ke clipboard, dan mencetak DIRECT_URL untuk disimpan pemilik.
 // Aman dijalankan ulang (password kedua akun diganti baru setiap kali).
 //
 // Butuh sertifikat CA Aiven di prisma/aiven-ca.pem (Aiven Console ->
@@ -141,23 +143,18 @@ async function main() {
   const migrateUrl = urlPrisma(AKUN_MIGRATE, sandiMigrate, host, port);
   const env = { DATABASE_URL: appUrl, DIRECT_URL: migrateUrl };
 
-  // 2. Migrasi. Trigger append-only butuh log_bin_trust_function_creators di
-  //    MySQL terkelola. Kalau tidak diizinkan, migrasi trigger ditandai
-  //    diterapkan tanpa dijalankan — log tetap append-only lewat hak akses
-  //    tabel (langkah 3).
-  const [[v]] = await admin.query('SELECT @@log_bin AS logBin, @@log_bin_trust_function_creators AS percaya');
-  const bolehTrigger = !Number(v.logBin) || Number(v.percaya) === 1;
-  if (bolehTrigger) {
-    npxPrisma(['migrate', 'deploy'], env);
-  } else {
-    for (const nama of MIGRASI_TRIGGER) {
-      deploySebelum(env, nama);
-      // Gagal kalau sudah pernah ditandai (dijalankan ulang) — tidak apa-apa.
-      npxPrisma(['migrate', 'resolve', '--applied', nama], env, { wajibBerhasil: false });
-    }
-    npxPrisma(['migrate', 'deploy'], env);
+  // 2. Migrasi. Trigger append-only di MySQL terkelola bergantung pada
+  //    pengaturan server (log_bin_trust_function_creators, hak SUPER) yang
+  //    tidak selalu bisa diatur, jadi migrasi trigger ditandai diterapkan
+  //    tanpa dijalankan. Log tetap append-only bagi akun aplikasi lewat hak
+  //    akses tabel (langkah 3) — jalur yang sudah diuji ujung ke ujung.
+  for (const nama of MIGRASI_TRIGGER) {
+    deploySebelum(env, nama);
+    // Gagal kalau sudah pernah ditandai (dijalankan ulang) — tidak apa-apa.
+    npxPrisma(['migrate', 'resolve', '--applied', nama], env, { wajibBerhasil: false });
   }
-  console.log(`✓ migrasi (${bolehTrigger ? 'termasuk trigger append-only' : 'append-only lewat hak akses tabel'})`);
+  npxPrisma(['migrate', 'deploy'], env);
+  console.log('✓ migrasi (append-only lewat hak akses tabel)');
 
   // 3. Hak akses popside_app per tabel.
   await admin.query('REVOKE ALL PRIVILEGES, GRANT OPTION FROM ?@?', [AKUN_APP, '%']);
@@ -191,16 +188,61 @@ UJI_APP_URL=${appUrl}
 UJI_MIGRATE_URL=${migrateUrl}`);
     return;
   }
+  // 6. Isian environment Render lengkap — DATABASE_URL + rahasia aplikasi
+  //    yang dibuat acak di sini — langsung ke clipboard, tidak ditampilkan:
+  //    di Render cukup "Add from .env" lalu tempel. Blueprint (yang membuat
+  //    rahasianya sendiri) meminta kartu kredit walau paket gratis, jadi
+  //    service dibuat manual dan rahasianya disiapkan di sini.
+  const blokRender = isianRender(appUrl);
+  const tersalin = keClipboard(blokRender);
   console.log(`
 ============================================================
-Isi di Render -> popside-api -> Environment:
+${
+  tersalin
+    ? `Isian environment Render (${blokRender.split('\n').length} baris) SUDAH DISALIN ke clipboard.
+Render -> Web Service -> Environment -> "Add from .env" -> tempel (Ctrl+V).
 
-  DATABASE_URL = ${appUrl}
+PENTING: tempel juga ke catatan pribadi / password manager sebagai
+cadangan. DATA_ENC_KEY & DATA_HASH_KEY di dalamnya tidak bisa dibuat ulang —
+kalau hilang, nomor HP member & 2FA admin tidak bisa dibaca lagi.`
+    : `Clipboard tidak tersedia. Isian environment untuk Render:
 
-Simpan di tempat aman (JANGAN dibagikan) untuk migrasi berikutnya:
+${blokRender}`
+}
+
+Simpan juga di tempat aman (JANGAN dibagikan) untuk migrasi berikutnya:
 
   DIRECT_URL = ${migrateUrl}
 ============================================================`);
+}
+
+// Nilai sama dengan render.yaml. Kunci 32 byte base64 = format yang dibaca
+// src/utils/kripto.js.
+function isianRender(databaseUrl) {
+  const acak = () => crypto.randomBytes(32).toString('base64');
+  return [
+    'NODE_ENV=production',
+    'NODE_VERSION=22',
+    'TZ=Asia/Jakarta',
+    `DATABASE_URL=${databaseUrl}`,
+    `SESSION_SECRET=${acak()}`,
+    `CSRF_SECRET=${acak()}`,
+    `QR_HMAC_SECRET=${acak()}`,
+    `DATA_ENC_KEY=${acak()}`,
+    `DATA_HASH_KEY=${acak()}`,
+    'UPLOAD_DRIVER=database',
+    'TRUST_PROXY=2',
+    'CORS_ORIGIN=https://popside-admin.vercel.app,https://popside-menu.vercel.app',
+    'PUBLIC_WEB_URL=https://popside-menu.vercel.app',
+    'OTP_PENGIRIM=console',
+  ].join('\n');
+}
+
+function keClipboard(teks) {
+  const perintah = { win32: ['clip', []], darwin: ['pbcopy', []] }[process.platform];
+  if (!perintah) return false;
+  const r = spawnSync(perintah[0], perintah[1], { input: teks });
+  return r.status === 0;
 }
 
 main().catch((err) => {
