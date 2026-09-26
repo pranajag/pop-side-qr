@@ -27,6 +27,7 @@
 // service -> Overview -> "CA certificate" -> Download). Sertifikat CA
 // bukan rahasia; boleh ikut di-commit.
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const readline = require('node:readline');
@@ -195,12 +196,28 @@ UJI_APP_URL=${appUrl}
 UJI_MIGRATE_URL=${migrateUrl}`);
     return;
   }
-  // 6. Isian environment Render lengkap — DATABASE_URL + rahasia aplikasi
-  //    yang dibuat acak di sini — langsung ke clipboard, tidak ditampilkan:
-  //    di Render cukup "Add from .env" lalu tempel. Blueprint (yang membuat
-  //    rahasianya sendiri) meminta kartu kredit walau paket gratis, jadi
-  //    service dibuat manual dan rahasianya disiapkan di sini.
+  // 6. Isian environment server API — DATABASE_URL + rahasia aplikasi yang
+  //    dibuat acak di sini — tidak pernah ditampilkan. Selalu disimpan
+  //    sebagai cadangan di folder Documents pemilik (di luar repo).
+  //    --railway: langsung diisikan ke service Railway yang terhubung dengan
+  //    folder ini (Railway CLI yang sudah login), nilai lewat stdin.
+  //    Tanpa itu: disalin ke clipboard untuk ditempel manual (mis. Render
+  //    "Add from .env"; Blueprint Render meminta kartu kredit walau gratis).
   const blokRender = isianRender(appUrl);
+  const cadangan = simpanCadangan(blokRender, migrateUrl);
+  if (process.argv.includes('--railway')) {
+    console.log(`\nMengisi ${blokRender.split('\n').length} variabel ke Railway (service ${LAYANAN_RAILWAY})...`);
+    if (keRailway(blokRender)) {
+      console.log(`
+============================================================
+✓ SELESAI. Semua variabel sudah terisi di Railway.
+  Cadangan (JANGAN dibagikan): ${cadangan}
+  Kembali ke chat dan balas "skrip selesai".
+============================================================`);
+      return;
+    }
+    console.log('Gagal mengisi Railway — beralih ke clipboard.');
+  }
   const tersalin = keClipboard(blokRender);
   console.log(`
 ============================================================
@@ -250,6 +267,53 @@ function keClipboard(teks) {
   if (!perintah) return false;
   const r = spawnSync(perintah[0], perintah[1], { input: teks });
   return r.status === 0;
+}
+
+// Satu variabel per panggilan, nilainya lewat stdin — tidak pernah muncul
+// di argumen perintah (terlihat di daftar proses) atau di layar. Nama
+// variabel dicek dulu, jadi perintah shell-nya hanya berisi teks tetap.
+const LAYANAN_RAILWAY = 'popside-api';
+function keRailway(blok) {
+  for (const baris of blok.split('\n')) {
+    const i = baris.indexOf('=');
+    const kunci = baris.slice(0, i);
+    if (!/^[A-Z][A-Z0-9_]*$/.test(kunci)) return false;
+    const r = spawnSync(`npx --yes @railway/cli variable set ${kunci} --stdin --skip-deploys --service ${LAYANAN_RAILWAY}`, {
+      cwd: API,
+      shell: true,
+      input: baris.slice(i + 1),
+      encoding: 'utf8',
+      stdio: ['pipe', 'ignore', 'pipe'],
+    });
+    if (r.status !== 0) {
+      const pesan = (r.stderr || '').split('\n').filter((b) => b.trim() && !/agent|railway setup/i.test(b)).pop() || '';
+      console.error(`  gagal mengisi ${kunci}: ${pesan.trim()}`);
+      return false;
+    }
+    console.log(`  ✓ ${kunci}`);
+  }
+  return true;
+}
+
+// Cadangan isian server + DIRECT_URL di folder Documents pemilik — di luar
+// folder repo (repo publik), nama berstempel waktu supaya tidak menimpa.
+function simpanCadangan(blok, migrateUrl) {
+  const folder = path.join(os.homedir(), 'Documents');
+  fs.mkdirSync(folder, { recursive: true });
+  const stempel = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  const file = path.join(folder, `popside-kunci-produksi-${stempel}.txt`);
+  fs.writeFileSync(
+    file,
+    `# Popside — rahasia produksi (${new Date().toISOString()}). JANGAN dibagikan / di-commit.
+# Isian environment server API:
+${blok}
+
+# Untuk migrasi berikutnya dari laptop (JANGAN diisi di server):
+DIRECT_URL=${migrateUrl}
+`,
+    { mode: 0o600 }
+  );
+  return file;
 }
 
 main().catch((err) => {
