@@ -23,6 +23,7 @@ Popside butuh sistem pemesanan mandiri berbasis QR per meja, supaya customer bis
 - Sebagai customer yang bayar QRIS, saya diarahkan ke gambar QRIS toko, lalu klik "saya sudah bayar" setelah transfer.
 - Sebagai customer yang bayar tunai/debit, saya mendapat kode order yang saya sebutkan ke kasir untuk konfirmasi.
 - Sebagai customer, saya bisa memantau status pesanan saya (menunggu verifikasi/dikonfirmasi/dimasak/siap/selesai) tanpa perlu refresh manual.
+- Sebagai customer, begitu pesanan saya selesai saya otomatis menerima struk digital yang bisa diunduh (PDF/PNG); setelah itu pesanan tersebut tidak bisa dibuka lagi dari web publik, oleh saya maupun orang lain.
 
 **Kasir**
 
