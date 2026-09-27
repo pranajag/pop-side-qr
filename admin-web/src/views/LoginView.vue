@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { Button } from '@/components/ui/button'
@@ -90,6 +90,52 @@ const setupData = ref(null)
 const kodeCadangan = ref([])
 const tersalin = ref(false)
 const sudahDisimpan = ref(false)
+const kunciTersalin = ref(false)
+
+// Aplikasi authenticator yang disarankan — keduanya membaca QR/tautan
+// otpauth:// standar (TOTP SHA1, 6 digit, 30 detik) dari server.
+const APLIKASI = [
+  {
+    nama: 'Google Authenticator',
+    android: 'https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2',
+    ios: 'https://apps.apple.com/app/google-authenticator/id388497605',
+  },
+  {
+    nama: 'Microsoft Authenticator',
+    android: 'https://play.google.com/store/apps/details?id=com.azure.authenticator',
+    ios: 'https://apps.apple.com/app/microsoft-authenticator/id983156458',
+  },
+]
+// Dashboard dibuka di HP: QR di layar HP itu sendiri tidak bisa dipindai
+// kameranya, jadi yang ditonjolkan tombol yang membuka aplikasinya langsung.
+const platform = (() => {
+  const ua = navigator.userAgent || ''
+  if (/android/i.test(ua)) return 'android'
+  if (/iphone|ipad|ipod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'ios'
+  return 'lainnya'
+})()
+
+async function salinKunci() {
+  try {
+    await navigator.clipboard.writeText(setupData.value.rahasia.replace(/\s/g, ''))
+    kunciTersalin.value = true
+  } catch {
+    kunciTersalin.value = false
+  }
+}
+
+// Kode dari aplikasi: hanya angka, maks 6 — Microsoft Authenticator
+// menampilkannya "123 456", dan kode yang ditempel sering membawa spasi.
+// Begitu lengkap 6 digit langsung dikirim, tanpa perlu menekan tombol.
+watch(kode, (nilai) => {
+  if (pakaiCadangan.value || langkah.value === 'password') return
+  const angka = nilai.replace(/\D/g, '').slice(0, 6)
+  if (angka !== nilai) {
+    kode.value = angka
+    return
+  }
+  if (angka.length === 6 && !submitting.value) kirimKode()
+})
 
 function kembaliKePassword(pesan = '') {
   langkah.value = 'password'
@@ -108,6 +154,7 @@ function tanganiError2fa(err) {
 
 async function muatSetup() {
   setupData.value = null
+  kunciTersalin.value = false
   try {
     setupData.value = await auth.mulaiSetup2fa()
   } catch (err) {
@@ -178,8 +225,8 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="flex min-h-svh items-center justify-center bg-muted/30 px-4">
-    <div class="w-full max-w-sm space-y-6">
+  <div class="flex min-h-svh items-center justify-center bg-muted/30 px-4 py-8">
+    <div class="w-full space-y-6" :class="langkah === 'setup-2fa' ? 'max-w-md' : 'max-w-sm'">
       <div class="space-y-1 text-center">
         <h1 class="text-xl font-semibold tracking-tight">Popside Admin</h1>
         <p class="text-sm text-muted-foreground">
@@ -235,30 +282,112 @@ async function onSubmit() {
           <div class="space-y-1">
             <h2 class="text-sm font-semibold">Pasang verifikasi 2 langkah (wajib untuk admin)</h2>
             <p class="text-sm text-muted-foreground">
-              Buka Google Authenticator, Authy, atau Microsoft Authenticator di
-              HP, pilih tambah akun, lalu pindai QR ini.
+              Sekali saja, sekitar 2 menit. Sesudah ini, setiap login admin
+              meminta kode 6 digit dari aplikasi di HP Anda.
             </p>
           </div>
-          <div class="flex justify-center">
-            <img
-              v-if="setupData"
-              :src="setupData.qrDataUrl"
-              alt="QR kode 2FA untuk aplikasi authenticator"
-              class="size-48 rounded-md border bg-white p-2"
-            />
-            <div v-else class="flex size-48 items-center justify-center rounded-md border">
+
+          <section class="space-y-2">
+            <p class="flex items-center gap-2 text-sm font-medium">
+              <span class="flex size-5 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">1</span>
+              Pasang aplikasi di HP (gratis)
+            </p>
+            <div class="grid grid-cols-2 gap-2">
+              <div v-for="app in APLIKASI" :key="app.nama" class="rounded-md border px-3 py-2">
+                <p class="text-sm font-medium leading-tight">{{ app.nama }}</p>
+                <div class="mt-1 flex flex-wrap gap-x-3 text-xs">
+                  <a
+                    v-if="platform !== 'ios'"
+                    :href="app.android"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-primary underline-offset-4 hover:underline"
+                  >Play Store</a>
+                  <a
+                    v-if="platform !== 'android'"
+                    :href="app.ios"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-primary underline-offset-4 hover:underline"
+                  >App Store</a>
+                </div>
+              </div>
+            </div>
+            <p class="text-xs text-muted-foreground">Sudah punya salah satunya? Langsung ke langkah 2.</p>
+          </section>
+
+          <section class="space-y-3">
+            <p class="flex items-center gap-2 text-sm font-medium">
+              <span class="flex size-5 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">2</span>
+              Tambahkan akun Popside ke aplikasi
+            </p>
+            <div v-if="!setupData" class="flex h-24 items-center justify-center rounded-md border">
               <LoaderCircleIcon class="size-5 animate-spin text-muted-foreground" />
             </div>
-          </div>
-          <p v-if="setupData" class="text-center text-xs text-muted-foreground">
-            Tidak bisa memindai? Ketik kunci ini di aplikasi:
-            <span class="block pt-1 font-mono text-sm text-foreground select-all">{{ setupData.rahasia }}</span>
+            <template v-else>
+              <!-- HP: dashboard dan aplikasi di HP yang sama — QR tidak bisa
+                   dipindai, jadi satu ketukan yang membuka aplikasinya. -->
+              <div class="space-y-2 md:hidden">
+                <Button as="a" :href="setupData.otpauthUrl" class="w-full">
+                  <ShieldCheckIcon class="size-4" />
+                  Tambahkan ke aplikasi Authenticator
+                </Button>
+                <p class="text-xs text-muted-foreground">
+                  Aplikasi terbuka sendiri dan akun "Popside" langsung tersimpan,
+                  lalu kembali ke halaman ini. Tidak terbuka? Pakai kunci manual di bawah.
+                </p>
+                <details class="rounded-md border px-3 py-2 text-sm">
+                  <summary class="cursor-pointer text-muted-foreground">Pindai QR dari HP lain</summary>
+                  <img
+                    :src="setupData.qrDataUrl"
+                    alt="QR kode 2FA untuk aplikasi authenticator"
+                    class="mx-auto mt-2 size-48 rounded-md border bg-white p-2"
+                  />
+                </details>
+              </div>
+              <!-- Laptop/tablet: pindai QR dengan kamera aplikasi di HP. -->
+              <div class="hidden flex-col items-center gap-2 md:flex">
+                <img
+                  :src="setupData.qrDataUrl"
+                  alt="QR kode 2FA untuk aplikasi authenticator"
+                  class="size-60 rounded-md border bg-white p-2"
+                />
+                <ul class="w-full space-y-0.5 text-xs text-muted-foreground">
+                  <li><strong class="text-foreground">Google Authenticator:</strong> ketuk <strong>+</strong> → <strong>Pindai kode QR</strong>.</li>
+                  <li><strong class="text-foreground">Microsoft Authenticator:</strong> ketuk <strong>+</strong> → <strong>Akun lain</strong> → <strong>Pindai kode QR</strong>.</li>
+                </ul>
+              </div>
+              <div class="space-y-1.5 rounded-md bg-muted/50 p-3">
+                <p class="text-xs text-muted-foreground">
+                  Kunci manual — di aplikasi pilih <strong>Masukkan kunci penyiapan</strong>
+                  (Microsoft: <strong>masukkan kode secara manual</strong>), jenis <strong>berbasis waktu</strong>.
+                  Nama akun bebas, misalnya "Popside".
+                </p>
+                <div class="flex items-center gap-2">
+                  <span class="flex-1 font-mono text-sm break-words select-all">{{ setupData.rahasia }}</span>
+                  <Button type="button" variant="outline" size="sm" @click="salinKunci">
+                    <CheckIcon v-if="kunciTersalin" class="size-4" />
+                    <CopyIcon v-else class="size-4" />
+                    {{ kunciTersalin ? 'Tersalin' : 'Salin' }}
+                  </Button>
+                </div>
+              </div>
+            </template>
+          </section>
+
+          <p class="flex items-center gap-2 text-sm font-medium">
+            <span class="flex size-5 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">3</span>
+            Masukkan kode 6 digit yang muncul di aplikasi
           </p>
         </template>
         <div v-else class="space-y-1">
           <h2 class="text-sm font-semibold">Verifikasi 2 langkah</h2>
           <p class="text-sm text-muted-foreground">
-            {{ pakaiCadangan ? 'Masukkan salah satu kode cadangan (XXXX-XXXX).' : 'Masukkan kode 6 digit dari aplikasi authenticator.' }}
+            {{
+              pakaiCadangan
+                ? 'Masukkan salah satu kode cadangan (XXXX-XXXX).'
+                : 'Buka Google Authenticator atau Microsoft Authenticator di HP, lalu masukkan 6 digit dari akun Popside.'
+            }}
           </p>
         </div>
 
@@ -268,13 +397,17 @@ async function onSubmit() {
             id="kode2fa"
             v-model="kode"
             :inputmode="pakaiCadangan ? 'text' : 'numeric'"
+            :pattern="pakaiCadangan ? undefined : '[0-9 ]*'"
             autocomplete="one-time-code"
-            :maxlength="pakaiCadangan ? 9 : 6"
+            :maxlength="pakaiCadangan ? 9 : 12"
             :placeholder="pakaiCadangan ? 'XXXX-XXXX' : '000000'"
-            class="text-center font-mono text-lg tracking-widest"
+            class="h-12 text-center font-mono text-xl tracking-widest"
             required
             autofocus
           />
+          <p v-if="!pakaiCadangan" class="text-xs text-muted-foreground">
+            Kode berganti tiap 30 detik — langsung terkirim begitu 6 digit terisi.
+          </p>
         </div>
 
         <Button type="submit" class="w-full" :disabled="submitting || !kode.trim()">
