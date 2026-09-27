@@ -410,7 +410,7 @@ async function onSubmit() {
           </p>
         </div>
 
-        <Button type="submit" class="w-full" :disabled="submitting || !kode.trim()">
+        <Button type="submit" class="h-11 w-full md:h-10" :disabled="submitting || !kode.trim()">
           <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
           {{ langkah === 'setup-2fa' ? 'Aktifkan & masuk' : 'Masuk' }}
         </Button>
@@ -461,9 +461,12 @@ async function onSubmit() {
             id="username"
             v-model="username"
             autocomplete="username"
+            autocapitalize="none"
+            spellcheck="false"
             required
             autofocus
             :disabled="isLockedOut"
+            class="h-11 text-base md:h-10 md:text-sm"
           />
         </div>
 
@@ -477,7 +480,7 @@ async function onSubmit() {
               autocomplete="current-password"
               required
               :disabled="isLockedOut"
-              class="pr-10"
+              class="h-11 pr-10 text-base md:h-10 md:text-sm"
             />
             <button
               type="button"
@@ -494,12 +497,22 @@ async function onSubmit() {
 
         <Button
           type="submit"
-          class="w-full"
+          class="h-11 w-full md:h-10"
           :disabled="submitting || isLockedOut"
         >
           <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
           {{ isLockedOut ? `Coba lagi dalam ${lockoutClock}` : 'Masuk' }}
         </Button>
+
+        <div class="flex items-start gap-2 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+          <ShieldCheckIcon class="mt-0.5 size-4 shrink-0 text-primary" />
+          <p>
+            Akun admin memakai verifikasi 2 langkah dengan
+            <strong class="text-foreground">Google Authenticator</strong> atau
+            <strong class="text-foreground">Microsoft Authenticator</strong> di HP.
+            Login pertama akan memandu pemasangannya — bisa dari HP maupun laptop.
+          </p>
+        </div>
       </form>
     </div>
   </div>
