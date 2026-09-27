@@ -71,9 +71,15 @@ function hitungDpWajib(aturan, jumlahTamu) {
 // Uang DP dihitung ke rekap shift staff yang mencatatnya, yang sedang
 // berjalan saat diterima (shift.service.js shiftPenerimaDp). Tanpa shift,
 // uangnya masuk laci tapi tidak jelas masuk rekap shift siapa.
+// Kode PERLU_SHIFT: layar Reservasi menanggapinya dengan menawarkan mulai
+// shift di tempat (isian form tetap utuh), bukan sekadar menampilkan pesan.
 async function assertShiftBerjalan(userId) {
   if (!(await shiftService.getActiveShift(userId))) {
-    throw new AppError(403, 'Mulai shift dulu sebelum mencatat DP — DP harus masuk hitungan kas shift.');
+    throw new AppError(
+      403,
+      'Mulai shift dulu sebelum mencatat DP — DP harus masuk hitungan kas shift.',
+      'PERLU_SHIFT'
+    );
   }
 }
 

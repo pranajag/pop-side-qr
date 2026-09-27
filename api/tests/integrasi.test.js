@@ -390,6 +390,38 @@ test('reservasi: DP di bawah aturan toko hanya boleh admin, wajib alasan', async
   }
 });
 
+test('reservasi: DP tanpa shift ditolak (PERLU_SHIFT) tanpa menyimpan setengah jalan; sesudah mulai shift tercatat', async (t) => {
+  if (lewati) return t.skip(lewati);
+  const staff = await akunTanpaPassword('zz_uji_dp_shift');
+  dibuat.userIds.push(staff.id);
+  const pelaku = { id: staff.id, role: 'admin' };
+  const isi = {
+    namaCustomer: 'ZZ Uji DP Tanpa Shift', jumlahTamu: 2, tanggalReservasi: jadwalUji(26), tableId: dibuat.tableId,
+    depositAmount: 40000, alasanDp: 'ZZ uji otomatis', dpDibayarSekarang: 40000, metodeDp: 'tunai',
+  };
+  const jumlah = () => prisma.reservation.count({ where: { namaCustomer: isi.namaCustomer } });
+
+  // Kode PERLU_SHIFT = layar Reservasi menawarkan mulai shift di tempat.
+  const perluShift = (e) => e.statusCode === 403 && e.code === 'PERLU_SHIFT';
+  await assert.rejects(reservationService.create(isi, pelaku), perluShift);
+  assert.equal(await jumlah(), 0, 'reservasi tidak tersimpan tanpa DP-nya');
+
+  // Jalan lain yang ditawarkan layar: simpan tanpa DP, catat DP nanti.
+  const { dpDibayarSekarang, metodeDp, ...tanpaDp } = isi;
+  const { reservation: dulu } = await reservationService.create(tanpaDp, pelaku);
+  assert.equal(dulu.dp.status, 'belum');
+  await assert.rejects(reservationService.catatPembayaranDp(dulu.id, { amount: 40000, metode: 'tunai' }, staff.id), perluShift);
+
+  await shiftService.startShift(staff.id, 0, 'ZZ Uji DP Shift');
+  const baru = await reservationService.create({ ...isi, tanggalReservasi: jadwalUji(28) }, pelaku);
+  assert.equal(baru.baruLunas, true, 'DP yang dibayar saat membuat reservasi langsung tercatat');
+  assert.equal(baru.reservation.status, 'confirmed');
+  const nanti = await reservationService.catatPembayaranDp(dulu.id, { amount: 40000, metode: 'tunai' }, staff.id);
+  assert.equal(nanti.reservation.dp.status, 'lunas');
+  const shift = await shiftService.getMyActiveShift(staff.id);
+  assert.equal(shift.depositTotal, dpDibayarSekarang * 2, 'kedua DP masuk kas shift pencatatnya');
+});
+
 test('log audit: aksi staff tercatat tanpa rahasia; akun aplikasi tidak bisa mengubah/menghapusnya', async (t) => {
   if (lewati) return t.skip(lewati);
   const express = require('express');

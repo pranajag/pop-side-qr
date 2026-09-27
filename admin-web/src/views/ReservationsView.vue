@@ -4,9 +4,11 @@ import { toast } from 'vue-sonner'
 import { useReservationsStore } from '@/stores/reservations'
 import { useTablesStore } from '@/stores/tables'
 import { useAuthStore } from '@/stores/auth'
+import { useActiveShiftStore } from '@/stores/activeShift'
 import { dengarkan } from '@/lib/realtime'
 import { formatApiError, API_URL } from '@/lib/api'
 import { formatDateTime, formatRupiah } from '@/lib/format'
+import StartShiftDialog from '@/components/StartShiftDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -54,11 +56,52 @@ import {
   QrCodeIcon,
   WalletIcon,
   CircleCheckIcon,
+  TriangleAlertIcon,
 } from '@lucide/vue'
 
 const store = useReservationsStore()
 const tables = useTablesStore()
 const auth = useAuthStore()
+const activeShiftStore = useActiveShiftStore()
+
+// ---------- Shift berjalan (syarat mencatat DP) ----------
+// Uang DP masuk hitungan kas shift pencatatnya, jadi server menolak mencatat
+// DP tanpa shift berjalan milik akun ini (reservation.service.js
+// assertShiftBerjalan, kode PERLU_SHIFT). Dulu layar ini tidak memberi tahu
+// apa-apa: staff mengisi seluruh form + DP, menekan Simpan, dan ditolak
+// berulang kali tanpa jalan keluar. Sekarang statusnya terlihat sejak awal,
+// dan shift bisa dimulai di tempat — isian form tetap utuh, lalu aksi yang
+// tadi menunggu (simpan reservasi + DP, catat Bayar DP) langsung dijalankan.
+const belumShift = computed(() => activeShiftStore.loaded && !activeShiftStore.hasActiveShift)
+const shiftDialog = reactive({ open: false, alasan: '', labelKonfirmasi: '', labelLewati: '' })
+// Aksi yang menunggu shift dimulai / jalan lain tanpa shift. Selalu ditimpa
+// setiap kali dialog dibuka, jadi aksi lama tidak pernah ikut terjalankan.
+let setelahShift = null
+let tanpaShift = null
+function mintaMulaiShift({
+  alasan = '',
+  labelKonfirmasi = 'Konfirmasi Mulai Shift',
+  labelLewati = '',
+  lanjut = null,
+  lewati = null,
+} = {}) {
+  setelahShift = lanjut
+  tanpaShift = lewati
+  Object.assign(shiftDialog, { open: true, alasan, labelKonfirmasi, labelLewati })
+}
+function onShiftDimulai() {
+  const aksi = setelahShift
+  setelahShift = null
+  tanpaShift = null
+  aksi?.()
+}
+function onLewatiShift() {
+  const aksi = tanpaShift
+  setelahShift = null
+  tanpaShift = null
+  shiftDialog.open = false
+  aksi?.()
+}
 
 const formOpen = ref(false)
 const editingId = ref(null)
@@ -178,11 +221,25 @@ function onBayarClick() {
   if (bayarMelunasi.value) {
     mintaKonfirmasiLunas(
       { nama: r.namaCustomer, total: r.dp.wajib, pending: r.status === 'pending' },
-      kirimBayar
+      catatBayar
     )
     return
   }
+  catatBayar()
+}
+function catatBayar() {
+  if (belumShift.value) {
+    mintaShiftUntukBayar()
+    return
+  }
   kirimBayar()
+}
+function mintaShiftUntukBayar() {
+  mintaMulaiShift({
+    alasan: `Pembayaran DP ${formatRupiah(bayarAmount.value)} harus masuk kas shift. Mulai shift dulu — pembayarannya langsung dicatat.`,
+    labelKonfirmasi: 'Mulai Shift & Catat',
+    lanjut: kirimBayar,
+  })
 }
 async function kirimBayar() {
   const r = bayarTarget.value
@@ -203,6 +260,12 @@ async function kirimBayar() {
     }
     bayarTarget.value = null
   } catch (err) {
+    // Shift diakhiri di tab/perangkat lain sejak halaman ini dimuat.
+    if (err.code === 'PERLU_SHIFT') {
+      activeShiftStore.fetch().catch(() => {})
+      mintaShiftUntukBayar()
+      return
+    }
     toast.error(formatApiError(err))
   } finally {
     savingBayar.value = false
@@ -356,15 +419,21 @@ const berhentiDengar = dengarkan('reservasi:berubah', () => {
   clearTimeout(tundaMuat)
   tundaMuat = setTimeout(() => store.fetchAll(), 250)
 })
+// Shift dimulai/diakhiri di tab atau perangkat lain.
+const berhentiDengarShift = dengarkan('shift:berubah', () => {
+  activeShiftStore.fetch().catch(() => {})
+})
 onUnmounted(() => {
   clearTimeout(tundaMuat)
   berhentiDengar()
+  berhentiDengarShift()
 })
 
 onMounted(() => {
   store.fetchAll()
   tables.fetchAll()
   store.fetchAturanDp().catch(() => {})
+  activeShiftStore.fetch().catch(() => {})
 })
 
 // Native datetime-local inputs always read/write in the browser's own local
@@ -474,14 +543,34 @@ function onSubmit() {
   if (dpAkanLunas.value) {
     mintaKonfirmasiLunas(
       { nama: form.namaCustomer || 'customer', total: dpWajibForm.value, pending: true },
-      kirimForm
+      simpanForm
     )
+    return
+  }
+  simpanForm()
+}
+
+// DP yang dibayar sekarang butuh shift berjalan — tanpa itu, staff memilih:
+// mulai shift lalu simpan bersama DP-nya, atau simpan reservasinya saja dan
+// DP dicatat nanti lewat Bayar DP.
+function simpanForm() {
+  if (editingId.value === null && dpBayarForm.value > 0 && belumShift.value) {
+    mintaShiftUntukForm()
     return
   }
   kirimForm()
 }
+function mintaShiftUntukForm() {
+  mintaMulaiShift({
+    alasan: `DP ${formatRupiah(dpBayarForm.value)} yang dibayar sekarang harus masuk kas shift. Mulai shift dulu — reservasinya langsung disimpan bersama DP-nya.`,
+    labelKonfirmasi: 'Mulai Shift & Simpan',
+    labelLewati: 'Simpan tanpa DP',
+    lanjut: () => kirimForm(),
+    lewati: () => kirimForm({ tanpaDp: true }),
+  })
+}
 
-async function kirimForm() {
+async function kirimForm({ tanpaDp = false } = {}) {
   submitting.value = true
   try {
     const { dpDibayarSekarang, metodeDp, ...isi } = form
@@ -501,7 +590,7 @@ async function kirimForm() {
       await store.update(editingId.value, payload)
       toast.success('Reservasi diperbarui')
     } else {
-      const bayar = Number(dpDibayarSekarang) || 0
+      const bayar = tanpaDp ? 0 : Number(dpDibayarSekarang) || 0
       if (bayar > 0) Object.assign(payload, { dpDibayarSekarang: bayar, metodeDp })
       const hasil = await store.create(payload)
       if (hasil.baruLunas) {
@@ -512,6 +601,10 @@ async function kirimForm() {
         toast.success(`Reservasi ditambahkan — DP ${formatRupiah(bayar)} dicatat`, {
           description: `Kurang ${formatRupiah(hasil.kurang)} lagi. Uangnya sudah tercatat di shift ini.`,
         })
+      } else if (tanpaDp) {
+        toast.success('Reservasi ditambahkan — DP belum dicatat', {
+          description: 'Catat DP-nya lewat tombol Bayar DP setelah shift dimulai.',
+        })
       } else {
         toast.success('Reservasi ditambahkan')
       }
@@ -519,6 +612,13 @@ async function kirimForm() {
     }
     formOpen.value = false
   } catch (err) {
+    // Shift diakhiri di tab/perangkat lain sejak halaman ini dimuat — form
+    // tetap terbuka, tawarkan mulai shift di tempat.
+    if (err.code === 'PERLU_SHIFT' && editingId.value === null) {
+      activeShiftStore.fetch().catch(() => {})
+      mintaShiftUntukForm()
+      return
+    }
     toast.error(formatApiError(err))
   } finally {
     submitting.value = false
@@ -603,6 +703,18 @@ async function onDeleteConfirm() {
       <Button v-if="auth.isAdmin" size="sm" variant="outline" @click="openAturan">
         Atur DP
       </Button>
+    </div>
+
+    <div
+      v-if="belumShift"
+      class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950"
+    >
+      <span class="flex min-w-0 items-start gap-2 text-amber-900 dark:text-amber-200">
+        <TriangleAlertIcon class="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        Kamu belum mulai shift — reservasi tetap bisa dibuat, tapi DP yang
+        dibayar customer baru bisa dicatat setelah shift dimulai.
+      </span>
+      <Button size="sm" variant="outline" @click="mintaMulaiShift()">Mulai Shift</Button>
     </div>
 
     <div class="rounded-lg border bg-card">
@@ -910,6 +1022,14 @@ async function onDeleteConfirm() {
               Kosongkan kalau customer belum membayar DP. Uang yang dicatat di
               sini langsung masuk DP reservasi di shift yang sedang berjalan.
             </p>
+            <p
+              v-if="belumShift && dpBayarForm > 0 && !dpBayarMelebihi"
+              class="flex items-start gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400"
+            >
+              <TriangleAlertIcon class="mt-px size-3.5 shrink-0" />
+              Kamu belum mulai shift. Saat menyimpan, kamu diminta mulai shift
+              dulu supaya DP ini masuk kas shift — atau simpan tanpa DP.
+            </p>
           </div>
         </form>
         <DialogFooter>
@@ -1044,6 +1164,14 @@ async function onDeleteConfirm() {
           <p v-else-if="bayarAmount > 0" class="text-xs font-medium text-status-waiting-verif">
             Setelah ini masih kurang {{ formatRupiah(bayarSisa) }}.
           </p>
+          <p
+            v-if="belumShift"
+            class="flex items-start gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400"
+          >
+            <TriangleAlertIcon class="mt-px size-3.5 shrink-0" />
+            Kamu belum mulai shift. Sebelum dicatat, kamu diminta mulai shift
+            dulu supaya uang DP ini masuk kas shift.
+          </p>
         </div>
         <DialogFooter>
           <Button variant="outline" :disabled="savingBayar" @click="bayarTarget = null">
@@ -1076,6 +1204,17 @@ async function onDeleteConfirm() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    <!-- Mulai shift di tempat — syarat mencatat DP. -->
+    <StartShiftDialog
+      :open="shiftDialog.open"
+      :alasan="shiftDialog.alasan"
+      :label-konfirmasi="shiftDialog.labelKonfirmasi"
+      :label-lewati="shiftDialog.labelLewati"
+      @update:open="(v) => (shiftDialog.open = v)"
+      @dimulai="onShiftDimulai"
+      @lewati="onLewatiShift"
+    />
 
     <!-- Aturan DP toko (admin). -->
     <Dialog :open="aturanOpen" @update:open="(v) => (aturanOpen = v)">

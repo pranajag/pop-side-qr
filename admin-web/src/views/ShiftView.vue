@@ -5,6 +5,7 @@ import { api, formatApiError, API_URL } from '@/lib/api'
 import { formatRupiah, formatDateTime } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth'
 import { useActiveShiftStore } from '@/stores/activeShift'
+import StartShiftDialog from '@/components/StartShiftDialog.vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -82,54 +83,9 @@ onMounted(() => {
 })
 onUnmounted(() => clearInterval(clockTimer))
 
-// Starting a shift now requires counting the starting float first — same
-// reasoning as the end-shift dialog below: expectedCash at end-shift is
-// meaningless without knowing what the drawer started with.
+// Kas awal + nama staff diisi di StartShiftDialog (dipakai juga halaman
+// Reservasi); dialog itu sendiri yang memperbarui activeShiftStore.
 const startDialogOpen = ref(false)
-const cashStartInput = ref('')
-// Who's actually on shift, separate from which login account is doing the
-// clicking — a shared kasir/admin login otherwise leaves no record of
-// which real person was working (schema.prisma's Shift.namaStaff comment).
-const namaStaffInput = ref('')
-
-function openStartDialog() {
-  cashStartInput.value = ''
-  namaStaffInput.value = ''
-  startDialogOpen.value = true
-}
-
-const cashStartNumber = computed(() => {
-  const raw = cashStartInput.value
-  if (raw === '' || raw === null || raw === undefined) return null
-  const n = typeof raw === 'number' ? raw : Number(raw)
-  return Number.isFinite(n) && n >= 0 ? n : null
-})
-
-async function onStartConfirm() {
-  if (cashStartNumber.value === null) {
-    toast.error('Masukkan jumlah kas awal yang valid')
-    return
-  }
-  if (!namaStaffInput.value.trim()) {
-    toast.error('Masukkan nama staff yang sedang shift')
-    return
-  }
-  busy.value = true
-  try {
-    await api.post('/admin/shifts/start', {
-      cashStart: cashStartNumber.value,
-      namaStaff: namaStaffInput.value.trim(),
-    })
-    startDialogOpen.value = false
-    toast.success('Shift dimulai')
-    await load()
-    activeShiftStore.fetch()
-  } catch (err) {
-    toast.error(formatApiError(err))
-  } finally {
-    busy.value = false
-  }
-}
 
 // Ending a shift now requires counting the drawer first — this dialog is
 // both the cash-reconciliation input AND the confirmation step for an
@@ -374,7 +330,7 @@ const staleOtherShifts = computed(() =>
         <Button
           class="w-full shrink-0 gap-2 @md:w-auto"
           :disabled="busy"
-          @click="openStartDialog"
+          @click="startDialogOpen = true"
         >
           <LoaderCircleIcon v-if="busy" class="size-4 animate-spin" />
           <PlayIcon v-else class="size-4" />
@@ -465,55 +421,11 @@ const staleOtherShifts = computed(() =>
       </Table>
     </div>
 
-    <Dialog :open="startDialogOpen" @update:open="(v) => (startDialogOpen = v)">
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Mulai Shift</DialogTitle>
-          <DialogDescription>
-            Hitung uang kas yang ada di laci sekarang sebelum mulai jualan, lalu
-            masukkan jumlahnya. Ini dipakai sebagai patokan awal saat
-            rekonsiliasi kas di akhir shift nanti.
-          </DialogDescription>
-        </DialogHeader>
-        <div class="space-y-4">
-          <div class="space-y-2">
-            <Label for="nama-staff">Nama Staff yang Shift</Label>
-            <Input
-              id="nama-staff"
-              v-model="namaStaffInput"
-              placeholder="Mis. Budi"
-              autofocus
-            />
-          </div>
-          <div class="space-y-2">
-            <Label for="cash-start">Uang Kas Awal</Label>
-            <Input
-              id="cash-start"
-              v-model="cashStartInput"
-              type="number"
-              min="0"
-              step="500"
-              placeholder="0"
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            :disabled="busy"
-            @click="startDialogOpen = false"
-            >Batal</Button
-          >
-          <Button
-            :disabled="busy || cashStartNumber === null || !namaStaffInput.trim()"
-            @click="onStartConfirm"
-          >
-            <LoaderCircleIcon v-if="busy" class="size-4 animate-spin" />
-            Konfirmasi Mulai Shift
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <StartShiftDialog
+      :open="startDialogOpen"
+      @update:open="(v) => (startDialogOpen = v)"
+      @dimulai="load"
+    />
 
     <Dialog :open="endDialogOpen" @update:open="(v) => (endDialogOpen = v)">
       <!-- Lebih lebar dari bawaan (384px) supaya dua kolom ojol tidak
