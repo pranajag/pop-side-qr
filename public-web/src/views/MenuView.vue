@@ -202,15 +202,8 @@ const estimatedTotal = computed(() =>
         >
           {{ locale.t('meja') }} {{ table.nomorMeja }}
         </span>
-        <button
-          v-if="recentOrders.daftar.length > 0"
-          type="button"
-          :aria-label="locale.t('pesananSayaLabel')"
-          class="flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent"
-          @click="recentOrdersOpen = true"
-        >
-          <ReceiptIcon class="size-4" />
-        </button>
+        <!-- Tidak ada lagi ikon riwayat pesanan di sini (permintaan pemilik):
+        status pesanan cukup dari kartu "Pesanan kamu" di atas menu. -->
         <button
           type="button"
           :aria-label="locale.t('panggilStaffLabel')"
