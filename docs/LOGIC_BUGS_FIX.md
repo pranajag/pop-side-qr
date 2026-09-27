@@ -88,7 +88,9 @@ Tes: "cek nomor member: hanya dijawab untuk token meja yang sah", pentest #13.
 
 ### [9] OTP member — diperbaiki
 
-Diskon tier member di checkout publik baru berlaku setelah nomor diverifikasi kode 6 digit (berlaku 5 menit, sekali pakai, salah 5x hangus, hanya dikirim ke member bertier, dibatasi per nomor/perangkat/hari). Tanpa verifikasi tidak ada diskon, nama, tier, maupun saldo poin. Tanpa gateway WhatsApp/SMS (produksi tanpa `OTP_HTTP_*`), fitur ini mati dengan aman dan diskon member lewat kasir. Rincian: `SECURITY_FIXES.md` rincian 11.
+Diskon tier member di checkout publik baru berlaku setelah nomor diverifikasi kode 6 digit (berlaku 5 menit, sekali pakai, salah 5x hangus, hanya dikirim ke member bertier, dibatasi per nomor/perangkat/hari). Tanpa verifikasi tidak ada diskon, nama, tier, maupun saldo poin. Tanpa gateway WhatsApp/SMS (produksi tanpa `OTP_HTTP_*`), diskon tier berlaku otomatis untuk tunai, QRIS, dan debit, ditandai supaya kasir mencocokkan pemilik nomor (perbaikan 27 September — sebelumnya member tidak pernah dapat diskon di checkout publik selama gateway belum ada).
+
+**Riwayat "Pesanan Saya" — diperbaiki (27 September).** Riwayat dulu hanya kode di `localStorage`, dipangkas saat QR dipindai ulang setelah pesanan selesai, hilang kalau dibuka dari browser lain, dan tombolnya berupa ikon kecil. Sekarang diambil dari server lewat `GET /api/public/pesanan-saya` — order milik perangkat ini (cookie perangkat yang sama dengan pelacakan status, jadi perangkat lain tidak bisa melihat) dalam 24 jam, lengkap dengan status — dan tampil sebagai kartu "Pesanan kamu" di atas menu. Tes: "pesanan saya: hanya order milik perangkat ini, lengkap dengan status", "diskon member otomatis kalau OTP tidak tersedia: tunai, QRIS, dan debit". Rincian: `SECURITY_FIXES.md` rincian 11.
 
 Tes: "OTP member: kode hanya untuk member bertier, sekali pakai, salah 5x hangus", "OTP member: tanpa verifikasi tidak ada diskon, detail member, maupun saldo poin".
 

@@ -193,7 +193,7 @@ Rinciannya di `AGENTS.md` bagian "Database Lokal":
 - Batas: 3 permintaan/10 menit dan 10/hari per nomor, 10/jam per perangkat, 15 percobaan verifikasi/10 menit, dan batas harian seluruh toko (`OTP_BATAS_HARIAN`, bawaan 200).
 - Setelah lolos, perangkat itu diingat 2 jam lewat cookie bertanda tangan `__Host-popside_member` (`httpOnly`, `sameSite=strict`).
 - Tanpa verifikasi tidak ada diskon, nama, tier, maupun saldo poin yang ditampilkan; poin pesanan tetap masuk ke nomor itu setelah dibayar.
-- Tanpa gateway, fitur ini mati dengan aman: checkout tidak menawarkan verifikasi, dan diskon member diberikan kasir lewat Pesanan Manual. Mode `OTP_PENGIRIM=console` (kode ditulis ke log API) hanya untuk pengembangan dan otomatis mati di `NODE_ENV=production`.
+- Tanpa gateway (27 September, atas permintaan pemilik): diskon tier langsung berlaku otomatis dari nomor yang diisi, untuk tunai, QRIS, maupun debit — satu aturan untuk pratinjau dan order (`aksesDiskonMember`). Karena siapa pun yang tahu nomor member bisa memakainya, alasan diskon order itu ditandai "belum diverifikasi, cek pemilik nomor" (hanya untuk staf — customer melihat alasan biasa), dan kartu pesanan + dialog konfirmasi bayar menampilkan nama dan 4 digit terakhir member supaya kasir mencocokkan pemilik nomor. Saldo poin persisnya tetap tidak dibuka tanpa verifikasi. Begitu gateway diisi, verifikasi OTP kembali wajib. Mode `OTP_PENGIRIM=console` (kode ditulis ke log API) hanya untuk pengembangan dan otomatis mati di `NODE_ENV=production`.
 - Captcha tidak dipasang (layanan pihak ketiga); perannya diganti batas-batas di atas.
 
 Tes: integrasi "OTP member: kode hanya untuk member bertier, sekali pakai, salah 5x hangus", "OTP member: tanpa verifikasi tidak ada diskon, detail member, maupun saldo poin"; security "OTP: mode console mati di produksi…".
@@ -327,5 +327,5 @@ Sepuluh poin yang di pass pertama berstatus "butuh keputusan", beserta keputusan
 
 ### Yang masih menunggu
 
-- **Gateway WhatsApp/SMS untuk OTP di produksi** — butuh akun gateway atas nama toko (isi `OTP_PENGIRIM=http` + `OTP_HTTP_*` di variabel Railway). Sampai itu ada, diskon member lewat kasir.
+- **Gateway WhatsApp/SMS untuk OTP di produksi** — butuh akun gateway atas nama toko (isi `OTP_PENGIRIM=http` + `OTP_HTTP_*` di variabel Railway). Sampai itu ada, diskon member berlaku otomatis dengan pencocokan pemilik nomor oleh kasir ([rincian 11](#11-otp-member-keputusan-2)).
 - **Cadangan kunci `DATA_ENC_KEY` & `DATA_HASH_KEY`** — file `popside-kunci-produksi-*.txt` di folder Documents pemilik; pindahkan ke password manager atau tempat aman lain, terpisah dari backup database.

@@ -139,7 +139,7 @@ Aturan yang JANGAN diubah tanpa paham akibatnya:
 - MySQL Railway tidak bisa dijangkau dari internet. Migrasi baru di produksi: buka TCP proxy sementara untuk service `MySQL` (Settings → Networking, lalu redeploy), jalankan `prisma migrate deploy` dengan `DIRECT_URL` akun `popside_migrate` lewat proxy itu, beri `popside_app` hak di tabel baru (SELECT/INSERT/UPDATE/DELETE; tabel log hanya SELECT/INSERT), lalu hapus lagi proxy-nya.
 - Tanpa trigger, tabel log tetap append-only lewat hak akses: `popside_app` hanya `SELECT` + `INSERT` di `audit_log` dan `order_status_log`.
 - Railway trial: $5 / 30 hari untuk API + MySQL (volume maks 500 MB). Sesudahnya: upgrade paket Railway, atau kembali ke Aiven — salin datanya dulu dari MySQL Railway, lalu isi `DATABASE_URL` dengan `ROLLBACK_DATABASE_URL_AIVEN` di file cadangan.
-- OTP member di produksi butuh gateway WhatsApp/SMS (`OTP_PENGIRIM=http` + `OTP_HTTP_*`). Tanpa itu verifikasi mati dan diskon member lewat kasir.
+- OTP member di produksi butuh gateway WhatsApp/SMS (`OTP_PENGIRIM=http` + `OTP_HTTP_*`). Tanpa itu (kondisi sekarang), diskon tier berlaku **otomatis** dari nomor yang diisi (`memberOtp.service.js` `aksesDiskonMember`), alasan diskonnya ditandai "belum diverifikasi" dan layar kasir menampilkan nama + 4 digit terakhir member supaya kasir mencocokkan pemilik nomor saat bayar. Begitu gateway diisi, verifikasi OTP otomatis wajib lagi.
 
 ## BOLEH
 
