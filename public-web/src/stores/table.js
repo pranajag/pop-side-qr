@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { api } from '@/lib/api'
 import { loadJSON, saveJSON } from '@/lib/persist'
 import { useCartStore } from '@/stores/cart'
-import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { hapusDraft } from '@/lib/checkoutDraft'
 
 const STORAGE_KEY = 'popside.table'
@@ -51,11 +50,6 @@ export const useTableStore = defineStore('table', {
         // A cart built for a different (or no) table must not silently
         // carry over to this one — see cart.js's syncTable() for why.
         useCartStore().syncTable(this.id)
-        // Same idea for "Pesanan Saya": a fresh scan means a fresh visit,
-        // and the table bill has already dropped the previous group's
-        // orders by this exact cutoff. Keeping stale kode order around
-        // would just link to orders that are done, or gone entirely.
-        useRecentOrdersStore().pruneBefore(data.table.currentVisitStartedAt)
         // Draft checkout (catatan + nomor HP member) milik siapa pun yang
         // terakhir memakai perangkat ini tidak boleh terbawa ke sesi pesan
         // yang baru dimulai — lihat lib/checkoutDraft.js.

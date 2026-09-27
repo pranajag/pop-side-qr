@@ -667,6 +667,77 @@ test('pelacakan order: hanya dari perangkat pemesan (token tersembunyi)', async 
   assert.equal(ulang.id, order.id, 'percobaan ulang dari perangkat yang sama tetap dapat order yang sama');
 });
 
+test('pesanan selesai: struk hanya untuk pemesan selama jendela struk, lalu hilang dari status, Pesanan kamu, dan bill meja', async (t) => {
+  if (lewati) return t.skip(lewati);
+  const kasirId = dibuat.userIds[0]; // punya shift uji terbuka (test.before)
+  const produk = await prisma.product.create({
+    data: { categoryId: dibuat.categoryId, nama: 'ZZ Uji Struk', harga: 18000, stok: 0, trackStock: false, isAvailable: true },
+  });
+  dibuat.productIds.push(produk.id);
+  const perangkatA = crypto.randomBytes(32).toString('hex');
+  const perangkatB = crypto.randomBytes(32).toString('hex');
+  const pesan = () =>
+    orderService.createOrder({ token: dibuat.tableToken, metode: 'tunai', items: [{ productId: produk.id, qty: 1 }] }, { deviceHash: perangkatA });
+  const kodeDiBill = async () => (await orderService.getTableBill(dibuat.tableToken)).orders.map((o) => o.kodeOrder);
+  const diKartu = async (sekarang) =>
+    (await orderService.daftarMilikPerangkat(perangkatA, sekarang)).some((o) => o.kodeOrder === order.kodeOrder);
+
+  const order = await pesan();
+  dibuat.orderIds.push(order.id);
+  assert.ok((await kodeDiBill()).includes(order.kodeOrder), 'pesanan berjalan tampil di bill meja');
+
+  const batasPinAsli = await settingsService.getPinVerifikasiMinimal();
+  try {
+    await settingsService.updatePinVerifikasi(null);
+    const total = Number((await prisma.order.findUnique({ where: { id: order.id } })).totalHarga);
+    await orderManagementService.confirmPayment(order.id, kasirId, total + 2000);
+    for (const status of ['cooking', 'ready', 'completed']) {
+      await orderManagementService.updateStatus(order.id, status, kasirId);
+    }
+
+    // Struk digital untuk pemesannya: waktu selesai, batas struk, uang tunai.
+    const struk = await orderService.getByCode(order.kodeOrder, perangkatA);
+    assert.equal(struk.status, 'completed');
+    assert.equal(new Date(struk.strukBerlakuSampai) - new Date(struk.berakhirPada), orderService.JENDELA_STRUK_MS);
+    assert.equal(struk.cashReceived, total + 2000);
+    assert.equal(struk.changeAmount, 2000);
+    await assert.rejects(orderService.getByCode(order.kodeOrder, perangkatB), (e) => e.statusCode === 404, 'perangkat lain');
+    assert.ok(!(await kodeDiBill()).includes(order.kodeOrder), 'pesanan selesai tidak pernah tampil di bill meja');
+    assert.ok(await diKartu(), 'selama jendela struk: masih di kartu Pesanan kamu');
+
+    // Sesudah jendela struk: pemesannya sendiri pun tidak bisa membukanya.
+    const nanti = new Date(new Date(struk.strukBerlakuSampai).getTime() + 1000);
+    const berakhir = (e) => e.statusCode === 410 && e.code === 'PESANAN_BERAKHIR';
+    await assert.rejects(orderService.getByCode(order.kodeOrder, perangkatA, nanti), berakhir);
+    await assert.rejects(orderService.idMilikPerangkat(order.kodeOrder, perangkatA, nanti), berakhir);
+    assert.ok(!(await diKartu(nanti)), 'sesudah jendela struk: hilang dari kartu');
+
+    // Tutup struk: langsung hilang, tanpa menunggu jendelanya habis — dan
+    // updatedAt tidak berubah (sinkronisasi API eksternal, rekap shift).
+    const sebelum = await prisma.order.findUnique({ where: { id: order.id }, select: { updatedAt: true } });
+    await assert.rejects(orderService.tutupStruk(order.kodeOrder, perangkatB), (e) => e.statusCode === 404, 'perangkat lain tidak bisa menutup');
+    await orderService.tutupStruk(order.kodeOrder, perangkatA);
+    await assert.rejects(orderService.getByCode(order.kodeOrder, perangkatA), (e) => e.statusCode === 404);
+    assert.ok(!(await diKartu()), 'struk ditutup: hilang dari kartu');
+    const sesudah = await prisma.order.findUnique({ where: { id: order.id }, select: { updatedAt: true, deviceHash: true } });
+    assert.equal(sesudah.deviceHash, null);
+    assert.equal(sesudah.updatedAt.getTime(), sebelum.updatedAt.getTime(), 'updatedAt tidak berubah');
+
+    // Pesanan yang belum selesai tidak bisa "ditutup"; yang batal ikut aturan
+    // yang sama (tampil untuk pemesannya selama jendela, tidak di bill).
+    const berjalan = await pesan();
+    dibuat.orderIds.push(berjalan.id);
+    await assert.rejects(orderService.tutupStruk(berjalan.kodeOrder, perangkatA), (e) => e.statusCode === 409);
+    await orderManagementService.updateStatus(berjalan.id, 'cancelled', kasirId, 'ZZ uji batal');
+    const batal = await orderService.getByCode(berjalan.kodeOrder, perangkatA);
+    assert.equal(batal.status, 'cancelled');
+    assert.ok(batal.strukBerlakuSampai);
+    assert.ok(!(await kodeDiBill()).includes(berjalan.kodeOrder));
+  } finally {
+    await settingsService.updatePinVerifikasi(batasPinAsli);
+  }
+});
+
 test('konfirmasi pembayaran: di atas batas wajib PIN staff, di bawahnya tidak', async (t) => {
   if (lewati) return t.skip(lewati);
   const kasirId = dibuat.userIds[0]; // punya shift uji terbuka (test.before)

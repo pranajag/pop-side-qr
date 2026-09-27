@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { Toaster } from '@/components/ui/sonner'
 import { useNetworkStore } from '@/stores/network'
-import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { useLocaleStore } from '@/stores/locale'
 import { useCafeStatusStore } from '@/stores/cafeStatus'
 import { retryPendingOrder } from '@/lib/offlineQueue'
@@ -12,7 +11,6 @@ import { formatApiError } from '@/lib/api'
 import { WifiOffIcon } from '@lucide/vue'
 
 const network = useNetworkStore()
-const recentOrders = useRecentOrdersStore()
 const locale = useLocaleStore()
 const cafeStatus = useCafeStatusStore()
 const router = useRouter()
@@ -20,7 +18,6 @@ const router = useRouter()
 function retryQueue() {
   retryPendingOrder({
     onSuccess: (order) => {
-      recentOrders.add(order.kodeOrder, order.createdAt)
       toast.success(locale.t('offlineOrderSent'))
       router.push({ name: 'order', params: { kodeOrder: order.kodeOrder } })
     },

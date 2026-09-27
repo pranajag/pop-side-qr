@@ -9,7 +9,7 @@ import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { useLocaleStore } from '@/stores/locale'
 import { useThemeStore } from '@/stores/theme'
 import { useCafeStatusStore } from '@/stores/cafeStatus'
-import { formatRupiah } from '@/lib/format'
+import { formatRupiah, formatTime } from '@/lib/format'
 import { STATUS_LABEL_KEY, STATUS_COLOR } from '@/lib/orderStatus'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -19,7 +19,6 @@ import ReservasiNotice from '@/components/ReservasiNotice.vue'
 import { teksReservasi } from '@/lib/reservasi'
 import VariantPickerDialog from '@/components/VariantPickerDialog.vue'
 import CallStaffDialog from '@/components/CallStaffDialog.vue'
-import RecentOrdersDialog from '@/components/RecentOrdersDialog.vue'
 import BillDialog from '@/components/BillDialog.vue'
 import {
   ImageOffIcon,
@@ -27,7 +26,6 @@ import {
   QrCodeIcon,
   BellIcon,
   SearchIcon,
-  ReceiptIcon,
   ReceiptTextIcon,
   SunIcon,
   MoonIcon,
@@ -47,7 +45,6 @@ const router = useRouter()
 const pickerOpen = ref(false)
 const pickerProduct = ref(null)
 const callStaffOpen = ref(false)
-const recentOrdersOpen = ref(false)
 const billOpen = ref(false)
 
 // null = "Semua" (no filter). Display-only — menu.categories itself stays
@@ -101,8 +98,10 @@ watch(
 )
 
 // "Pesanan kamu" di atas menu: status pesanan milik perangkat ini, dari
-// server — tetap ada setelah halaman status ditutup. Diperbarui berkala
-// selama halaman terlihat, dan langsung begitu kembali ke tab ini.
+// server — tetap ada setelah halaman status ditutup. Pesanan yang sudah
+// selesai hanya muncul selama struk digitalnya masih bisa diambil; tidak ada
+// riwayat pesanan selesai. Diperbarui berkala selama halaman terlihat, dan
+// langsung begitu kembali ke tab ini.
 const JEDA_RIWAYAT_MS = 30000
 let timerRiwayat = null
 function segarkanRiwayat() {
@@ -259,44 +258,34 @@ const estimatedTotal = computed(() =>
       <ReservasiNotice class="mb-4" />
 
       <section
-        v-if="recentOrders.aktif.length > 0"
+        v-if="recentOrders.pesanan.length > 0"
         class="mb-4 space-y-2 rounded-2xl border border-primary/40 bg-primary/10 p-3"
       >
         <p class="px-0.5 text-xs font-semibold">{{ locale.t('pesananKamu') }}</p>
         <button
-          v-for="order in recentOrders.aktif.slice(0, 3)"
+          v-for="order in recentOrders.pesanan"
           :key="order.kodeOrder"
           type="button"
           class="flex w-full items-center gap-2.5 rounded-xl bg-card px-3 py-2.5 text-left transition-colors hover:bg-accent active:bg-accent"
           @click="bukaPesanan(order.kodeOrder)"
         >
-          <span class="size-2.5 shrink-0 rounded-full" :class="STATUS_COLOR[order.status]" />
+          <ReceiptTextIcon v-if="order.status === 'completed'" class="size-4 shrink-0 text-status-completed" />
+          <span v-else class="size-2.5 shrink-0 rounded-full" :class="STATUS_COLOR[order.status]" />
           <span class="min-w-0 flex-1">
             <span class="block text-sm font-medium">{{ locale.t(STATUS_LABEL_KEY[order.status]) }}</span>
-            <span class="block truncate font-mono text-xs text-muted-foreground">{{ order.kodeOrder }}</span>
+            <span
+              v-if="order.status === 'completed' && order.strukBerlakuSampai"
+              class="block truncate text-xs text-muted-foreground"
+              >{{ locale.t('strukSiapSampai', { jam: formatTime(order.strukBerlakuSampai) }) }}</span
+            >
+            <span v-else class="block truncate font-mono text-xs text-muted-foreground">{{ order.kodeOrder }}</span>
           </span>
-          <span class="shrink-0 text-xs font-semibold text-primary-strong">{{ locale.t('lihatStatus') }}</span>
+          <span class="shrink-0 text-xs font-semibold text-primary-strong">{{
+            locale.t(order.status === 'completed' ? 'lihatStruk' : 'lihatStatus')
+          }}</span>
           <ChevronRightIcon class="size-4 shrink-0 text-muted-foreground" />
         </button>
-        <button
-          v-if="recentOrders.daftar.length > recentOrders.aktif.length"
-          type="button"
-          class="px-0.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          @click="recentOrdersOpen = true"
-        >
-          {{ locale.t('lihatSemuaPesanan', { n: recentOrders.daftar.length }) }}
-        </button>
       </section>
-      <button
-        v-else-if="recentOrders.daftar.length > 0"
-        type="button"
-        class="mb-4 flex w-full items-center gap-2.5 rounded-2xl border px-3.5 py-3 text-left text-sm transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent"
-        @click="recentOrdersOpen = true"
-      >
-        <ReceiptIcon class="size-4 shrink-0 text-primary-strong" />
-        <span class="min-w-0 flex-1 font-medium">{{ locale.t('riwayatPesananKamu', { n: recentOrders.daftar.length }) }}</span>
-        <ChevronRightIcon class="size-4 shrink-0 text-muted-foreground" />
-      </button>
 
       <div
         v-if="tutup"
@@ -487,10 +476,6 @@ const estimatedTotal = computed(() =>
     <CallStaffDialog
       :open="callStaffOpen"
       @update:open="callStaffOpen = $event"
-    />
-    <RecentOrdersDialog
-      :open="recentOrdersOpen"
-      @update:open="recentOrdersOpen = $event"
     />
     <BillDialog :open="billOpen" @update:open="billOpen = $event" />
   </div>

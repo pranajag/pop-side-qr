@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { api, formatApiError, API_URL } from '@/lib/api'
@@ -10,6 +10,7 @@ import { playReadySound } from '@/lib/notifySound'
 import { lacakOrder, berhentiLacak, dengarkan, realtimeTersambung } from '@/lib/realtime'
 import logoUrl from '@/assets/pop-side-logo.jpg'
 import { Button } from '@/components/ui/button'
+import StrukDigital from '@/components/StrukDigital.vue'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -105,6 +106,9 @@ function notifyStatus(status) {
 
 const order = ref(null)
 const notFound = ref(false)
+// Pesanan sudah selesai/batal dan jendela struknya habis (API 410
+// PESANAN_BERAKHIR) — tidak bisa dibuka lagi, oleh siapa pun.
+const berakhir = ref(false)
 const loading = ref(true)
 const confirming = ref(false)
 const qrisImage = ref(null)
@@ -168,9 +172,7 @@ const STATUS_STEP_INDEX = {
 const currentStepIndex = computed(
   () => STATUS_STEP_INDEX[order.value?.status] ?? -1
 )
-const showStepper = computed(
-  () => order.value && order.value.status !== 'cancelled'
-)
+const showStepper = computed(() => order.value && !isTerminal.value)
 
 function stepState(i) {
   if (order.value?.status === 'completed') return 'done'
@@ -183,6 +185,25 @@ function stepState(i) {
 // (this cafe has no per-order kitchen-load data to predict one honestly),
 // just an honest "how long has this been sitting" data point.
 const now = ref(Date.now())
+// Batas struk lewat saat halaman masih terbuka: tampilannya ikut hilang,
+// sama seperti kalau halaman ini dibuka ulang (API menjawab 410).
+const kedaluwarsa = computed(
+  () =>
+    isTerminal.value &&
+    !!order.value?.strukBerlakuSampai &&
+    now.value >= new Date(order.value.strukBerlakuSampai).getTime()
+)
+let timerKedaluwarsa = null
+watch(
+  () => order.value?.strukBerlakuSampai,
+  (batas) => {
+    clearTimeout(timerKedaluwarsa)
+    if (!batas) return
+    const sisa = new Date(batas).getTime() - Date.now()
+    timerKedaluwarsa = setTimeout(() => (now.value = Date.now()), Math.max(0, sisa) + 500)
+  }
+)
+
 const elapsedMinutes = computed(() => {
   if (!order.value?.updatedAt) return null
   return Math.max(
@@ -219,6 +240,10 @@ async function load({ silent = false } = {}) {
     // Silent (polling) failures — a rate limit hit, a network blip — just
     // retry next tick and keep showing whatever order data is already on
     // screen, rather than blanking out a page the customer is looking at.
+    if (err.status === 410) {
+      berakhir.value = true
+      return
+    }
     if (silent) return
     if (err.status === 404) {
       notFound.value = true
@@ -235,6 +260,9 @@ let clockTimer = null
 
 onMounted(async () => {
   await load()
+  // Tidak ada yang perlu dilacak: kode salah / bukan milik HP ini, atau
+  // pesanannya sudah berakhir — jangan habiskan jatah request order ini.
+  if (notFound.value || berakhir.value) return
   if (needsQrisPayment.value) {
     try {
       const { settings } = await api.get('/public/settings')
@@ -287,7 +315,15 @@ function terimaStatus(isi) {
   if (!order.value || isi?.kodeOrder !== order.value.kodeOrder) return
   if (!isi.status || isi.status === order.value.status || isTerminal.value) return
   versiEvent += 1
-  order.value = { ...order.value, status: isi.status, updatedAt: new Date().toISOString() }
+  const sekarang = new Date()
+  order.value = { ...order.value, status: isi.status, updatedAt: sekarang.toISOString() }
+  // Selesai/batal: struk langsung tampil dengan perkiraan waktunya; angka
+  // pastinya menyusul lewat muat ulang di bawah.
+  if (isi.status === 'completed' || isi.status === 'cancelled') {
+    const menit = order.value.jendelaStrukMenit
+    order.value.berakhirPada = sekarang.toISOString()
+    order.value.strukBerlakuSampai = menit ? new Date(sekarang.getTime() + menit * 60000).toISOString() : null
+  }
   notifyStatus(isi.status)
   if (timerMuatUlang) return
   timerMuatUlang = setTimeout(
@@ -307,6 +343,7 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', onVisibilityChange)
   clearInterval(statusTimer)
   clearInterval(clockTimer)
+  clearTimeout(timerKedaluwarsa)
   if (buktiPreview.value) URL.revokeObjectURL(buktiPreview.value)
 })
 
@@ -376,6 +413,20 @@ async function copyKode() {
       </p>
     </div>
     <Button variant="outline" @click="router.push({ name: 'menu' })">{{
+      locale.t('kembaliKeMenu')
+    }}</Button>
+  </div>
+
+  <div
+    v-else-if="berakhir || kedaluwarsa"
+    class="flex min-h-svh flex-col items-center justify-center gap-4 px-6 text-center"
+  >
+    <CircleCheckIcon class="size-10 text-status-completed" />
+    <div class="space-y-1">
+      <h1 class="text-lg font-semibold">{{ locale.t('pesananBerakhir') }}</h1>
+      <p class="text-sm text-muted-foreground">{{ locale.t('pesananBerakhirDesc') }}</p>
+    </div>
+    <Button variant="outline" @click="router.replace({ name: 'menu' })">{{
       locale.t('kembaliKeMenu')
     }}</Button>
   </div>
@@ -592,13 +643,7 @@ async function copyKode() {
         </p>
       </div>
 
-      <div
-        v-else-if="order.status === 'completed'"
-        class="space-y-1 rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)] text-center"
-      >
-        <CircleCheckIcon class="mx-auto size-6 text-status-completed" />
-        <p class="text-sm font-medium">{{ locale.t('pesananSelesai') }}</p>
-      </div>
+      <StrukDigital v-else-if="order.status === 'completed'" :order="order" />
 
       <div
         v-else-if="order.status === 'cancelled'"
@@ -662,7 +707,10 @@ async function copyKode() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <div class="space-y-2 rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)]">
+      <div
+        v-if="order.status !== 'completed'"
+        class="space-y-2 rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(13,15,20,0.04)]"
+      >
         <h2 class="text-sm font-semibold text-muted-foreground">
           {{ locale.t('detailPesanan') }}
         </h2>

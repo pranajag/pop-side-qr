@@ -161,6 +161,23 @@ const confirmPaymentLimiter = rateLimit({
   },
 });
 
+// "Tutup struk" (order.service.js tutupStruk): aksi sekali dari customer
+// untuk pesanannya sendiri yang sudah selesai. Jatahnya sendiri, terpisah
+// dari orderStatusLimiter — customer yang bolak-balik menu dan struk sudah
+// memakai jatah cek status pesanan itu, dan tombol Tutup tidak boleh ikut
+// ditolak karenanya. Hanya perangkat pemesan yang bisa menutup (cookie), jadi
+// batas ini sekadar penjaga beban.
+const tutupStrukLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => scopedKey(req, req.params?.kodeOrder),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Terlalu banyak percobaan. Coba lagi sebentar.' });
+  },
+});
+
 // Plain per-IP anti-enumeration backstop, same reasoning as
 // orderStatusIpLimiter — tighter (10/min) since a real customer only ever
 // submits "sudah bayar" for their own order once or twice, never on a
@@ -397,6 +414,7 @@ module.exports = {
   orderStatusIpLimiter,
   confirmPaymentLimiter,
   confirmPaymentIpLimiter,
+  tutupStrukLimiter,
   staffCallLimiter,
   tableVerifyLimiter,
   publicReadLimiter,

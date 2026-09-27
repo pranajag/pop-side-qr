@@ -17,6 +17,7 @@ const {
   orderStatusIpLimiter,
   confirmPaymentLimiter,
   confirmPaymentIpLimiter,
+  tutupStrukLimiter,
   staffCallLimiter,
   tableVerifyLimiter,
   publicReadLimiter,
@@ -85,7 +86,13 @@ router.post(
   orderController.confirmPayment
 );
 router.get('/orders/:kodeOrder', orderStatusIpLimiter, orderStatusLimiter, orderController.track);
-// "Pesanan Saya": order milik perangkat ini (cookie perangkat), 24 jam terakhir.
+// Customer menutup struk digital pesanan yang sudah selesai: sejak itu
+// pesanan tidak bisa dibuka lagi dari perangkat mana pun (order.service.js
+// tutupStruk). Cookie perangkat sameSite=strict — situs lain tidak bisa
+// memicunya atas nama customer.
+router.post('/orders/:kodeOrder/struk/tutup', orderStatusIpLimiter, tutupStrukLimiter, orderController.tutupStruk);
+// "Pesanan kamu": order milik perangkat ini (cookie perangkat) yang masih
+// berjalan, atau baru selesai dan struknya masih bisa diambil.
 router.get('/pesanan-saya', publicReadLimiter, orderController.milikPerangkat);
 // Token berlangganan status order realtime — hanya untuk perangkat pemesan.
 router.get('/orders/:kodeOrder/realtime', orderStatusIpLimiter, orderStatusLimiter, orderController.realtimeToken);

@@ -23,7 +23,6 @@ export const translations = {
     // MenuView
     scanQrTitle: 'Scan QR di meja kamu',
     scanQrDesc: 'Menu cuma bisa dibuka lewat QR yang ditempel di meja.',
-    pesananSayaLabel: 'Pesanan Saya',
     panggilStaffLabel: 'Panggil Staff',
     semua: 'Semua',
     cariMenu: 'Cari menu...',
@@ -94,7 +93,10 @@ export const translations = {
     // Pelacakan terikat ke perangkat pemesan (cookie tersembunyi), jadi kode
     // yang benar pun "tidak ditemukan" kalau dibuka dari HP lain.
     orderTidakDitemukanDesc:
-      'Kode order salah atau sudah kedaluwarsa. Status pesanan hanya bisa dilihat dari HP yang dipakai memesan — kalau perlu, tanyakan ke kasir dengan menyebutkan kode order.',
+      'Kode order salah, atau pesanannya sudah selesai. Status pesanan hanya bisa dilihat dari HP yang dipakai memesan, dan pesanan yang sudah selesai tidak bisa dibuka lagi — kalau perlu, tanyakan ke kasir dengan menyebutkan kode order.',
+    pesananBerakhir: 'Pesanan sudah selesai',
+    pesananBerakhirDesc:
+      'Pesanan yang sudah selesai tidak bisa dibuka lagi — struk digitalnya hanya bisa diunduh sesaat setelah pesanan selesai. Butuh struk? Minta ke kasir.',
     gagalMemuatStatus: 'Gagal memuat status pesanan',
     cobaLagiSebentar: 'Coba lagi sebentar.',
     cobaLagi: 'Coba Lagi',
@@ -116,7 +118,6 @@ export const translations = {
     debit: 'debit',
     menungguVerifikasiKasir: 'Menunggu kasir verifikasi pembayaran',
     sudahNMenit: 'Sudah {n} menit',
-    pesananSelesai: 'Pesanan selesai. Terima kasih!',
     pesananSedangDiproses: 'Pesanan sedang diproses dapur.',
     pesananSiapDiambil: 'Pesanan kamu sudah siap!',
     pesananSiapDiambilDesc: 'Silakan ambil di kasir, sebutkan kode order ini.',
@@ -125,7 +126,7 @@ export const translations = {
     notifDimasak: 'Pesanan kamu sedang dibuat',
     notifDimasakDesc: 'Tunggu sebentar lagi ya.',
     notifSelesai: 'Pesanan kamu selesai',
-    notifSelesaiDesc: 'Terima kasih sudah memesan di Popside!',
+    notifSelesaiDesc: 'Struk digital kamu sudah siap — unduh sekarang.',
     notifDibatalkan: 'Pesanan kamu dibatalkan',
     notifDibatalkanDesc: 'Tanyakan ke staff kalau kamu merasa ini keliru.',
     aktifkanNotifikasi: 'Aktifkan',
@@ -185,11 +186,11 @@ export const translations = {
     // BillDialog
     billLabel: 'Bill',
     billTitle: 'Bill Meja {meja}',
-    billKosong: 'Belum ada pesanan untuk kunjungan ini di meja ini.',
+    billKosong: 'Belum ada pesanan yang sedang diproses di meja ini.',
     billTotalKeseluruhan: 'Total Keseluruhan',
     billJumlahPesanan: '{n} pesanan',
     billScopeNote:
-      'Cuma pesanan dari kunjungan meja ini yang sedang berjalan — bukan gabungan dari pengunjung sebelumnya.',
+      'Cuma pesanan meja ini yang masih diproses. Pesanan yang sudah selesai tidak ditampilkan lagi — struknya ada di HP pemesan.',
 
     // CallStaffDialog
     panggilStaffTitle: 'Panggil Staff',
@@ -204,12 +205,39 @@ export const translations = {
     jumlah: 'Jumlah',
     tambahHarga: 'Tambah · {price}',
 
-    // RecentOrdersDialog + kartu "Pesanan kamu" di menu
-    belumAdaPesananDiPerangkat: 'Belum ada pesanan di perangkat ini.',
+    // Kartu "Pesanan kamu" di menu
     pesananKamu: 'Pesanan kamu',
     lihatStatus: 'Lihat status',
-    lihatSemuaPesanan: 'Lihat semua pesanan ({n})',
-    riwayatPesananKamu: 'Riwayat pesanan kamu ({n})',
+    lihatStruk: 'Lihat struk',
+    strukSiapSampai: 'Struk siap sampai {jam}',
+
+    // StrukDigital (halaman status) + isi struk PNG/PDF (lib/struk.js)
+    strukDigitalJudul: 'Struk digital kamu',
+    strukDigitalDesc:
+      'Pesanan sudah selesai. Unduh struknya sebelum pukul {jam} — setelah itu, atau setelah struk ditutup, pesanan ini tidak bisa dibuka lagi.',
+    strukAlt: 'Struk pesanan {kode}',
+    menyiapkanStruk: 'Menyiapkan struk…',
+    gagalMembuatStruk: 'Struk gagal dibuat. Coba muat ulang halaman ini.',
+    unduhPdf: 'Unduh PDF',
+    unduhPng: 'Unduh PNG',
+    tutupStruk: 'Selesai, tutup struk',
+    tutupStrukJudul: 'Tutup struk?',
+    tutupStrukDesc:
+      'Setelah ditutup, pesanan ini hilang dari HP kamu dan tidak bisa dibuka lagi. Pastikan struknya sudah diunduh.',
+    nantiDulu: 'Nanti dulu',
+    yaTutupStruk: 'Ya, tutup',
+    strukDitutup: 'Struk ditutup. Terima kasih sudah memesan!',
+    strukLunasSelesai: 'LUNAS · SELESAI',
+    strukKode: 'Kode',
+    strukTipe: 'Tipe',
+    strukDipesan: 'Dipesan',
+    strukBayar: 'Bayar',
+    strukPajak: 'Pajak',
+    strukTotal: 'TOTAL',
+    strukTunai: 'Tunai',
+    strukKembalian: 'Kembalian',
+    strukTerimaKasih: 'Terima kasih!',
+    strukDibuat: 'Struk digital · {waktu}',
 
     // QtyStepper
     kurangiJumlah: 'Kurangi jumlah',
@@ -235,7 +263,6 @@ export const translations = {
     scanQrTitle: 'Scan the QR at your table',
     scanQrDesc:
       'The menu can only be opened by scanning the QR code on your table.',
-    pesananSayaLabel: 'My Orders',
     panggilStaffLabel: 'Call Staff',
     semua: 'All',
     cariMenu: 'Search menu...',
@@ -301,7 +328,10 @@ export const translations = {
     statusCancelled: 'Cancelled',
     orderTidakDitemukan: 'Order not found',
     orderTidakDitemukanDesc:
-      "Wrong order code, or it has expired. An order's status can only be viewed on the phone that placed it — ask the cashier with your order code if needed.",
+      "Wrong order code, or the order is already finished. An order's status can only be viewed on the phone that placed it, and finished orders can't be opened again — ask the cashier with your order code if needed.",
+    pesananBerakhir: 'This order is finished',
+    pesananBerakhirDesc:
+      "Finished orders can't be opened again — the digital receipt can only be downloaded shortly after the order is completed. Need a receipt? Ask the cashier.",
     gagalMemuatStatus: 'Failed to load order status',
     cobaLagiSebentar: 'Please try again shortly.',
     cobaLagi: 'Try Again',
@@ -323,7 +353,6 @@ export const translations = {
     debit: 'debit',
     menungguVerifikasiKasir: 'Waiting for cashier to verify payment',
     sudahNMenit: '{n} min so far',
-    pesananSelesai: 'Order completed. Thank you!',
     pesananSedangDiproses: 'Your order is being prepared.',
     pesananSiapDiambil: 'Your order is ready!',
     pesananSiapDiambilDesc: 'Please pick it up at the counter — mention this order code.',
@@ -332,7 +361,7 @@ export const translations = {
     notifDimasak: 'Your order is being prepared',
     notifDimasakDesc: 'Just a little longer.',
     notifSelesai: 'Your order is complete',
-    notifSelesaiDesc: 'Thanks for ordering at Popside!',
+    notifSelesaiDesc: 'Your digital receipt is ready — download it now.',
     notifDibatalkan: 'Your order was cancelled',
     notifDibatalkanDesc: 'Ask a staff member if you think this is a mistake.',
     aktifkanNotifikasi: 'Enable',
@@ -392,11 +421,11 @@ export const translations = {
     // BillDialog
     billLabel: 'Bill',
     billTitle: 'Table {meja} Bill',
-    billKosong: 'No orders yet for this visit at this table.',
+    billKosong: 'No orders in progress at this table.',
     billTotalKeseluruhan: 'Grand Total',
     billJumlahPesanan: '{n} orders',
     billScopeNote:
-      "Only orders from this table's current visit — not combined with earlier guests.",
+      "Only this table's orders that are still in progress. Finished orders are no longer shown — their receipt is on the phone that ordered.",
 
     panggilStaffTitle: 'Call Staff',
     mintaAirPutih: 'Request Water',
@@ -409,11 +438,37 @@ export const translations = {
     jumlah: 'Quantity',
     tambahHarga: 'Add · {price}',
 
-    belumAdaPesananDiPerangkat: 'No orders yet on this device.',
     pesananKamu: 'Your orders',
     lihatStatus: 'View status',
-    lihatSemuaPesanan: 'See all orders ({n})',
-    riwayatPesananKamu: 'Your order history ({n})',
+    lihatStruk: 'View receipt',
+    strukSiapSampai: 'Receipt ready until {jam}',
+
+    strukDigitalJudul: 'Your digital receipt',
+    strukDigitalDesc:
+      'Your order is complete. Download the receipt before {jam} — after that, or once you close it, this order can no longer be opened.',
+    strukAlt: 'Receipt for order {kode}',
+    menyiapkanStruk: 'Preparing receipt…',
+    gagalMembuatStruk: 'Could not create the receipt. Try reloading this page.',
+    unduhPdf: 'Download PDF',
+    unduhPng: 'Download PNG',
+    tutupStruk: 'Done, close receipt',
+    tutupStrukJudul: 'Close the receipt?',
+    tutupStrukDesc:
+      "Once closed, this order disappears from your phone and can't be opened again. Make sure you've downloaded the receipt.",
+    nantiDulu: 'Not yet',
+    yaTutupStruk: 'Yes, close',
+    strukDitutup: 'Receipt closed. Thanks for ordering!',
+    strukLunasSelesai: 'PAID · COMPLETED',
+    strukKode: 'Code',
+    strukTipe: 'Type',
+    strukDipesan: 'Ordered',
+    strukBayar: 'Payment',
+    strukPajak: 'Tax',
+    strukTotal: 'TOTAL',
+    strukTunai: 'Cash',
+    strukKembalian: 'Change',
+    strukTerimaKasih: 'Thank you!',
+    strukDibuat: 'Digital receipt · {waktu}',
 
     kurangiJumlah: 'Decrease quantity',
     tambahJumlah: 'Increase quantity',

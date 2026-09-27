@@ -5,7 +5,6 @@ import { toast } from 'vue-sonner'
 import { useTableStore } from '@/stores/table'
 import { useCartStore } from '@/stores/cart'
 import { useMenuStore } from '@/stores/menu'
-import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { useLocaleStore } from '@/stores/locale'
 import { useCafeStatusStore } from '@/stores/cafeStatus'
 import { api, formatApiError } from '@/lib/api'
@@ -41,7 +40,6 @@ import {
 const table = useTableStore()
 const cart = useCartStore()
 const menu = useMenuStore()
-const recentOrders = useRecentOrdersStore()
 const locale = useLocaleStore()
 const cafeStatus = useCafeStatusStore()
 const router = useRouter()
@@ -285,7 +283,6 @@ async function onSubmit() {
     const { order } = await api.post('/public/orders', payload)
     cart.clear()
     clearCheckoutDraft()
-    recentOrders.add(order.kodeOrder, order.createdAt)
     router.replace({ name: 'order', params: { kodeOrder: order.kodeOrder } })
   } catch (err) {
     // err.status is only ever set once a real HTTP response came back

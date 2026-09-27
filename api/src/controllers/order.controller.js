@@ -31,6 +31,12 @@ async function realtimeToken(req, res) {
   res.json({ token: realtime.tokenOrder(id) });
 }
 
+// Customer selesai dengan struk digitalnya — pesanan dilepas dari perangkat.
+async function tutupStruk(req, res) {
+  await orderService.tutupStruk(req.params.kodeOrder, sidikPerangkat(req));
+  res.status(204).end();
+}
+
 async function milikPerangkat(req, res) {
   res.json({ orders: await orderService.daftarMilikPerangkat(sidikPerangkat(req)) });
 }
@@ -40,4 +46,4 @@ async function bill(req, res) {
   res.json({ bill });
 }
 
-module.exports = { create, confirmPayment, track, realtimeToken, milikPerangkat, bill };
+module.exports = { create, confirmPayment, track, realtimeToken, tutupStruk, milikPerangkat, bill };

@@ -4,7 +4,7 @@ const { generateOrderCode } = require('../utils/orderCode');
 const { isUniqueConstraintError } = require('../utils/prismaErrors');
 const { resolveProductVariants } = require('../utils/productVariants');
 const { jakartaDayBoundsUTC } = require('../utils/jakartaTime');
-const { NON_TERMINAL_STATUSES } = require('../utils/orderStatus');
+const { NON_TERMINAL_STATUSES, TERMINAL_STATUSES } = require('../utils/orderStatus');
 const tableService = require('./table.service');
 const paymentProof = require('./paymentProof.service');
 const customerService = require('./customer.service');
@@ -22,6 +22,38 @@ const realtime = require('../realtime');
 // tidak ada yang bisa dipelajari dengan menebak kode.
 function milikPerangkat(order, deviceHash) {
   return Boolean(order?.deviceHash && deviceHash && samaAman(order.deviceHash, deviceHash));
+}
+
+// Pesanan yang sudah selesai (atau batal) tidak bisa dibuka lagi dari web
+// publik — permintaan pemilik: riwayatnya tidak boleh terlihat, baik oleh
+// customer yang sama maupun orang lain. Satu-satunya pengecualian: perangkat
+// pemesannya sendiri, selama JENDELA_STRUK_MS sesudah pesanan berakhir,
+// untuk menerima dan mengunduh struk digitalnya (PDF/PNG) — cukup lama
+// supaya struk tidak hilang hanya karena layar HP mati atau halamannya
+// termuat ulang sebelum sempat diunduh. Sesudah itu, atau begitu customer
+// menutup struknya (tutupStruk), pesanan itu hilang dari halaman status,
+// "Pesanan kamu", dan bill meja. Staff tetap melihat semuanya.
+const JENDELA_STRUK_MS = 30 * 60 * 1000;
+
+// Kapan pesanan berakhir: log status terakhirnya ke completed/cancelled
+// (updateStatus di orderManagement.service.js selalu menulis log itu).
+// updatedAt hanya cadangan — kolom itu ikut berubah oleh pembaruan lain.
+const LOG_BERAKHIR = {
+  where: { statusTo: { in: [...TERMINAL_STATUSES] } },
+  orderBy: { createdAt: 'desc' },
+  take: 1,
+  select: { createdAt: true },
+};
+function waktuBerakhir(order) {
+  return order.statusLogs?.[0]?.createdAt ?? order.updatedAt;
+}
+function strukBerlakuSampai(order) {
+  return new Date(waktuBerakhir(order).getTime() + JENDELA_STRUK_MS);
+}
+// Pesanan yang masih boleh tampil di web publik (untuk pemesannya): belum
+// berakhir, atau berakhir kurang dari JENDELA_STRUK_MS yang lalu.
+function masihTerlihat(order, sekarang) {
+  return !TERMINAL_STATUSES.has(order.status) || sekarang < strukBerlakuSampai(order);
 }
 
 const MAX_CODE_ATTEMPTS = 5;
@@ -484,23 +516,30 @@ async function confirmQrisPayment(kodeOrder, fileBuffer, deviceHash) {
 
 // Id order untuk token realtime (realtime.js) — aturannya sama persis
 // dengan pelacakan: hanya perangkat pemesan, selain itu "tidak ditemukan".
-async function idMilikPerangkat(kodeOrder, deviceHash) {
+async function idMilikPerangkat(kodeOrder, deviceHash, sekarang = new Date()) {
   if (!KODE_ORDER_PATTERN.test(kodeOrder)) throw new AppError(404, 'Order tidak ditemukan');
-  const order = await prisma.order.findUnique({ where: { kodeOrder }, select: { id: true, deviceHash: true } });
+  const order = await prisma.order.findUnique({
+    where: { kodeOrder },
+    select: { id: true, deviceHash: true, status: true, updatedAt: true, statusLogs: LOG_BERAKHIR },
+  });
   if (!order || !milikPerangkat(order, deviceHash)) throw new AppError(404, 'Order tidak ditemukan');
+  if (!masihTerlihat(order, sekarang)) {
+    throw new AppError(410, 'Pesanan ini sudah selesai dan tidak bisa dibuka lagi.', 'PESANAN_BERAKHIR');
+  }
   return order.id;
 }
 
-// "Pesanan Saya" di web publik: order dari perangkat ini dalam 24 jam
-// terakhir (umur cookie perangkat, utils/cookiePublik.js), terbaru dulu.
+// Kartu "Pesanan kamu" di web publik: order dari perangkat ini dalam 24 jam
+// terakhir (umur cookie perangkat, utils/cookiePublik.js), terbaru dulu —
+// yang masih berjalan, plus yang baru berakhir selama struknya masih bisa
+// diambil (JENDELA_STRUK_MS). Riwayat pesanan selesai tidak ada di sini.
 // Terikat cookie perangkat yang sama dengan pelacakan status — perangkat
 // lain tidak bisa meminta daftar ini, dan tidak ada kode yang bisa ditebak.
-// Isinya hanya yang memang sudah diketahui pemesannya sendiri.
 const RIWAYAT_PERANGKAT_MS = 24 * 60 * 60 * 1000;
-async function daftarMilikPerangkat(deviceHash) {
+async function daftarMilikPerangkat(deviceHash, sekarang = new Date()) {
   if (!deviceHash) return [];
   const orders = await prisma.order.findMany({
-    where: { deviceHash, createdAt: { gte: new Date(Date.now() - RIWAYAT_PERANGKAT_MS) } },
+    where: { deviceHash, createdAt: { gte: new Date(sekarang.getTime() - RIWAYAT_PERANGKAT_MS) } },
     orderBy: { createdAt: 'desc' },
     take: 10,
     select: {
@@ -509,22 +548,27 @@ async function daftarMilikPerangkat(deviceHash) {
       metode: true,
       totalHarga: true,
       createdAt: true,
+      updatedAt: true,
       table: { select: { nomorMeja: true } },
       items: { select: { qty: true, product: { select: { nama: true } } } },
+      statusLogs: LOG_BERAKHIR,
     },
   });
-  return orders.map((o) => ({
-    kodeOrder: o.kodeOrder,
-    status: o.status,
-    metode: o.metode,
-    totalHarga: Number(o.totalHarga),
-    createdAt: o.createdAt,
-    nomorMeja: o.table?.nomorMeja ?? null,
-    ringkasan: o.items.map((i) => `${i.qty}x ${i.product.nama}`).join(', '),
-  }));
+  return orders
+    .filter((o) => masihTerlihat(o, sekarang))
+    .map((o) => ({
+      kodeOrder: o.kodeOrder,
+      status: o.status,
+      metode: o.metode,
+      totalHarga: Number(o.totalHarga),
+      createdAt: o.createdAt,
+      nomorMeja: o.table?.nomorMeja ?? null,
+      ringkasan: o.items.map((i) => `${i.qty}x ${i.product.nama}`).join(', '),
+      strukBerlakuSampai: TERMINAL_STATUSES.has(o.status) ? strukBerlakuSampai(o) : null,
+    }));
 }
 
-async function getByCode(kodeOrder, deviceHash) {
+async function getByCode(kodeOrder, deviceHash, sekarang = new Date()) {
   if (!KODE_ORDER_PATTERN.test(kodeOrder)) {
     throw new AppError(404, 'Order tidak ditemukan');
   }
@@ -536,11 +580,23 @@ async function getByCode(kodeOrder, deviceHash) {
         include: { product: { select: { nama: true, category: { select: { estimasiMenit: true } } } }, variants: true },
       },
       table: { select: { nomorMeja: true } },
+      payment: { select: { cashReceived: true } },
+      statusLogs: LOG_BERAKHIR,
     },
   });
   if (!order || !milikPerangkat(order, deviceHash)) {
     throw new AppError(404, 'Order tidak ditemukan');
   }
+  // Hanya pemesannya yang sampai di sini (perangkat lain sudah mendapat
+  // 404 di atas), jadi boleh diberi tahu apa yang terjadi.
+  if (!masihTerlihat(order, sekarang)) {
+    throw new AppError(410, 'Pesanan ini sudah selesai dan tidak bisa dibuka lagi.', 'PESANAN_BERAKHIR');
+  }
+  const berakhir = TERMINAL_STATUSES.has(order.status);
+  const cashReceived =
+    order.payment?.cashReceived === null || order.payment?.cashReceived === undefined
+      ? null
+      : Number(order.payment.cashReceived);
 
   // Slowest category among the items wins — the order isn't "ready" until
   // everything on it is, and this app has no real per-item kitchen timing
@@ -565,6 +621,16 @@ async function getByCode(kodeOrder, deviceHash) {
     customerName: order.customerName,
     pointsEarned: order.pointsEarned ?? 0,
     estimasiMenit,
+    // Untuk struk digital: sama dengan struk cetak kasir (uang tunai yang
+    // diserahkan dan kembaliannya), plus kapan pesanan berakhir dan sampai
+    // kapan struknya masih bisa diambil.
+    cashReceived,
+    changeAmount: cashReceived === null ? null : cashReceived - Number(order.totalHarga),
+    berakhirPada: berakhir ? waktuBerakhir(order) : null,
+    strukBerlakuSampai: berakhir ? strukBerlakuSampai(order) : null,
+    // Layar status yang menerima "selesai" lewat realtime memperkirakan
+    // batas struk dari sini sampai data lengkapnya dimuat ulang.
+    jendelaStrukMenit: JENDELA_STRUK_MS / 60000,
     items: order.items.map((item) => ({
       nama: item.product.nama,
       qty: item.qty,
@@ -575,6 +641,33 @@ async function getByCode(kodeOrder, deviceHash) {
   };
 }
 
+// "Tutup struk" dari halaman status: customer sudah selesai dengan struknya,
+// jadi pesanan ini dilepas dari perangkatnya sekarang juga — tidak menunggu
+// JENDELA_STRUK_MS habis. Sidik perangkatnya dikosongkan (sama dengan order
+// buatan staff): halaman status, token realtime, dan "Pesanan kamu" langsung
+// menjawab "tidak ditemukan" untuk perangkat itu. updatedAt sengaja tidak
+// ikut berubah — kolom itu dipakai sinkronisasi API eksternal (listSince)
+// dan rekap pembatalan shift; melepas perangkat bukan perubahan pesanan.
+async function tutupStruk(kodeOrder, deviceHash) {
+  if (!KODE_ORDER_PATTERN.test(kodeOrder)) {
+    throw new AppError(404, 'Order tidak ditemukan');
+  }
+  const order = await prisma.order.findUnique({
+    where: { kodeOrder },
+    select: { id: true, status: true, deviceHash: true, updatedAt: true },
+  });
+  if (!order || !milikPerangkat(order, deviceHash)) {
+    throw new AppError(404, 'Order tidak ditemukan');
+  }
+  if (!TERMINAL_STATUSES.has(order.status)) {
+    throw new AppError(409, 'Pesanan ini belum selesai.');
+  }
+  await prisma.order.updateMany({
+    where: { id: order.id, deviceHash: order.deviceHash },
+    data: { deviceHash: null, updatedAt: order.updatedAt },
+  });
+}
+
 // Combined bill for a table's current visit — this is a pay-as-you-go
 // system (each order is paid individually, at ordering time, not at the
 // end), so this doesn't collect a debt; it's a running summary for a table
@@ -583,6 +676,12 @@ async function getByCode(kodeOrder, deviceHash) {
 // to today (Asia/Jakarta) since a table gets reused indefinitely and there's
 // no visit/session concept in the schema — "today's orders on this table"
 // is the closest available proxy for "this visit".
+//
+// Hanya pesanan yang masih berjalan. Bill terbaca siapa pun yang memindai
+// QR meja ini, jadi pesanan yang sudah selesai (atau batal) tidak pernah
+// ikut — riwayatnya tidak boleh terlihat oleh customer lain di meja yang
+// sama, dan pemesannya sendiri sudah menerima struk digital (lihat
+// JENDELA_STRUK_MS di atas).
 async function getTableBill(token) {
   const table = await tableService.verifyToken(token);
   if (!table) {
@@ -597,7 +696,7 @@ async function getTableBill(token) {
   const orders = await prisma.order.findMany({
     where: {
       tableId: table.id,
-      status: { not: 'cancelled' },
+      status: { in: NON_TERMINAL_STATUSES },
       createdAt: { gte: visitStart },
     },
     include: { items: { include: { product: { select: { nama: true } } } } },
@@ -628,6 +727,8 @@ module.exports = {
   getByCode,
   idMilikPerangkat,
   daftarMilikPerangkat,
+  tutupStruk,
   getTableBill,
   alasanUntukPelanggan,
+  JENDELA_STRUK_MS,
 };
