@@ -12,7 +12,7 @@ const { otpTersedia } = require('../utils/pengirimOtp');
 // Invalid lines are reported in `issues` rather than failing the whole
 // request, so the frontend can show exactly what changed instead of a
 // generic error.
-async function computeTotal(items, customerPhone, token, { terverifikasi = false } = {}) {
+async function computeTotal(items, customerPhone, token, { terverifikasi = false, boleh = terverifikasi } = {}) {
   // Nomor HP = pertanyaan tentang data orang lain (terdaftar? poinnya
   // berapa?), jadi hanya dijawab untuk meja yang benar-benar ada — sama
   // seperti createOrder. Tanpa ini token palsu yang berbeda tiap request
@@ -74,12 +74,14 @@ async function computeTotal(items, customerPhone, token, { terverifikasi = false
   // quoted here is the number that will actually be charged: member
   // discount off the subtotal, then tax/service on what remains.
   //
-  // Detail member (poin, tier, diskon) HANYA untuk nomor yang sudah
-  // diverifikasi OTP oleh pemesan ini (memberOtp.service.js). Sebelum itu,
-  // jawabannya sama persis untuk nomor apa pun — member atau bukan — jadi
-  // tidak ada yang bisa dipelajari tentang nomor orang lain dari sini.
+  // Diskon mengikuti memberOtp.service.js aksesDiskonMember (`boleh`):
+  // selama OTP tersedia, detail member (tier, diskon) HANYA untuk nomor yang
+  // sudah diverifikasi pemesan ini — sebelum itu jawabannya sama persis untuk
+  // nomor apa pun, member atau bukan. Tanpa pengirim OTP, diskon tier
+  // langsung dihitung; saldo poin persisnya tetap hanya untuk nomor yang
+  // terverifikasi, karena itu data pemilik nomor.
   const memberEnabled = await settingsService.isMemberEnabled(prisma);
-  const { customer, tier, discountAmount } = terverifikasi
+  const { customer, tier, discountAmount } = boleh
     ? await customerService.resolveMemberDiscount(prisma, customerPhone, subtotal)
     : { customer: null, tier: null, discountAmount: 0 };
   const afterDiscount = subtotal - discountAmount;
@@ -88,11 +90,14 @@ async function computeTotal(items, customerPhone, token, { terverifikasi = false
   // berapa yang harus dikumpulkan supaya pesanan berikutnya dapat diskon.
   // Nomor yang belum diverifikasi juga dihitung dari 0: saldo aslinya
   // adalah data pemilik nomor.
+  // Diskon otomatis tanpa verifikasi: tingkatan berikutnya dihitung dari
+  // saldo asli, tapi selisih poinnya tidak dibuka (kurangPoin null).
+  const saldoRahasia = boleh && !terverifikasi;
   let nextTier = null;
   if (customerPhone && memberEnabled) {
     const saldo = customer?.points ?? 0;
     const tier = await loyaltyTierService.nextTier(prisma, saldo);
-    if (tier) nextTier = { ...tier, kurangPoin: tier.minPoints - saldo };
+    if (tier) nextTier = { ...tier, kurangPoin: saldoRahasia ? null : tier.minPoints - saldo };
   }
 
   const { taxAmount, serviceChargeAmount, totalHarga } = await settingsService.computeTaxAndService(
@@ -122,7 +127,7 @@ async function computeTotal(items, customerPhone, token, { terverifikasi = false
     member:
       customer === null
         ? null
-        : { telepon: customerPhone, points: customer.points, tier, discountAmount },
+        : { telepon: customerPhone, points: saldoRahasia ? null : customer.points, tier, discountAmount },
     // Null kalau tidak ada nomor, fitur member mati, atau sudah di tingkatan
     // tertinggi.
     nextTier,
@@ -131,6 +136,9 @@ async function computeTotal(items, customerPhone, token, { terverifikasi = false
     verifikasiMember: {
       tersedia: Boolean(customerPhone) && memberEnabled && otpTersedia(),
       terverifikasi: Boolean(customerPhone) && terverifikasi,
+      // Diskon member dipakai tanpa verifikasi (tidak ada pengirim OTP) —
+      // checkout memberi tahu bahwa kasir bisa mencocokkan pemilik nomor.
+      otomatis: Boolean(customerPhone) && memberEnabled && saldoRahasia,
     },
     issues,
   };

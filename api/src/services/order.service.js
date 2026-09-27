@@ -30,6 +30,14 @@ const MAX_CODE_ATTEMPTS = 5;
 // gerbang ini. Bentuk lengkapnya dijelaskan di utils/orderCode.js.
 const KODE_ORDER_PATTERN = /^ORD-\d{8}-[A-Z0-9]{4}(?:-(?:M[A-Z0-9]{1,4}|TA))?$/;
 
+// Ditempel di alasan diskon member yang dipakai tanpa verifikasi OTP
+// (memberOtp.service.js aksesDiskonMember) — untuk kasir saja: layar dan
+// data untuk customer memakai alasanUntukPelanggan().
+const TANDA_BELUM_DIVERIFIKASI = ' · belum diverifikasi, cek pemilik nomor';
+function alasanUntukPelanggan(alasan) {
+  return alasan ? alasan.replace(TANDA_BELUM_DIVERIFIKASI, '') : alasan;
+}
+
 // A table's "visit" is the run of orders from one seating, with no schema
 // concept of its own — approximated here as "since the last time this table
 // had zero non-terminal orders". Bumping it right before a genuinely new
@@ -126,7 +134,10 @@ async function buildOrderItems(tx, items) {
 // with the checkout preview so both quote the same total.
 const { computeTaxAndService } = settingsService;
 
-async function createOrder({ token, metode, catatan, items, idempotencyKey, customerPhone }, { deviceHash = null, memberTerverifikasi = false } = {}) {
+async function createOrder(
+  { token, metode, catatan, items, idempotencyKey, customerPhone },
+  { deviceHash = null, memberTerverifikasi = false, diskonMemberBoleh = memberTerverifikasi } = {}
+) {
   const table = await tableService.verifyToken(token);
   if (!table) {
     throw new AppError(404, 'Meja tidak valid. Coba scan ulang QR.');
@@ -187,11 +198,13 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
         // service on the remainder), so what was previewed is what gets
         // charged.
         //
-        // Diskon tier hanya kalau nomor itu sudah diverifikasi OTP oleh
-        // pemesan ini (memberOtp.service.js) — tahu nomor HP member orang
-        // lain tidak cukup untuk memakai diskonnya. Tanpa verifikasi, order
-        // tetap jalan tanpa diskon, dan poinnya tetap masuk ke pemilik nomor.
-        const { tier, discountAmount } = memberTerverifikasi
+        // Diskon tier mengikuti memberOtp.service.js aksesDiskonMember:
+        // selama OTP tersedia, hanya untuk nomor yang sudah diverifikasi
+        // pemesan ini — tahu nomor HP member orang lain tidak cukup. Tanpa
+        // pengirim OTP, diskon otomatis dari tier nomor itu, dan alasannya
+        // ditandai supaya kasir mencocokkan pemilik nomor saat bayar. Tanpa
+        // diskon, order tetap jalan dan poinnya tetap masuk ke pemilik nomor.
+        const { tier, discountAmount } = diskonMemberBoleh
           ? await customerService.resolveMemberDiscount(tx, customerPhone, subtotal)
           : { tier: null, discountAmount: 0 };
         const afterDiscount = subtotal - discountAmount;
@@ -236,7 +249,9 @@ async function createOrder({ token, metode, catatan, items, idempotencyKey, cust
             // the tracking page wraps it in its own "Diskon" label, and
             // matches the phrasing Pesanan Manual already writes for the
             // staff-applied version of the same discount.
-            discountReason: tier ? `Member ${tier.discountPercent}% (≥ ${tier.minPoints} poin)` : null,
+            discountReason: tier
+              ? `Member ${tier.discountPercent}% (≥ ${tier.minPoints} poin)${memberTerverifikasi ? '' : TANDA_BELUM_DIVERIFIKASI}`
+              : null,
             taxAmount,
             serviceChargeAmount,
             catatan,
@@ -476,6 +491,39 @@ async function idMilikPerangkat(kodeOrder, deviceHash) {
   return order.id;
 }
 
+// "Pesanan Saya" di web publik: order dari perangkat ini dalam 24 jam
+// terakhir (umur cookie perangkat, utils/cookiePublik.js), terbaru dulu.
+// Terikat cookie perangkat yang sama dengan pelacakan status — perangkat
+// lain tidak bisa meminta daftar ini, dan tidak ada kode yang bisa ditebak.
+// Isinya hanya yang memang sudah diketahui pemesannya sendiri.
+const RIWAYAT_PERANGKAT_MS = 24 * 60 * 60 * 1000;
+async function daftarMilikPerangkat(deviceHash) {
+  if (!deviceHash) return [];
+  const orders = await prisma.order.findMany({
+    where: { deviceHash, createdAt: { gte: new Date(Date.now() - RIWAYAT_PERANGKAT_MS) } },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+    select: {
+      kodeOrder: true,
+      status: true,
+      metode: true,
+      totalHarga: true,
+      createdAt: true,
+      table: { select: { nomorMeja: true } },
+      items: { select: { qty: true, product: { select: { nama: true } } } },
+    },
+  });
+  return orders.map((o) => ({
+    kodeOrder: o.kodeOrder,
+    status: o.status,
+    metode: o.metode,
+    totalHarga: Number(o.totalHarga),
+    createdAt: o.createdAt,
+    nomorMeja: o.table?.nomorMeja ?? null,
+    ringkasan: o.items.map((i) => `${i.qty}x ${i.product.nama}`).join(', '),
+  }));
+}
+
 async function getByCode(kodeOrder, deviceHash) {
   if (!KODE_ORDER_PATTERN.test(kodeOrder)) {
     throw new AppError(404, 'Order tidak ditemukan');
@@ -507,7 +555,7 @@ async function getByCode(kodeOrder, deviceHash) {
     metode: order.metode,
     totalHarga: Number(order.totalHarga),
     discountAmount: order.discountAmount === null ? 0 : Number(order.discountAmount),
-    discountReason: order.discountReason,
+    discountReason: alasanUntukPelanggan(order.discountReason),
     taxAmount: Number(order.taxAmount),
     serviceChargeAmount: Number(order.serviceChargeAmount),
     catatan: order.catatan,
@@ -573,4 +621,13 @@ async function getTableBill(token) {
   return { nomorMeja: table.nomorMeja, orders: shaped, total };
 }
 
-module.exports = { createOrder, createManualOrder, confirmQrisPayment, getByCode, idMilikPerangkat, getTableBill };
+module.exports = {
+  createOrder,
+  createManualOrder,
+  confirmQrisPayment,
+  getByCode,
+  idMilikPerangkat,
+  daftarMilikPerangkat,
+  getTableBill,
+  alasanUntukPelanggan,
+};

@@ -4,8 +4,8 @@ const { tokenMember } = require('../utils/cookiePublik');
 
 async function total(req, res) {
   const { items, customerPhone, token } = req.body;
-  const terverifikasi = memberOtpService.sudahTerverifikasi(tokenMember(req), customerPhone);
-  const result = await cartService.computeTotal(items, customerPhone, token, { terverifikasi });
+  const akses = memberOtpService.aksesDiskonMember(tokenMember(req), customerPhone);
+  const result = await cartService.computeTotal(items, customerPhone, token, akses);
   res.json(result);
 }
 

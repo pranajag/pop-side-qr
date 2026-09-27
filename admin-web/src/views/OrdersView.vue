@@ -636,6 +636,9 @@ async function onCancelConfirm() {
         <p v-if="order.discountAmount > 0" class="text-xs text-destructive">
           Diskon {{ formatRupiah(order.discountAmount) }}{{ order.discountReason ? ` — ${order.discountReason}` : '' }}
         </p>
+        <p v-if="order.member" class="text-xs text-muted-foreground">
+          Member: {{ order.member.nama || 'tanpa nama' }} · nomor …{{ order.member.teleponAkhir }}
+        </p>
 
         <div
           class="flex items-center justify-between border-t pt-2 text-sm font-semibold"
@@ -753,6 +756,10 @@ async function onCancelConfirm() {
             <span v-if="confirmTarget?.discountReason" class="font-normal text-muted-foreground">
               — {{ confirmTarget.discountReason }}
             </span>
+          </p>
+          <p v-if="confirmTarget?.member" class="text-muted-foreground">
+            Member: <strong class="text-foreground">{{ confirmTarget.member.nama || 'tanpa nama' }}</strong>
+            · nomor berakhiran <strong class="text-foreground">{{ confirmTarget.member.teleponAkhir }}</strong>
           </p>
           <div class="flex justify-between text-muted-foreground">
             <span>Sebelum diskon</span>

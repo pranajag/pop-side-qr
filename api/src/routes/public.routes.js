@@ -85,6 +85,8 @@ router.post(
   orderController.confirmPayment
 );
 router.get('/orders/:kodeOrder', orderStatusIpLimiter, orderStatusLimiter, orderController.track);
+// "Pesanan Saya": order milik perangkat ini (cookie perangkat), 24 jam terakhir.
+router.get('/pesanan-saya', publicReadLimiter, orderController.milikPerangkat);
 // Token berlangganan status order realtime — hanya untuk perangkat pemesan.
 router.get('/orders/:kodeOrder/realtime', orderStatusIpLimiter, orderStatusLimiter, orderController.realtimeToken);
 router.post('/call-staff', staffCallLimiter, staffCallMejaLimiter, validate(createStaffCallSchema), staffCallController.create);

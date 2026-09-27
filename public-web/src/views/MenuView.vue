@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { useRouter } from 'vue-router'
 import { useTableStore } from '@/stores/table'
@@ -10,6 +10,7 @@ import { useLocaleStore } from '@/stores/locale'
 import { useThemeStore } from '@/stores/theme'
 import { useCafeStatusStore } from '@/stores/cafeStatus'
 import { formatRupiah } from '@/lib/format'
+import { STATUS_LABEL_KEY, STATUS_COLOR } from '@/lib/orderStatus'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -99,6 +100,15 @@ watch(
   { immediate: true }
 )
 
+// "Pesanan kamu" di atas menu: status pesanan milik perangkat ini, dari
+// server — tetap ada setelah halaman status ditutup. Diperbarui berkala
+// selama halaman terlihat, dan langsung begitu kembali ke tab ini.
+const JEDA_RIWAYAT_MS = 30000
+let timerRiwayat = null
+function segarkanRiwayat() {
+  if (document.visibilityState !== 'hidden') recentOrders.muat()
+}
+
 onMounted(() => {
   // Setelah scan QR info reservasinya masih segar; setelah reload halaman
   // belum pernah dicek — perbaruiReservasi sendiri yang memutuskan.
@@ -107,7 +117,18 @@ onMounted(() => {
     menu.fetchMenu()
   }
   cafeStatus.fetch()
+  recentOrders.muat()
+  timerRiwayat = setInterval(segarkanRiwayat, JEDA_RIWAYAT_MS)
+  document.addEventListener('visibilitychange', segarkanRiwayat)
 })
+onUnmounted(() => {
+  clearInterval(timerRiwayat)
+  document.removeEventListener('visibilitychange', segarkanRiwayat)
+})
+
+function bukaPesanan(kodeOrder) {
+  router.push({ name: 'order', params: { kodeOrder } })
+}
 
 function photoUrl(filename) {
   return `${API_URL}/public/products/photo/${filename}`
@@ -182,7 +203,7 @@ const estimatedTotal = computed(() =>
           {{ locale.t('meja') }} {{ table.nomorMeja }}
         </span>
         <button
-          v-if="recentOrders.items.length > 0"
+          v-if="recentOrders.daftar.length > 0"
           type="button"
           :aria-label="locale.t('pesananSayaLabel')"
           class="flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent"
@@ -243,6 +264,46 @@ const estimatedTotal = computed(() =>
 
     <main class="px-4 py-4">
       <ReservasiNotice class="mb-4" />
+
+      <section
+        v-if="recentOrders.aktif.length > 0"
+        class="mb-4 space-y-2 rounded-2xl border border-primary/40 bg-primary/10 p-3"
+      >
+        <p class="px-0.5 text-xs font-semibold">{{ locale.t('pesananKamu') }}</p>
+        <button
+          v-for="order in recentOrders.aktif.slice(0, 3)"
+          :key="order.kodeOrder"
+          type="button"
+          class="flex w-full items-center gap-2.5 rounded-xl bg-card px-3 py-2.5 text-left transition-colors hover:bg-accent active:bg-accent"
+          @click="bukaPesanan(order.kodeOrder)"
+        >
+          <span class="size-2.5 shrink-0 rounded-full" :class="STATUS_COLOR[order.status]" />
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm font-medium">{{ locale.t(STATUS_LABEL_KEY[order.status]) }}</span>
+            <span class="block truncate font-mono text-xs text-muted-foreground">{{ order.kodeOrder }}</span>
+          </span>
+          <span class="shrink-0 text-xs font-semibold text-primary-strong">{{ locale.t('lihatStatus') }}</span>
+          <ChevronRightIcon class="size-4 shrink-0 text-muted-foreground" />
+        </button>
+        <button
+          v-if="recentOrders.daftar.length > recentOrders.aktif.length"
+          type="button"
+          class="px-0.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          @click="recentOrdersOpen = true"
+        >
+          {{ locale.t('lihatSemuaPesanan', { n: recentOrders.daftar.length }) }}
+        </button>
+      </section>
+      <button
+        v-else-if="recentOrders.daftar.length > 0"
+        type="button"
+        class="mb-4 flex w-full items-center gap-2.5 rounded-2xl border px-3.5 py-3 text-left text-sm transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent"
+        @click="recentOrdersOpen = true"
+      >
+        <ReceiptIcon class="size-4 shrink-0 text-primary-strong" />
+        <span class="min-w-0 flex-1 font-medium">{{ locale.t('riwayatPesananKamu', { n: recentOrders.daftar.length }) }}</span>
+        <ChevronRightIcon class="size-4 shrink-0 text-muted-foreground" />
+      </button>
 
       <div
         v-if="tutup"

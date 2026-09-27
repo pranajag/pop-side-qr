@@ -112,4 +112,24 @@ function sudahTerverifikasi(tokenCookie, telepon) {
   return Boolean(isi && isi.exp > Date.now() && samaAman(isi.h, sidikTelepon(telepon)));
 }
 
-module.exports = { mintaKode, prosesMintaKode, verifikasiKode, sudahTerverifikasi, VERIFIKASI_BERLAKU_MS, MAKS_PERCOBAAN };
+// Kapan diskon tier boleh dipakai di checkout publik. Satu aturan untuk
+// pratinjau (cart.service.js) dan order sungguhan (order.service.js):
+//   - pengirim OTP tersedia: nomor wajib diverifikasi dulu oleh perangkat
+//     ini — tahu nomor member orang lain tidak cukup;
+//   - pengirim OTP tidak tersedia (produksi tanpa gateway WhatsApp/SMS):
+//     diskon langsung berlaku dari tier nomor itu, ditandai belum
+//     diverifikasi supaya kasir mencocokkan pemilik nomor saat bayar.
+function aksesDiskonMember(tokenCookie, telepon) {
+  const terverifikasi = sudahTerverifikasi(tokenCookie, telepon);
+  return { boleh: terverifikasi || !otpTersedia(), terverifikasi };
+}
+
+module.exports = {
+  mintaKode,
+  prosesMintaKode,
+  verifikasiKode,
+  sudahTerverifikasi,
+  aksesDiskonMember,
+  VERIFIKASI_BERLAKU_MS,
+  MAKS_PERCOBAAN,
+};

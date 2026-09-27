@@ -530,6 +530,79 @@ test('OTP member: tanpa verifikasi tidak ada diskon, detail member, maupun saldo
   assert.ok(Number(dengan.discountAmount) > 0, 'order terverifikasi: dapat diskon');
 });
 
+test('diskon member otomatis kalau OTP tidak tersedia: tunai, QRIS, dan debit', async (t) => {
+  if (lewati) return t.skip(lewati);
+  if (!(await settingsService.isMemberEnabled(prisma))) return t.skip('fitur member dimatikan di toko ini');
+  const target = await memberBertier();
+  if (!target) return t.skip('toko belum punya tier member');
+  const memberOtpService = require('../src/services/memberOtp.service');
+  const produk = await prisma.product.create({
+    data: { categoryId: dibuat.categoryId, nama: 'ZZ Uji Diskon Otomatis', harga: 100000, stok: 0, trackStock: false, isAvailable: true },
+  });
+  dibuat.productIds.push(produk.id);
+  const items = [{ productId: produk.id, qty: 1 }];
+  const asli = { OTP_PENGIRIM: process.env.OTP_PENGIRIM, OTP_HTTP_URL: process.env.OTP_HTTP_URL, OTP_HTTP_TOKEN: process.env.OTP_HTTP_TOKEN };
+  try {
+    // Pengirim http tanpa URL/token = tidak ada gateway = OTP tidak tersedia
+    // (seperti hosting sekarang).
+    process.env.OTP_PENGIRIM = 'http';
+    delete process.env.OTP_HTTP_URL;
+    delete process.env.OTP_HTTP_TOKEN;
+    const akses = memberOtpService.aksesDiskonMember(null, target.nomor);
+    assert.deepEqual(akses, { boleh: true, terverifikasi: false });
+
+    const pratinjau = await cartService.computeTotal(items, target.nomor, dibuat.tableToken, akses);
+    assert.ok(pratinjau.discountAmount > 0, 'checkout langsung menampilkan diskon');
+    assert.equal(pratinjau.member.points, null, 'saldo poin persis tidak dibuka tanpa verifikasi');
+    assert.equal(pratinjau.verifikasiMember.otomatis, true);
+
+    for (const metode of ['tunai', 'qris', 'debit']) {
+      const o = await orderService.createOrder(
+        { token: dibuat.tableToken, metode, items, customerPhone: target.nomor },
+        { memberTerverifikasi: akses.terverifikasi, diskonMemberBoleh: akses.boleh }
+      );
+      dibuat.orderIds.push(o.id);
+      assert.equal(Number(o.discountAmount), pratinjau.discountAmount, `${metode}: diskon sama dengan yang ditampilkan`);
+      assert.match(o.discountReason, /belum diverifikasi/, `${metode}: kasir diberi tanda untuk mencocokkan pemilik nomor`);
+      const untukPelanggan = orderService.alasanUntukPelanggan(o.discountReason);
+      assert.match(untukPelanggan, /^Member \d+% \(≥ \d+ poin\)$/, `${metode}: catatan kasir tidak tampil ke customer`);
+    }
+  } finally {
+    for (const [k, v] of Object.entries(asli)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+  // Pengirim OTP tersedia lagi: tanpa verifikasi kembali tanpa diskon.
+  assert.deepEqual(memberOtpService.aksesDiskonMember(null, target.nomor), { boleh: false, terverifikasi: false });
+});
+
+test('pesanan saya: hanya order milik perangkat ini, lengkap dengan status', async (t) => {
+  if (lewati) return t.skip(lewati);
+  const produk = await prisma.product.create({
+    data: { categoryId: dibuat.categoryId, nama: 'ZZ Uji Riwayat', harga: 15000, stok: 0, trackStock: false, isAvailable: true },
+  });
+  dibuat.productIds.push(produk.id);
+  const items = [{ productId: produk.id, qty: 2 }];
+  const perangkatA = crypto.randomBytes(32).toString('hex');
+  const perangkatB = crypto.randomBytes(32).toString('hex');
+  const pertama = await orderService.createOrder({ token: dibuat.tableToken, metode: 'tunai', items }, { deviceHash: perangkatA });
+  const kedua = await orderService.createOrder({ token: dibuat.tableToken, metode: 'qris', items }, { deviceHash: perangkatA });
+  const orangLain = await orderService.createOrder({ token: dibuat.tableToken, metode: 'tunai', items }, { deviceHash: perangkatB });
+  dibuat.orderIds.push(pertama.id, kedua.id, orangLain.id);
+
+  const daftar = await orderService.daftarMilikPerangkat(perangkatA);
+  const kode = daftar.map((o) => o.kodeOrder);
+  assert.ok(kode.includes(pertama.kodeOrder) && kode.includes(kedua.kodeOrder));
+  assert.ok(!kode.includes(orangLain.kodeOrder), 'order perangkat lain tidak ikut');
+  assert.equal(daftar[0].kodeOrder, kedua.kodeOrder, 'terbaru di atas');
+  const satu = daftar.find((o) => o.kodeOrder === pertama.kodeOrder);
+  assert.equal(satu.status, 'pending');
+  assert.match(satu.ringkasan, /2x ZZ Uji Riwayat/);
+  assert.ok(!('deviceHash' in satu), 'sidik perangkat tidak ikut dikirim');
+  assert.deepEqual(await orderService.daftarMilikPerangkat(null), [], 'tanpa cookie perangkat: kosong');
+});
+
 test('pelacakan order: hanya dari perangkat pemesan (token tersembunyi)', async (t) => {
   if (lewati) return t.skip(lewati);
   const produk = await prisma.product.create({

@@ -456,7 +456,9 @@ async function onSubmit() {
             <BadgeCheckIcon class="size-3.5 shrink-0" />
             {{ verifikasi.terverifikasi ? locale.t('memberTerverifikasi') : locale.t('memberDikenali') }}
           </p>
-          <p class="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <!-- Saldo persisnya hanya untuk nomor yang terverifikasi (diskon
+          otomatis tanpa OTP tidak membuka saldo milik pemilik nomor). -->
+          <p v-if="member.points !== null && member.points !== undefined" class="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
             <StarIcon class="size-3 shrink-0 fill-current" />
             {{ locale.t('memberPoinKamu', { n: member.points }) }}
           </p>
@@ -477,14 +479,22 @@ async function onSubmit() {
             <p class="mt-1 text-xs text-muted-foreground">
               {{ locale.t('memberPoinTidakDipotong') }}
             </p>
+            <p v-if="verifikasi.otomatis" class="mt-1 text-xs text-muted-foreground">
+              {{ locale.t('memberDiskonOtomatis') }}
+            </p>
           </template>
           <p v-else class="mt-2 text-xs text-muted-foreground">
             {{
               summary?.nextTier
-                ? locale.t('memberKurangPoin', {
-                    n: summary.nextTier.kurangPoin,
-                    percent: summary.nextTier.discountPercent,
-                  })
+                ? summary.nextTier.kurangPoin === null
+                  ? locale.t('memberNaikMulai', {
+                      n: summary.nextTier.minPoints,
+                      percent: summary.nextTier.discountPercent,
+                    })
+                  : locale.t('memberKurangPoin', {
+                      n: summary.nextTier.kurangPoin,
+                      percent: summary.nextTier.discountPercent,
+                    })
                 : locale.t('memberBelumCukupPoin')
             }}
           </p>
@@ -493,10 +503,15 @@ async function onSubmit() {
             class="mt-1 text-xs text-muted-foreground"
           >
             {{
-              locale.t('memberKurangPoinNaik', {
-                n: summary.nextTier.kurangPoin,
-                percent: summary.nextTier.discountPercent,
-              })
+              summary.nextTier.kurangPoin === null
+                ? locale.t('memberNaikMulai', {
+                    n: summary.nextTier.minPoints,
+                    percent: summary.nextTier.discountPercent,
+                  })
+                : locale.t('memberKurangPoinNaik', {
+                    n: summary.nextTier.kurangPoin,
+                    percent: summary.nextTier.discountPercent,
+                  })
             }}
           </p>
           <p
@@ -558,7 +573,7 @@ async function onSubmit() {
               }}
             </Button>
           </template>
-          <p v-else class="text-muted-foreground">{{ locale.t('memberVerifikasiTidakTersedia') }}</p>
+          <p v-else-if="!verifikasi.otomatis" class="text-muted-foreground">{{ locale.t('memberVerifikasiTidakTersedia') }}</p>
         </div>
       </section>
 

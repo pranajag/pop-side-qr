@@ -156,6 +156,8 @@ export const translations = {
     memberMengecek: 'Mengecek nomor...',
     memberKurangPoin: 'Kurang {n} poin lagi untuk dapat diskon {percent}%.',
     memberKurangPoinNaik: 'Kurang {n} poin lagi untuk naik ke diskon {percent}%.',
+    memberNaikMulai: 'Diskon {percent}% berlaku mulai {n} poin.',
+    memberDiskonOtomatis: 'Diskon member dipasang otomatis. Kasir bisa menanyakan nama pemilik nomor ini saat pembayaran.',
     memberTargetPertama: 'Kumpulkan {n} poin untuk mulai dapat diskon {percent}%.',
     teleponTidakValid:
       'Nomor HP tidak valid — pakai angka saja, contoh 08123456789. Kosongkan kalau tidak mau ikut member.',
@@ -202,8 +204,12 @@ export const translations = {
     jumlah: 'Jumlah',
     tambahHarga: 'Tambah · {price}',
 
-    // RecentOrdersDialog
+    // RecentOrdersDialog + kartu "Pesanan kamu" di menu
     belumAdaPesananDiPerangkat: 'Belum ada pesanan di perangkat ini.',
+    pesananKamu: 'Pesanan kamu',
+    lihatStatus: 'Lihat status',
+    lihatSemuaPesanan: 'Lihat semua pesanan ({n})',
+    riwayatPesananKamu: 'Riwayat pesanan kamu ({n})',
 
     // QtyStepper
     kurangiJumlah: 'Kurangi jumlah',
@@ -356,6 +362,8 @@ export const translations = {
     memberMengecek: 'Checking number...',
     memberKurangPoin: '{n} more points to unlock a {percent}% discount.',
     memberKurangPoinNaik: '{n} more points to move up to a {percent}% discount.',
+    memberNaikMulai: '{percent}% discount from {n} points.',
+    memberDiskonOtomatis: 'Member discount applied automatically. The cashier may ask for the name registered to this number when you pay.',
     memberTargetPertama: 'Collect {n} points to start getting a {percent}% discount.',
     teleponTidakValid:
       'Invalid phone number — digits only, e.g. 08123456789. Leave it blank to skip membership.',
@@ -402,6 +410,10 @@ export const translations = {
     tambahHarga: 'Add · {price}',
 
     belumAdaPesananDiPerangkat: 'No orders yet on this device.',
+    pesananKamu: 'Your orders',
+    lihatStatus: 'View status',
+    lihatSemuaPesanan: 'See all orders ({n})',
+    riwayatPesananKamu: 'Your order history ({n})',
 
     kurangiJumlah: 'Decrease quantity',
     tambahJumlah: 'Increase quantity',

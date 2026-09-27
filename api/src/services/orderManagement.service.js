@@ -54,6 +54,9 @@ const ORDER_INCLUDE = {
   table: { select: { nomorMeja: true } },
   items: { include: { product: { select: { nama: true } }, variants: true } },
   payment: { select: { buktiFile: true, verifiedAt: true, cashReceived: true } },
+  // Nama + 4 digit terakhir saja (nomor lengkapnya terenkripsi) — cukup
+  // untuk kasir mencocokkan pemilik nomor member saat pembayaran.
+  customer: { select: { nama: true, teleponAkhir: true } },
 };
 
 // Order yang masih menunggu konfirmasi pembayaran.
@@ -91,6 +94,7 @@ function shapeOrder(order, batasPin) {
     updatedAt: order.updatedAt,
     nomorMeja: order.table?.nomorMeja ?? null,
     customerName: order.customerName,
+    member: order.customer ? { nama: order.customer.nama, teleponAkhir: order.customer.teleponAkhir } : null,
     pointsEarned: order.pointsEarned ?? 0,
     // Never the filename itself — that's only ever resolved server-side
     // by serveBuktiBayar, keyed off this order's own id, never handed to

@@ -7,9 +7,13 @@ async function create(req, res) {
   // Perangkat pemesan dikenali lewat cookie httpOnly (diterbitkan di sini
   // kalau belum ada) — hanya perangkat ini yang nanti bisa melacak order-nya.
   const deviceHash = pastikanPerangkat(req, res);
-  const memberTerverifikasi = memberOtpService.sudahTerverifikasi(tokenMember(req), req.body.customerPhone);
-  const { deviceHash: _sidik, ...order } = await orderService.createOrder(req.body, { deviceHash, memberTerverifikasi });
-  res.status(201).json({ order });
+  const akses = memberOtpService.aksesDiskonMember(tokenMember(req), req.body.customerPhone);
+  const { deviceHash: _sidik, ...order } = await orderService.createOrder(req.body, {
+    deviceHash,
+    memberTerverifikasi: akses.terverifikasi,
+    diskonMemberBoleh: akses.boleh,
+  });
+  res.status(201).json({ order: { ...order, discountReason: orderService.alasanUntukPelanggan(order.discountReason) } });
 }
 
 async function confirmPayment(req, res) {
@@ -27,9 +31,13 @@ async function realtimeToken(req, res) {
   res.json({ token: realtime.tokenOrder(id) });
 }
 
+async function milikPerangkat(req, res) {
+  res.json({ orders: await orderService.daftarMilikPerangkat(sidikPerangkat(req)) });
+}
+
 async function bill(req, res) {
   const bill = await orderService.getTableBill(req.params.token);
   res.json({ bill });
 }
 
-module.exports = { create, confirmPayment, track, realtimeToken, bill };
+module.exports = { create, confirmPayment, track, realtimeToken, milikPerangkat, bill };

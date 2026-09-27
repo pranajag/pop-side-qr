@@ -1,18 +1,23 @@
 import { defineStore } from 'pinia'
+import { api } from '@/lib/api'
 import { loadJSON, saveJSON } from '@/lib/persist'
 
 const STORAGE_KEY = 'popside.recentOrders'
 const MAX_RECENT = 10
+const SELESAI = new Set(['completed', 'cancelled'])
 
-// Pure recovery mechanism for "closed the tab and forgot the kode order" —
-// a kodeOrder plus the moment it was placed, nothing else. No live status
-// here; that's what clicking through to /pesanan/:kodeOrder is for.
+// "Pesanan Saya". Sumber utamanya server: GET /public/pesanan-saya
+// mengembalikan order milik perangkat ini (cookie perangkat httpOnly — aturan
+// yang sama dengan pelacakan status, jadi perangkat lain tidak bisa melihat)
+// dalam 24 jam terakhir, lengkap dengan statusnya. Daftar itu tidak hilang
+// walau halaman status ditutup, QR dipindai ulang, atau pesanan sudah selesai.
 //
-// The stored shape used to be a bare array of kodeOrder strings. Entries
-// migrated from it have no `waktu`, so the first pruneBefore() drops them —
-// which is the right call: an order old enough to predate this format
-// belongs to an earlier visit anyway, and some of those codes point at
-// orders that no longer exist at all.
+// Daftar kode di localStorage tinggal cadangan saat server tidak bisa
+// dijangkau (offline) — isinya hanya kode order + waktu, tanpa harga
+// (AGENTS.md).
+//
+// Bentuk lama berupa array kode polos. Entri migrasi darinya tidak punya
+// `waktu`, jadi pruneBefore() pertama membuangnya.
 function normalize(stored) {
   if (!Array.isArray(stored)) return []
   return stored
@@ -27,9 +32,19 @@ function normalize(stored) {
 export const useRecentOrdersStore = defineStore('recentOrders', {
   state: () => ({
     entries: normalize(loadJSON(localStorage, STORAGE_KEY, [])),
+    // Dari server, terbaru dulu: { kodeOrder, status, metode, totalHarga,
+    // createdAt, nomorMeja, ringkasan }.
+    pesanan: [],
+    dimuat: false,
   }),
   getters: {
-    items: (state) => state.entries.map((entry) => entry.kodeOrder),
+    // Yang ditampilkan: daftar server begitu berhasil dimuat; sebelum itu
+    // (atau saat offline) kode dari localStorage tanpa status.
+    daftar: (state) =>
+      state.dimuat
+        ? state.pesanan
+        : state.entries.map((entry) => ({ kodeOrder: entry.kodeOrder, status: null, createdAt: entry.waktu })),
+    aktif: (state) => (state.dimuat ? state.pesanan.filter((order) => !SELESAI.has(order.status)) : []),
   },
   actions: {
     add(kodeOrder, createdAt) {
@@ -39,13 +54,18 @@ export const useRecentOrdersStore = defineStore('recentOrders', {
       ].slice(0, MAX_RECENT)
       this.persist()
     },
-    // Same rule the table bill already uses (order.service.js's
-    // getTableBill filters on currentVisitStartedAt): anything placed
-    // before this visit started belongs to whoever sat here earlier, so it
-    // has no business showing up in this visit's "Pesanan Saya" either.
-    // Called from the table store right after a QR scan resolves, which is
-    // the only moment the customer is definitely starting fresh — an open
-    // tab keeps showing its own just-finished orders.
+    async muat() {
+      try {
+        const { orders } = await api.get('/public/pesanan-saya')
+        this.pesanan = orders
+        this.dimuat = true
+      } catch {
+        // Offline / server tidak menjawab — daftar lokal tetap dipakai.
+      }
+    },
+    // Hanya untuk cadangan lokal: kode dari kunjungan sebelumnya di meja ini
+    // (tamu lain) dibuang saat QR dipindai. Daftar dari server sudah terikat
+    // perangkat ini sendiri, jadi tidak terpengaruh.
     pruneBefore(visitStartedAt) {
       if (!visitStartedAt) return
       const batas = new Date(visitStartedAt).getTime()
