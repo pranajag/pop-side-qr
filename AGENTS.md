@@ -71,6 +71,10 @@ popside-qr-system/
 
 ## Cara Jalanin Lokal
 
+**Cara cepat (Windows):** klik dua kali `jalankan-lokal.bat` di root repo — menyalakan MySQL Laragon (kalau belum), server API (`npm run start`), dashboard admin (http://localhost:5173), dan web menu (http://localhost:5174) di jendela masing-masing, lalu membuka dashboard. Yang sudah menyala dilewati. Menu customer dibuka dari dashboard: Meja → ikon QR → **Buka Menu**. Lupa sandi admin lokal: `buat-admin-lokal.bat` membuat akun admin baru (sandi diketik sendiri, tidak ditampilkan).
+
+Cara manual:
+
 0. Nyalakan MySQL dulu (lihat "Database Lokal" di bawah — **bukan** XAMPP di mesin ini).
    - Laragon: buka Laragon, klik "Start All" (atau start MySQL saja) — GUI-nya yang jaga proses, tidak perlu command manual tiap sesi.
 1. `cd api && npm install && npx prisma migrate dev && npm run dev`
@@ -180,7 +184,7 @@ Aturan yang JANGAN diubah tanpa paham akibatnya:
 16. **Error handling** — `NODE_ENV=production` → response generic ke client, detail error masuk log file (`winston`/`pino`). Jangan pernah mengembalikan `err.message` mentah ke client di production.
 17. **.gitignore wajib berisi**: `.env`, `node_modules/`, `api/uploads/*` (kecuali `.gitkeep`), `dist/`, `logs/`.
 18. **Validasi input** — semua endpoint pakai schema validation (`zod`) untuk tipe, range, dan whitelist (contoh: `qty` harus integer > 0, `metode_bayar` harus salah satu dari `qris`/`tunai`/`debit`). Validasi di client cuma bonus UX, server yang menentukan. Semua schema request pakai `z.strictObject` (field tak dikenal ditolak 400) — dijaga tes "validasi strict".
-19. **2FA admin wajib** — TOTP (`twoFactor.service.js`); sesi admin tanpa 2FA ditolak di semua endpoint (`PERLU_2FA`). Jangan buat jalur login admin yang melewatinya. Admin yang kehilangan HP: reset dari halaman Akun Staff, atau `npm run reset-2fa -- <username>`.
+19. **2FA admin wajib** — TOTP (`twoFactor.service.js`); sesi admin tanpa 2FA ditolak di semua endpoint (`PERLU_2FA`). Jangan buat jalur login admin yang melewatinya. Admin yang kehilangan HP: reset dari halaman Akun Staff, atau `npm run reset-2fa -- <username>`. Database lokal dan hosting punya akun & rahasia 2FA sendiri-sendiri: di luar produksi entri authenticator-nya bernama **"Popside (Lokal)"** (`PENERBIT`), supaya tidak tertukar dengan entri "Popside" milik hosting — kode entri yang satu selalu ditolak di tempat yang lain.
 20. **Data pribadi terenkripsi** — nomor HP (member & reservasi) dan rahasia 2FA disimpan terenkripsi AES-256-GCM lewat `utils/kripto.js`; pencarian lewat sidik HMAC (`telepon_hash`) dan 4 digit terakhir. Jangan simpan nomor polos di kolom/log mana pun.
 21. **Pelacakan order terikat perangkat** — status order, kirim bukti bayar, dan langganan realtime hanya untuk perangkat pemesan (cookie `popside_perangkat`); perangkat lain mendapat 404 walau kodenya benar. Pesanan yang sudah selesai/batal hanya bisa dibuka pemesannya selama 30 menit sesudahnya — untuk struk digital PDF/PNG (`JENDELA_STRUK_MS`) — atau sampai struknya ditutup; sesudah itu hilang dari web publik (halaman status 410/404, kartu "Pesanan kamu"), dan bill meja tidak pernah memuat pesanan selesai. Jangan tambahkan riwayat pesanan selesai di web publik (keputusan pemilik).
 22. **Realtime** — kanal staff hanya dengan token dari route ber-login; langganan status order hanya dengan token dari route pelacakan. Isi event minimal (id, kode order, status) — tanpa nama/nomor/total; layar memuat detailnya lewat API biasa.

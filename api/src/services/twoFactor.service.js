@@ -14,7 +14,12 @@ const { buatPenghitung } = require('../utils/penghitungGagal');
 // Rahasia TOTP disimpan terenkripsi (kripto.js). Kode yang sudah dipakai
 // tidak bisa dipakai lagi (users.totp_langkah_terakhir). 5x salah dalam 15
 // menit -> akun itu tidak bisa mencoba 2FA selama 15 menit.
-const PENERBIT = 'Popside';
+// Nama yang tampil di aplikasi authenticator. Di laptop (bukan produksi)
+// diberi "(Lokal)": database lokal dan hosting punya akun & rahasia 2FA
+// sendiri-sendiri, dan dua entri bernama sama di Google/Microsoft
+// Authenticator mudah tertukar — kode entri hosting selalu ditolak di
+// localhost, begitu juga sebaliknya.
+const PENERBIT = process.env.NODE_ENV === 'production' ? 'Popside' : 'Popside (Lokal)';
 const JUMLAH_KODE_PEMULIHAN = 8;
 const percobaan = buatPenghitung({ maks: 5, jendelaMs: 15 * 60 * 1000, kunciMs: 15 * 60 * 1000 });
 

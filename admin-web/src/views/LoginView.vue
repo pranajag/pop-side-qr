@@ -87,6 +87,10 @@ const langkah = ref('password')
 const kode = ref('')
 const pakaiCadangan = ref(false)
 const setupData = ref(null)
+// Nama entri di aplikasi authenticator — sama dengan api twoFactor.service.js
+// PENERBIT: di laptop (npm run dev) "Popside (Lokal)", supaya tidak
+// tertukar dengan entri akun hosting yang kodenya tidak berlaku di sini.
+const NAMA_ENTRI_2FA = import.meta.env.DEV ? 'Popside (Lokal)' : 'Popside'
 const kodeCadangan = ref([])
 const tersalin = ref(false)
 const sudahDisimpan = ref(false)
@@ -333,7 +337,7 @@ async function onSubmit() {
                   Tambahkan ke aplikasi Authenticator
                 </Button>
                 <p class="text-xs text-muted-foreground">
-                  Aplikasi terbuka sendiri dan akun "Popside" langsung tersimpan,
+                  Aplikasi terbuka sendiri dan akun "{{ NAMA_ENTRI_2FA }}" langsung tersimpan,
                   lalu kembali ke halaman ini. Tidak terbuka? Pakai kunci manual di bawah.
                 </p>
                 <details class="rounded-md border px-3 py-2 text-sm">
@@ -361,7 +365,7 @@ async function onSubmit() {
                 <p class="text-xs text-muted-foreground">
                   Kunci manual — di aplikasi pilih <strong>Masukkan kunci penyiapan</strong>
                   (Microsoft: <strong>masukkan kode secara manual</strong>), jenis <strong>berbasis waktu</strong>.
-                  Nama akun bebas, misalnya "Popside".
+                  Nama akun bebas, misalnya "{{ NAMA_ENTRI_2FA }}".
                 </p>
                 <div class="flex items-center gap-2">
                   <span class="flex-1 font-mono text-sm break-words select-all">{{ setupData.rahasia }}</span>
@@ -386,7 +390,7 @@ async function onSubmit() {
             {{
               pakaiCadangan
                 ? 'Masukkan salah satu kode cadangan (XXXX-XXXX).'
-                : 'Buka Google Authenticator atau Microsoft Authenticator di HP, lalu masukkan 6 digit dari akun Popside.'
+                : `Buka Google Authenticator atau Microsoft Authenticator di HP, lalu masukkan 6 digit dari entri "${NAMA_ENTRI_2FA}"${NAMA_ENTRI_2FA === 'Popside' ? '' : ' — bukan entri "Popside" milik hosting, kodenya tidak berlaku di laptop ini'}.`
             }}
           </p>
         </div>

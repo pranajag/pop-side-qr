@@ -44,6 +44,7 @@ import {
   CopyIcon,
   RefreshCwIcon,
   PrinterIcon,
+  ExternalLinkIcon,
 } from '@lucide/vue'
 
 const store = useTablesStore()
@@ -291,6 +292,12 @@ function printQr() {
           </p>
         </div>
         <DialogFooter class="print:hidden">
+          <!-- Membuka menu meja ini di tab baru — sama seperti memindai QR-nya,
+          untuk mencoba atau mempresentasikan tampilan customer dari laptop. -->
+          <Button as="a" :href="qrTarget?.url" target="_blank" rel="noopener" variant="outline" class="gap-2">
+            <ExternalLinkIcon class="size-4" />
+            Buka Menu
+          </Button>
           <Button variant="outline" class="gap-2" @click="copyLink(qrTarget)">
             <CopyIcon class="size-4" />
             Salin Link
