@@ -73,6 +73,8 @@ popside-qr-system/
 
 **Cara cepat (Windows):** klik dua kali `jalankan-lokal.bat` di root repo — menyalakan MySQL Laragon (kalau belum), server API (`npm run start`), dashboard admin (http://localhost:5173), dan web menu (http://localhost:5174) di jendela masing-masing, lalu membuka dashboard dan menu customer meja pertama, serta menampilkan link menu semua meja (`npm run link-meja` di `api/`). Yang sudah menyala dilewati. Dari dashboard, menu customer juga bisa dibuka lewat Meja → ikon QR → **Buka Menu**. Lupa sandi admin lokal: `buat-admin-lokal.bat` membuat akun admin baru (sandi diketik sendiri, tidak ditampilkan).
 
+**Mode WiFi (HP/laptop lain di WiFi yang sama):** `jalankan-lokal-wifi.bat` menyalakan ulang server dengan dashboard & menu terbuka untuk jaringan (`vite --host`), `VITE_API_URL=/api` yang diteruskan proxy Vite ke API di laptop (`vite.config.js`, sama dengan rewrite `/api` Vercel), dan `PUBLIC_WEB_URL` alamat WiFi laptop (`api/scripts/ip-wifi.js`) supaya QR meja bisa dipindai HP. Siapa pun di WiFi itu bisa membuka halaman login (tetap wajib login + 2FA), jadi pakai di WiFi yang dipercaya atau hotspot HP sendiri. Kembali ke mode biasa: tutup jendela "Popside ... (WiFi)", lalu `jalankan-lokal.bat`.
+
 Cara manual:
 
 0. Nyalakan MySQL dulu (lihat "Database Lokal" di bawah — **bukan** XAMPP di mesin ini).
