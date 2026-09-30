@@ -7,6 +7,8 @@ rem    1. MySQL Laragon (database lokal)   port 3306
 rem    2. Server API                        port 3000
 rem    3. Dashboard admin                   http://localhost:5173
 rem    4. Web menu customer                 http://localhost:5174
+rem  Setelah siap, dashboard dan menu customer Meja pertama terbuka di browser;
+rem  link menu semua meja ditampilkan di jendela ini.
 rem  Yang sudah menyala dilewati, jadi aman diklik berkali-kali.
 rem  Untuk mematikan: tutup jendela-jendela "Popside ..." di taskbar.
 rem ==================================================================
@@ -49,12 +51,18 @@ call :sudahMenyala 5174 && (echo [4/4] Web menu sudah menyala.) || (
 echo.
 echo  Siap!
 echo    Dashboard admin : http://localhost:5173
-echo    Web menu        : dari dashboard, buka Meja ^> ikon QR ^> "Buka Menu"
+echo    Web menu customer (sama dengan QR di tiap meja):
+pushd "%~dp0api"
+call node scripts\link-meja-lokal.js
+set "MENU_URL="
+for /f "delims=" %%u in ('node scripts\link-meja-lokal.js --pertama 2^>nul') do set "MENU_URL=%%u"
+popd
 echo.
 echo  Ingat: sebelum customer memesan, tekan "Mulai Shift" di dashboard.
 echo  Untuk mematikan, tutup jendela-jendela "Popside ..." di taskbar.
 echo.
 start "" http://localhost:5173
+if defined MENU_URL start "" "%MENU_URL%"
 pause
 exit /b 0
 

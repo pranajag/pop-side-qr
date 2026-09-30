@@ -18,6 +18,7 @@
     "pentest": "node scripts/pentest.js",
     "db:enkripsi-telepon": "node scripts/enkripsi-telepon.js",
     "reset-2fa": "node scripts/reset-2fa.js",
+    "link-meja": "node scripts/link-meja-lokal.js",
     "ekspor-data-demo": "node scripts/ekspor-data-demo.js",
     "siapkan-produksi": "node scripts/siapkan-produksi.js"
   },

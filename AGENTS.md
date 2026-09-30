@@ -71,7 +71,7 @@ popside-qr-system/
 
 ## Cara Jalanin Lokal
 
-**Cara cepat (Windows):** klik dua kali `jalankan-lokal.bat` di root repo — menyalakan MySQL Laragon (kalau belum), server API (`npm run start`), dashboard admin (http://localhost:5173), dan web menu (http://localhost:5174) di jendela masing-masing, lalu membuka dashboard. Yang sudah menyala dilewati. Menu customer dibuka dari dashboard: Meja → ikon QR → **Buka Menu**. Lupa sandi admin lokal: `buat-admin-lokal.bat` membuat akun admin baru (sandi diketik sendiri, tidak ditampilkan).
+**Cara cepat (Windows):** klik dua kali `jalankan-lokal.bat` di root repo — menyalakan MySQL Laragon (kalau belum), server API (`npm run start`), dashboard admin (http://localhost:5173), dan web menu (http://localhost:5174) di jendela masing-masing, lalu membuka dashboard dan menu customer meja pertama, serta menampilkan link menu semua meja (`npm run link-meja` di `api/`). Yang sudah menyala dilewati. Dari dashboard, menu customer juga bisa dibuka lewat Meja → ikon QR → **Buka Menu**. Lupa sandi admin lokal: `buat-admin-lokal.bat` membuat akun admin baru (sandi diketik sendiri, tidak ditampilkan).
 
 Cara manual:
 
