@@ -78,6 +78,45 @@ async function endShift(userId, cashCounted, gojekAmount, grabfoodAmount) {
   return shapeShift(shift);
 }
 
+// Nama kasir untuk struk (digital & cetak): nama yang diisi saat "Mulai
+// Shift" (namaStaff) pada shift berjalan milik staff yang MENERIMA
+// pembayaran — log status "→ confirmed" — bukan username akunnya. Menerima
+// pembayaran selalu butuh shift terbuka milik staff itu (lihat
+// dibayarDiShift), jadi shiftnya selalu ada; untuk data lama tanpa shift
+// hasilnya null dan struk tidak menulis baris Kasir.
+//
+// penerimaan: [{ userId, waktu }] (boleh null) -> array nama, urutannya
+// sama. Satu query untuk semua, supaya daftar pesanan tidak jadi N+1.
+async function namaKasirUntuk(penerimaan, client = prisma) {
+  const sah = penerimaan.filter((p) => p?.userId && p.waktu);
+  if (sah.length === 0) return penerimaan.map(() => null);
+  const waktu = sah.map((p) => p.waktu.getTime());
+  const shifts = await client.shift.findMany({
+    where: {
+      userId: { in: [...new Set(sah.map((p) => p.userId))] },
+      startedAt: { lte: new Date(Math.max(...waktu)) },
+      OR: [{ endedAt: null }, { endedAt: { gt: new Date(Math.min(...waktu)) } }],
+    },
+    select: { userId: true, namaStaff: true, startedAt: true, endedAt: true },
+  });
+  return penerimaan.map((p) => {
+    if (!p?.userId || !p.waktu) return null;
+    const cocok = shifts.find(
+      (x) => x.userId === p.userId && x.startedAt <= p.waktu && (!x.endedAt || x.endedAt > p.waktu)
+    );
+    return cocok?.namaStaff ?? null;
+  });
+}
+
+// Badge sidebar "Laporan" di dashboard: cukup jumlah shift yang selesai
+// sejak terakhir halaman Laporan dibuka. Dulu badge itu mengambil 50 shift
+// lengkap dengan hitungan uangnya (listShifts -> shapeShift, beberapa query
+// per shift) setiap 30 detik DAN setiap ada perubahan status pesanan, di
+// setiap tab admin — beban yang terus membesar seiring jumlah shift.
+async function jumlahSelesaiSejak(sejak) {
+  return prisma.shift.count({ where: { endedAt: { gt: sejak } } });
+}
+
 async function getMyActiveShift(userId) {
   const shift = await prisma.shift.findFirst({
     where: { userId, endedAt: null },
@@ -321,4 +360,6 @@ module.exports = {
   listActiveShifts,
   listShifts,
   getShiftDetail,
+  namaKasirUntuk,
+  jumlahSelesaiSejak,
 };

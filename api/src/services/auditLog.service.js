@@ -41,7 +41,6 @@ const LABEL_AKSI = {
   'PUT /api/admin/users/:id': 'Ubah akun staff',
   'DELETE /api/admin/users/:id': 'Hapus akun staff',
   'POST /api/admin/users/:id/reset-2fa': 'Reset 2FA akun staff',
-  'PATCH /api/admin/staff-calls/:id/resolve': 'Tangani panggilan meja',
   'POST /api/admin/reservations': 'Buat reservasi',
   'PUT /api/admin/reservations/:id': 'Ubah reservasi',
   'PATCH /api/admin/reservations/:id/status': 'Ubah status reservasi',

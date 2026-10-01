@@ -260,28 +260,12 @@ const loginUsernameLimiter = rateLimit({
     res.status(429).json({ error: 'Terlalu banyak percobaan gagal untuk akun ini. Coba lagi 15 menit lagi.' });
   },
 });
-const createOrderMejaLimiter = batasOtp(10 * 60 * 1000, 20, kunciMeja, 'Terlalu banyak pesanan dari meja ini. Coba lagi sebentar, atau panggil staff.');
-const staffCallMejaLimiter = batasOtp(10 * 60 * 1000, 10, kunciMeja, 'Staff sudah dipanggil beberapa kali dari meja ini — mohon tunggu sebentar.');
+const createOrderMejaLimiter = batasOtp(10 * 60 * 1000, 20, kunciMeja, 'Terlalu banyak pesanan dari meja ini. Coba lagi sebentar, atau minta bantuan kasir.');
 
 const otpMintaNomorLimiter = batasOtp(10 * 60 * 1000, 3, kunciNomor, 'Terlalu sering meminta kode untuk nomor ini. Coba lagi 10 menit lagi.');
 const otpMintaHarianLimiter = batasOtp(24 * 60 * 60 * 1000, 10, kunciNomor, 'Batas permintaan kode hari ini untuk nomor ini sudah habis.');
 const otpMintaIpLimiter = batasOtp(60 * 60 * 1000, 10, (req) => scopedKey(req, req.body?.token), 'Terlalu banyak permintaan kode dari perangkat ini. Coba lagi nanti.');
 const otpVerifikasiLimiter = batasOtp(10 * 60 * 1000, 15, (req) => scopedKey(req, req.body?.token), 'Terlalu banyak percobaan kode. Coba lagi beberapa menit lagi.');
-
-// Not an order, so no anti-guessing rationale like the ones above — this
-// is purely spam-prevention against a customer mashing the button. Scoped
-// per table so one table hammering it doesn't burn the whole cafe WiFi's
-// shared budget for every other table.
-const staffCallLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  limit: 3,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => scopedKey(req, req.body?.token),
-  handler: (req, res) => {
-    res.status(429).json({ error: 'Terlalu banyak permintaan. Coba lagi sebentar.' });
-  },
-});
 
 // The table-scan endpoint (GET /tables/:token) had no limiter at all —
 // the 64-hex HMAC token itself is what actually blocks guessing (256 bits
@@ -403,7 +387,6 @@ module.exports = {
   loginLimiter,
   loginUsernameLimiter,
   createOrderMejaLimiter,
-  staffCallMejaLimiter,
   duaFaktorLimiter,
   otpMintaNomorLimiter,
   otpMintaHarianLimiter,
@@ -415,7 +398,6 @@ module.exports = {
   confirmPaymentLimiter,
   confirmPaymentIpLimiter,
   tutupStrukLimiter,
-  staffCallLimiter,
   tableVerifyLimiter,
   publicReadLimiter,
   memberLookupLimiter,

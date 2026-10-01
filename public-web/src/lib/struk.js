@@ -104,6 +104,8 @@ function barisStruk({ order, toko, t, bahasa }) {
   if (order.berakhirPada) pasangan(t('statusCompleted'), formatWaktu(order.berakhirPada, bahasa))
   const METODE = { qris: 'QRIS', tunai: t('tunai').toUpperCase(), debit: 'DEBIT' }
   pasangan(t('strukBayar'), METODE[order.metode] ?? String(order.metode).toUpperCase())
+  // Nama yang diisi kasir saat Mulai Shift (api shift.service.js namaKasirUntuk).
+  if (order.kasir) pasangan(t('strukKasir'), order.kasir)
   garis()
 
   for (const item of order.items) {

@@ -159,7 +159,7 @@ async function sql(q) {
   // ---------- 7. Order nyangkut / shift / staff call ----------
   const orderNyangkut = await sql(`
     SELECT id, kode_order, status, table_id, created_at FROM orders
-    WHERE status IN ('pending','waiting_verif','confirmed','cooking','ready') AND created_at < DATE_SUB(NOW(), INTERVAL 12 HOUR) ORDER BY created_at`);
+    WHERE status IN ('pending','waiting_verif','confirmed','cooking','ready') AND created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 12 HOUR) ORDER BY created_at`);
   if (orderNyangkut.length)
     lapor('SEDANG', 'Order belum selesai/batal padahal sudah lewat 12 jam',
       orderNyangkut.map((o) => `${o.kode_order} (${o.status}, ${new Date(o.created_at).toLocaleString('id-ID')})`).join(' | '));
@@ -170,12 +170,6 @@ async function sql(q) {
   if (shiftNyangkut.length)
     lapor('SEDANG', 'Shift masih terbuka',
       shiftNyangkut.map((s) => `#${s.id} ${s.nama_staff ?? ''} mulai ${new Date(s.started_at).toLocaleString('id-ID')}`).join(' | '));
-
-  const panggilanNyangkut = await sql(
-    "SELECT id, table_id, created_at FROM staff_calls WHERE status='pending' AND created_at < DATE_SUB(NOW(), INTERVAL 6 HOUR)"
-  );
-  if (panggilanNyangkut.length)
-    lapor('RINGAN', 'Panggilan staff pending sudah basi (>6 jam)', `${panggilanNyangkut.length} baris`);
 
   // ---------- 7b. DP reservasi ----------
   // Ringkasan lunas di baris reservasi harus sama dengan jumlah pembayaran

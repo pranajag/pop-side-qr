@@ -21,4 +21,10 @@ router.use(externalAuthLimiter, requireApiKey, externalApiLimiter);
 router.get('/orders', validateQuery(externalOrdersQuerySchema), externalController.orders);
 router.get('/products', externalController.products);
 
+// Sama dengan public.routes.js: alamat lain tidak ada, dijawab sebelum
+// lapisan sesi & CSRF.
+router.use((req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
 module.exports = router;

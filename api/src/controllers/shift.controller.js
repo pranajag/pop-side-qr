@@ -55,4 +55,8 @@ async function exportPdf(req, res) {
   res.send(buffer);
 }
 
-module.exports = { start, end, active, list, detail, exportExcel, exportPdf };
+async function jumlahSelesai(req, res) {
+  res.json({ jumlah: await shiftService.jumlahSelesaiSejak(req.validQuery.sejak) });
+}
+
+module.exports = { start, end, active, list, detail, exportExcel, exportPdf, jumlahSelesai };

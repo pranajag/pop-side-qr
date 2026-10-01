@@ -325,13 +325,20 @@ function terimaStatus(isi) {
     order.value.strukBerlakuSampai = menit ? new Date(sekarang.getTime() + menit * 60000).toISOString() : null
   }
   notifyStatus(isi.status)
-  if (timerMuatUlang) return
+  // Selesai/batal adalah event terakhir pesanan ini: struknya (nama kasir,
+  // batas 5 menit yang pasti) dimuat cepat — cukup 5 detik dari muat
+  // terakhir — tanpa menunggu jeda biasa. Tetap paling banyak satu request.
+  const jeda = isi.status === 'completed' || isi.status === 'cancelled' ? 5000 : JEDA_MUAT_ULANG_MS
+  if (timerMuatUlang) {
+    if (jeda === JEDA_MUAT_ULANG_MS) return
+    clearTimeout(timerMuatUlang)
+  }
   timerMuatUlang = setTimeout(
     () => {
       timerMuatUlang = null
       load({ silent: true })
     },
-    Math.max(0, terakhirDimuat + JEDA_MUAT_ULANG_MS - Date.now())
+    Math.max(0, terakhirDimuat + jeda - Date.now())
   )
 }
 
@@ -465,7 +472,7 @@ async function copyKode() {
         </span>
         <button
           type="button"
-          class="flex w-full items-center justify-center gap-2 rounded-xl py-1 text-2xl font-bold tracking-wide transition-colors hover:bg-accent active:bg-accent"
+          class="flex w-full items-center justify-center gap-2 rounded-xl py-1 text-xl font-bold transition-colors hover:bg-accent active:bg-accent sm:text-2xl sm:tracking-wide"
           @click="copyKode"
         >
           {{ order.kodeOrder }}

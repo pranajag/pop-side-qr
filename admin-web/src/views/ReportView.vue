@@ -234,13 +234,16 @@ onMounted(() => useNotificationsStore().markLaporanSeen())
     </div>
 
     <div v-if="report" class="space-y-4">
-      <div class="rounded-lg border bg-card p-6">
-        <div class="flex items-center justify-between gap-2">
+      <!-- Di HP (360-390px) dua tombol Export tidak muat sebaris dengan judul
+      — dulu keluar dari kartu dan membuat seluruh halaman bisa digeser
+      ke samping. Sekarang melipat ke baris berikutnya. -->
+      <div class="rounded-lg border bg-card p-4 sm:p-6">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2 text-sm text-muted-foreground">
             <WalletIcon class="size-4" />
             Total Pendapatan
           </div>
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <a :href="exportUrl('report')">
               <Button size="sm" variant="outline" class="gap-1.5">
                 <DownloadIcon class="size-3.5" />
@@ -263,7 +266,7 @@ onMounted(() => useNotificationsStore().markLaporanSeen())
         </p>
       </div>
 
-      <div class="rounded-lg border bg-card p-6">
+      <div class="rounded-lg border bg-card p-4 sm:p-6">
         <div class="flex items-center gap-2 text-sm text-muted-foreground">
           <TrendingUpIcon class="size-4" />
           Margin Kotor

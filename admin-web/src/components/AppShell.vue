@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { clearAllDrafts } from '@/lib/drafts'
 import { useOrdersStore } from '@/stores/orders'
-import { useStaffCallsStore } from '@/stores/staffCalls'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useThemeStore } from '@/stores/theme'
 import { useNetworkStore } from '@/stores/network'
@@ -50,7 +49,6 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const orders = useOrdersStore()
-const staffCalls = useStaffCallsStore()
 const notifications = useNotificationsStore()
 const theme = useThemeStore()
 const network = useNetworkStore()
@@ -207,20 +205,6 @@ async function periksaSekali() {
       duration: 10000,
     })
   }
-
-  let freshCalls
-  try {
-    freshCalls = await staffCalls.checkForNewCalls()
-  } catch {
-    return
-  }
-  for (const call of freshCalls) {
-    playNotifySound()
-    toast.warning(`Meja ${call.nomorMeja} memanggil staff`, {
-      description: call.catatan || undefined,
-      duration: 10000,
-    })
-  }
 }
 
 function jadwalkanPolling() {
@@ -235,7 +219,6 @@ onMounted(() => {
   sambungRealtime()
   berhentiDengar = [
     dengarkan('order:baru', periksaNotifikasi),
-    dengarkan('panggilan:baru', periksaNotifikasi),
     dengarkan('order:berubah', refreshNotificationBadges),
   ]
   jadwalkanPolling()

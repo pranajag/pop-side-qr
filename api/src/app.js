@@ -25,7 +25,6 @@ const reportRoutes = require('./routes/report.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const shiftRoutes = require('./routes/shift.routes');
 const userRoutes = require('./routes/user.routes');
-const staffCallRoutes = require('./routes/staffCall.routes');
 const reservationRoutes = require('./routes/reservation.routes');
 const customerRoutes = require('./routes/customer.routes');
 const loyaltyTierRoutes = require('./routes/loyaltyTier.routes');
@@ -167,12 +166,14 @@ app.use(
     store: new PrismaSessionStore(),
     secret: process.env.SESSION_SECRET,
     resave: false,
-    // GET /csrf-token (below) never writes to req.session — it only reads
-    // req.session.id (csrf-csrf's getSessionIdentifier) — so without
-    // saveUninitialized: true that session, and the id the CSRF token gets
-    // bound to, wouldn't be persisted, and the following POST /login would
-    // fail CSRF validation against a session that was never saved.
-    saveUninitialized: true,
+    // false: sesi baru HANYA disimpan (dan cookie-nya dikirim) kalau isinya
+    // diubah. Dulu true — setiap request tanpa cookie ke alamat apa pun
+    // (termasuk yang tidak ada, mis. GET /apa-saja) menulis satu baris sesi
+    // ke MySQL, jadi siapa pun bisa membanjiri tabel sesi tanpa batas
+    // (pentest 1 Oktober). Satu-satunya pembuat sesi anonim sekarang
+    // GET /csrf-token (auth.controller.js menandai sesinya; dibatasi
+    // csrfTokenLimiter), supaya token CSRF terikat ke sesi yang tersimpan.
+    saveUninitialized: false,
     rolling: true,
     cookie: {
       httpOnly: true,
@@ -219,7 +220,6 @@ app.use('/api/admin/reports', reportRoutes);
 app.use('/api/admin/dashboard', dashboardRoutes);
 app.use('/api/admin/shifts', shiftRoutes);
 app.use('/api/admin/users', userRoutes);
-app.use('/api/admin/staff-calls', staffCallRoutes);
 app.use('/api/admin/reservations', reservationRoutes);
 app.use('/api/admin/customers', customerRoutes);
 app.use('/api/admin/loyalty-tiers', loyaltyTierRoutes);

@@ -28,12 +28,15 @@ function milikPerangkat(order, deviceHash) {
 // publik — permintaan pemilik: riwayatnya tidak boleh terlihat, baik oleh
 // customer yang sama maupun orang lain. Satu-satunya pengecualian: perangkat
 // pemesannya sendiri, selama JENDELA_STRUK_MS sesudah pesanan berakhir,
-// untuk menerima dan mengunduh struk digitalnya (PDF/PNG) — cukup lama
-// supaya struk tidak hilang hanya karena layar HP mati atau halamannya
-// termuat ulang sebelum sempat diunduh. Sesudah itu, atau begitu customer
-// menutup struknya (tutupStruk), pesanan itu hilang dari halaman status,
-// "Pesanan kamu", dan bill meja. Staff tetap melihat semuanya.
-const JENDELA_STRUK_MS = 30 * 60 * 1000;
+// untuk menerima dan mengunduh struk digitalnya (PDF/PNG). Sesudah itu,
+// atau begitu customer menutup struknya (tutupStruk), pesanan itu hilang
+// dari halaman status, "Pesanan kamu", dan bill meja. Staff tetap melihat
+// semuanya.
+//
+// 5 menit (permintaan client, 1 Oktober — sebelumnya 30 menit): struk
+// digital menghilang dengan sendirinya 5 menit setelah tersedia. Layar
+// customer menampilkan hitung mundurnya.
+const JENDELA_STRUK_MS = 5 * 60 * 1000;
 
 // Kapan pesanan berakhir: log status terakhirnya ke completed/cancelled
 // (updateStatus di orderManagement.service.js selalu menulis log itu).
@@ -42,10 +45,17 @@ const LOG_BERAKHIR = {
   where: { statusTo: { in: [...TERMINAL_STATUSES] } },
   orderBy: { createdAt: 'desc' },
   take: 1,
-  select: { createdAt: true },
+  select: { statusTo: true, createdAt: true },
+};
+// Untuk struk: log berakhir + log "→ confirmed" (siapa kasir penerima
+// pembayarannya, shift.service.js namaKasirUntuk).
+const LOG_STRUK = {
+  where: { statusTo: { in: ['confirmed', ...TERMINAL_STATUSES] } },
+  orderBy: { createdAt: 'desc' },
+  select: { statusTo: true, changedBy: true, createdAt: true },
 };
 function waktuBerakhir(order) {
-  return order.statusLogs?.[0]?.createdAt ?? order.updatedAt;
+  return order.statusLogs?.find((log) => TERMINAL_STATUSES.has(log.statusTo))?.createdAt ?? order.updatedAt;
 }
 function strukBerlakuSampai(order) {
   return new Date(waktuBerakhir(order).getTime() + JENDELA_STRUK_MS);
@@ -581,7 +591,7 @@ async function getByCode(kodeOrder, deviceHash, sekarang = new Date()) {
       },
       table: { select: { nomorMeja: true } },
       payment: { select: { cashReceived: true } },
-      statusLogs: LOG_BERAKHIR,
+      statusLogs: LOG_STRUK,
     },
   });
   if (!order || !milikPerangkat(order, deviceHash)) {
@@ -593,6 +603,10 @@ async function getByCode(kodeOrder, deviceHash, sekarang = new Date()) {
     throw new AppError(410, 'Pesanan ini sudah selesai dan tidak bisa dibuka lagi.', 'PESANAN_BERAKHIR');
   }
   const berakhir = TERMINAL_STATUSES.has(order.status);
+  const konfirmasi = order.statusLogs.find((log) => log.statusTo === 'confirmed');
+  const [kasir] = await shiftService.namaKasirUntuk([
+    konfirmasi ? { userId: konfirmasi.changedBy, waktu: konfirmasi.createdAt } : null,
+  ]);
   const cashReceived =
     order.payment?.cashReceived === null || order.payment?.cashReceived === undefined
       ? null
@@ -626,6 +640,9 @@ async function getByCode(kodeOrder, deviceHash, sekarang = new Date()) {
     // kapan struknya masih bisa diambil.
     cashReceived,
     changeAmount: cashReceived === null ? null : cashReceived - Number(order.totalHarga),
+    // Nama staff yang menerima pembayaran (diisi saat Mulai Shift) — bukan
+    // username atau id akunnya.
+    kasir,
     berakhirPada: berakhir ? waktuBerakhir(order) : null,
     strukBerlakuSampai: berakhir ? strukBerlakuSampai(order) : null,
     // Layar status yang menerima "selesai" lewat realtime memperkirakan

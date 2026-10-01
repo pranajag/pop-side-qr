@@ -272,7 +272,7 @@ async function onSave() {
       </p>
     </div>
 
-    <div class="space-y-4 rounded-lg border bg-card p-6">
+    <div class="space-y-4 rounded-lg border bg-card p-4 sm:p-6">
       <div>
         <h2 class="flex items-center gap-2 text-sm font-semibold">
           <StoreIcon class="size-4" />
@@ -315,7 +315,7 @@ async function onSave() {
       </Button>
     </div>
 
-    <div class="space-y-4 rounded-lg border bg-card p-6">
+    <div class="space-y-4 rounded-lg border bg-card p-4 sm:p-6">
       <div>
         <h2 class="flex items-center gap-2 text-sm font-semibold">
           <ShieldCheckIcon class="size-4" />
@@ -351,7 +351,7 @@ async function onSave() {
       </Button>
     </div>
 
-    <div class="space-y-4 rounded-lg border bg-card p-6">
+    <div class="space-y-4 rounded-lg border bg-card p-4 sm:p-6">
       <div>
         <h2 class="text-sm font-semibold">Gambar QRIS</h2>
         <p class="mt-1 text-xs text-muted-foreground">
@@ -397,7 +397,7 @@ async function onSave() {
       </Button>
     </div>
 
-    <div class="space-y-4 rounded-lg border bg-card p-6">
+    <div class="space-y-4 rounded-lg border bg-card p-4 sm:p-6">
       <div>
         <h2 class="flex items-center gap-2 text-sm font-semibold">
           <KeyIcon class="size-4" />
@@ -451,7 +451,7 @@ async function onSave() {
       </div>
     </div>
 
-    <div class="space-y-4 rounded-lg border bg-card p-6">
+    <div class="space-y-4 rounded-lg border bg-card p-4 sm:p-6">
       <div>
         <h2 class="flex items-center gap-2 text-sm font-semibold">
           <WebhookIcon class="size-4" />

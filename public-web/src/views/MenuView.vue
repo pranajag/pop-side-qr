@@ -9,22 +9,21 @@ import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { useLocaleStore } from '@/stores/locale'
 import { useThemeStore } from '@/stores/theme'
 import { useCafeStatusStore } from '@/stores/cafeStatus'
-import { formatRupiah, formatTime } from '@/lib/format'
+import { formatRupiah } from '@/lib/format'
 import { STATUS_LABEL_KEY, STATUS_COLOR } from '@/lib/orderStatus'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import QtyStepper from '@/components/QtyStepper.vue'
 import ReservasiNotice from '@/components/ReservasiNotice.vue'
+import HitungMundur from '@/components/HitungMundur.vue'
 import { teksReservasi } from '@/lib/reservasi'
 import VariantPickerDialog from '@/components/VariantPickerDialog.vue'
-import CallStaffDialog from '@/components/CallStaffDialog.vue'
 import BillDialog from '@/components/BillDialog.vue'
 import {
   ImageOffIcon,
   ChevronRightIcon,
   QrCodeIcon,
-  BellIcon,
   SearchIcon,
   ReceiptTextIcon,
   SunIcon,
@@ -44,7 +43,6 @@ const router = useRouter()
 
 const pickerOpen = ref(false)
 const pickerProduct = ref(null)
-const callStaffOpen = ref(false)
 const billOpen = ref(false)
 
 // null = "Semua" (no filter). Display-only — menu.categories itself stays
@@ -125,6 +123,13 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', segarkanRiwayat)
 })
 
+// Struk pesanan selesai hilang sendiri setelah 5 menit — begitu hitung
+// mundurnya habis, entrinya langsung lenyap dari kartu (server juga sudah
+// tidak mengembalikannya di muat berikutnya).
+function strukHabis(kodeOrder) {
+  recentOrders.pesanan = recentOrders.pesanan.filter((o) => o.kodeOrder !== kodeOrder)
+}
+
 function bukaPesanan(kodeOrder) {
   router.push({ name: 'order', params: { kodeOrder } })
 }
@@ -201,16 +206,6 @@ const estimatedTotal = computed(() =>
         >
           {{ locale.t('meja') }} {{ table.nomorMeja }}
         </span>
-        <!-- Tidak ada lagi ikon riwayat pesanan di sini (permintaan pemilik):
-        status pesanan cukup dari kartu "Pesanan kamu" di atas menu. -->
-        <button
-          type="button"
-          :aria-label="locale.t('panggilStaffLabel')"
-          class="flex size-10 shrink-0 items-center justify-center rounded-full border transition-colors hover:border-primary/50 hover:bg-accent active:bg-accent"
-          @click="callStaffOpen = true"
-        >
-          <BellIcon class="size-4" />
-        </button>
         <button
           type="button"
           :aria-label="locale.t('billLabel')"
@@ -276,8 +271,9 @@ const estimatedTotal = computed(() =>
             <span
               v-if="order.status === 'completed' && order.strukBerlakuSampai"
               class="block truncate text-xs text-muted-foreground"
-              >{{ locale.t('strukSiapSampai', { jam: formatTime(order.strukBerlakuSampai) }) }}</span
-            >
+              >{{ locale.t('strukHilangSingkat') }}
+              <HitungMundur :sampai="order.strukBerlakuSampai" @habis="strukHabis(order.kodeOrder)"
+            /></span>
             <span v-else class="block truncate font-mono text-xs text-muted-foreground">{{ order.kodeOrder }}</span>
           </span>
           <span class="shrink-0 text-xs font-semibold text-primary-strong">{{
@@ -472,10 +468,6 @@ const estimatedTotal = computed(() =>
       :open="pickerOpen"
       :product="pickerProduct"
       @update:open="pickerOpen = $event"
-    />
-    <CallStaffDialog
-      :open="callStaffOpen"
-      @update:open="callStaffOpen = $event"
     />
     <BillDialog :open="billOpen" @update:open="billOpen = $event" />
   </div>

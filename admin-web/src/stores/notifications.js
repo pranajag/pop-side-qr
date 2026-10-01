@@ -40,12 +40,15 @@ export const useNotificationsStore = defineStore('notifications', {
       }
       return lastSeen
     },
+    // Satu angka dari server (satu COUNT) — bukan 50 shift lengkap dengan
+    // hitungan uangnya, yang dulu diambil tiap 30 detik dan tiap ada
+    // perubahan status pesanan (api shift.service.js jumlahSelesaiSejak).
     async checkLaporan() {
       const lastSeen = this.ensureBaseline(LAPORAN_KEY)
-      const { shifts } = await api.get('/admin/shifts?limit=50')
-      this.laporanCount = shifts.filter(
-        (s) => s.endedAt && new Date(s.endedAt) > new Date(lastSeen)
-      ).length
+      const { jumlah } = await api.get(
+        `/admin/shifts/jumlah-selesai?sejak=${encodeURIComponent(lastSeen)}`
+      )
+      this.laporanCount = jumlah
     },
     async checkRiwayat() {
       const lastSeen = this.ensureBaseline(RIWAYAT_KEY)

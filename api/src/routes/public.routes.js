@@ -12,13 +12,11 @@ const { mintaOtpSchema, verifikasiOtpSchema } = require('../validators/memberOtp
 const {
   createOrderLimiter,
   createOrderMejaLimiter,
-  staffCallMejaLimiter,
   orderStatusLimiter,
   orderStatusIpLimiter,
   confirmPaymentLimiter,
   confirmPaymentIpLimiter,
   tutupStrukLimiter,
-  staffCallLimiter,
   tableVerifyLimiter,
   publicReadLimiter,
   memberLookupLimiter,
@@ -31,8 +29,6 @@ const {
 const productPhoto = require('../services/productPhoto.service');
 const settingsImage = require('../services/settingsImage.service');
 const settingsController = require('../controllers/settings.controller');
-const staffCallController = require('../controllers/staffCall.controller');
-const { createStaffCallSchema } = require('../validators/staffCall.validator');
 const { upload } = require('../middleware/upload');
 
 const router = Router();
@@ -96,6 +92,12 @@ router.post('/orders/:kodeOrder/struk/tutup', orderStatusIpLimiter, tutupStrukLi
 router.get('/pesanan-saya', publicReadLimiter, orderController.milikPerangkat);
 // Token berlangganan status order realtime — hanya untuk perangkat pemesan.
 router.get('/orders/:kodeOrder/realtime', orderStatusIpLimiter, orderStatusLimiter, orderController.realtimeToken);
-router.post('/call-staff', staffCallLimiter, staffCallMejaLimiter, validate(createStaffCallSchema), staffCallController.create);
+
+// Alamat lain di bawah /api/public tidak ada — dijawab di sini, sebelum
+// lapisan sesi & CSRF di app.js (jadi tidak membuat sesi, dan fitur yang
+// sudah dihapus seperti /call-staff menjawab 404, bukan 403 CSRF).
+router.use((req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
 
 module.exports = router;

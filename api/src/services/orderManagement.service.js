@@ -57,7 +57,22 @@ const ORDER_INCLUDE = {
   // Nama + 4 digit terakhir saja (nomor lengkapnya terenkripsi) — cukup
   // untuk kasir mencocokkan pemilik nomor member saat pembayaran.
   customer: { select: { nama: true, teleponAkhir: true } },
+  // Siapa yang menerima pembayaran — untuk nama kasir di struk
+  // (shift.service.js namaKasirUntuk).
+  statusLogs: { where: { statusTo: 'confirmed' }, orderBy: { createdAt: 'desc' }, take: 1, select: { changedBy: true, createdAt: true } },
 };
+
+function penerimaBayar(order) {
+  const log = order.statusLogs?.[0];
+  return log ? { userId: log.changedBy, waktu: log.createdAt } : null;
+}
+
+// Daftar pesanan siap kirim, lengkap dengan nama kasir masing-masing —
+// nama kasirnya dicari sekaligus untuk semua pesanan.
+async function bentukSemua(orders, batasPin, client = prisma) {
+  const kasir = await shiftService.namaKasirUntuk(orders.map(penerimaBayar), client);
+  return orders.map((o, i) => shapeOrder(o, batasPin, kasir[i]));
+}
 
 // Order yang masih menunggu konfirmasi pembayaran.
 const MENUNGGU_KONFIRMASI = new Set(['pending', 'waiting_verif']);
@@ -68,7 +83,7 @@ function perluPin(totalHarga, batasPin) {
   return batasPin !== null && batasPin !== undefined && Number(totalHarga) >= batasPin;
 }
 
-function shapeOrder(order, batasPin) {
+function shapeOrder(order, batasPin, kasir = null) {
   // Change owed back, derived rather than stored: it is always exactly
   // "what was handed over minus what was owed", so persisting it too would
   // just create a second number that could disagree with the first.
@@ -96,6 +111,8 @@ function shapeOrder(order, batasPin) {
     customerName: order.customerName,
     member: order.customer ? { nama: order.customer.nama, teleponAkhir: order.customer.teleponAkhir } : null,
     pointsEarned: order.pointsEarned ?? 0,
+    // Nama staff yang menerima pembayaran, seperti diisi saat Mulai Shift.
+    kasir,
     // Never the filename itself — that's only ever resolved server-side
     // by serveBuktiBayar, keyed off this order's own id, never handed to
     // the client to construct a URL from directly.
@@ -130,9 +147,8 @@ async function list(statusFilter) {
     prisma.order.findMany({ where: buildWhere(statusFilter), include: ORDER_INCLUDE }),
     settingsService.getPinVerifikasiMinimal(),
   ]);
-  return orders
-    .sort((a, b) => STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status] || a.createdAt - b.createdAt)
-    .map((o) => shapeOrder(o, batasPin));
+  orders.sort((a, b) => STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status] || a.createdAt - b.createdAt);
+  return bentukSemua(orders, batasPin);
 }
 
 // For external.routes.js's polling endpoint — "everything touched since I
@@ -146,7 +162,7 @@ async function listSince(since, limit) {
     orderBy: { updatedAt: 'asc' },
     take: limit,
   });
-  return orders.map((o) => shapeOrder(o));
+  return bentukSemua(orders);
 }
 
 async function findFull(tx, id) {
@@ -224,7 +240,7 @@ async function confirmPayment(orderId, userId, cashReceived, pin) {
       data: { orderId, statusFrom: expectedStatus, statusTo: 'confirmed', changedBy: userId },
     });
 
-    return shapeOrder(await findFull(tx, orderId));
+    return (await bentukSemua([await findFull(tx, orderId)], undefined, tx))[0];
   });
   webhookService.dispatch('order.status_changed', {
     kodeOrder: shaped.kodeOrder,
@@ -328,7 +344,7 @@ async function updateStatus(orderId, newStatus, userId, catatan, refundAmount, p
       data: { orderId, statusFrom: currentStatus, statusTo: newStatus, changedBy: userId, catatan },
     });
 
-    return shapeOrder(await findFull(tx, orderId));
+    return (await bentukSemua([await findFull(tx, orderId)], undefined, tx))[0];
   });
   webhookService.dispatch('order.status_changed', {
     kodeOrder: shaped.kodeOrder,

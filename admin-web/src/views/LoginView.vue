@@ -241,7 +241,7 @@ async function onSubmit() {
       <!-- Kode cadangan: ditampilkan SEKALI setelah 2FA baru dipasang. -->
       <div
         v-if="langkah === 'kode-cadangan'"
-        class="space-y-4 rounded-lg border bg-card p-6"
+        class="space-y-4 rounded-lg border bg-card p-4 sm:p-6"
       >
         <div class="flex items-start gap-3">
           <ShieldCheckIcon class="mt-0.5 size-5 shrink-0 text-primary" />
@@ -273,7 +273,7 @@ async function onSubmit() {
       <!-- Langkah 2FA: kode dari aplikasi, atau pasang 2FA dulu. -->
       <form
         v-else-if="langkah === 'kode-2fa' || langkah === 'setup-2fa'"
-        class="space-y-4 rounded-lg border bg-card p-6"
+        class="space-y-4 rounded-lg border bg-card p-4 sm:p-6"
         @submit.prevent="kirimKode"
       >
         <Alert v-if="error" variant="destructive">
@@ -435,7 +435,7 @@ async function onSubmit() {
 
       <form
         v-else
-        class="space-y-4 rounded-lg border bg-card p-6"
+        class="space-y-4 rounded-lg border bg-card p-4 sm:p-6"
         @submit.prevent="onSubmit"
       >
         <Alert v-if="isLockedOut" variant="destructive">

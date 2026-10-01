@@ -4,7 +4,7 @@ const logger = require('./utils/logger');
 const { tandaTangan, bacaTandaTangan } = require('./utils/kripto');
 
 // Notifikasi realtime (Socket.IO, tech stack AGENTS.md): pesanan baru,
-// panggilan meja, perubahan status, dan buka/tutup kafe sampai ke layar
+// perubahan status, reservasi, shift, dan buka/tutup kafe sampai ke layar
 // dalam hitungan milidetik, bukan menunggu polling berikutnya. Polling
 // tetap ada di frontend sebagai cadangan kalau koneksi realtime putus.
 //

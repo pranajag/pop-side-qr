@@ -3,9 +3,9 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { api, formatApiError } from '@/lib/api'
-import { formatTime } from '@/lib/format'
 import { buatStruk, keBlob, pdfDariCanvas, unduh } from '@/lib/struk'
 import { useLocaleStore } from '@/stores/locale'
+import HitungMundur from '@/components/HitungMundur.vue'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -17,12 +17,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { FileTextIcon, ImageIcon, LoaderCircleIcon, ReceiptTextIcon } from '@lucide/vue'
+import { FileTextIcon, ImageIcon, LoaderCircleIcon, ReceiptTextIcon, TimerIcon } from '@lucide/vue'
 
 // Struk digital yang otomatis muncul begitu pesanan selesai. Bisa diunduh
-// sebagai PDF atau PNG sampai strukBerlakuSampai (api order.service.js
-// JENDELA_STRUK_MS) — sesudah itu, atau setelah customer menutupnya di sini,
-// pesanan ini tidak bisa dibuka lagi dari web publik.
+// sebagai PDF atau PNG selama 5 menit (strukBerlakuSampai, api
+// order.service.js JENDELA_STRUK_MS) — hitung mundurnya terlihat di sini,
+// dan begitu habis struknya hilang sendiri (OrderView.vue kedaluwarsa).
+// Setelah ditutup customer pun, pesanan ini tidak bisa dibuka lagi.
 const props = defineProps({ order: { type: Object, required: true } })
 
 const locale = useLocaleStore()
@@ -34,10 +35,6 @@ const menyiapkan = ref(true)
 const gagal = ref(false)
 let canvas = null
 let png = null
-
-const batasJam = computed(() =>
-  props.order.strukBerlakuSampai ? formatTime(props.order.strukBerlakuSampai) : null
-)
 
 // Menggambar ulang setiap kali isinya berubah (bahasa, atau waktu selesai
 // yang sebelumnya masih perkiraan dari event realtime).
@@ -69,7 +66,7 @@ onMounted(async () => {
   }
   await siapkan()
 })
-watch(() => [locale.locale, props.order.berakhirPada, props.order.strukBerlakuSampai], siapkan)
+watch(() => [locale.locale, props.order.berakhirPada, props.order.strukBerlakuSampai, props.order.kasir], siapkan)
 onUnmounted(() => {
   urutan += 1
   if (pratinjau.value) URL.revokeObjectURL(pratinjau.value)
@@ -123,7 +120,15 @@ async function tutup() {
       <div class="min-w-0 space-y-0.5">
         <h2 class="text-sm font-semibold">{{ locale.t('strukDigitalJudul') }}</h2>
         <p class="text-xs leading-relaxed text-muted-foreground">
-          {{ locale.t('strukDigitalDesc', { jam: batasJam ?? '—' }) }}
+          {{ locale.t('strukDigitalDesc') }}
+        </p>
+        <p
+          v-if="order.strukBerlakuSampai"
+          class="inline-flex items-center gap-1.5 rounded-full bg-status-waiting-verif/15 px-2.5 py-1 text-xs font-semibold text-status-waiting-verif"
+        >
+          <TimerIcon class="size-3.5" />
+          {{ locale.t('strukHilangDalam') }}
+          <HitungMundur :sampai="order.strukBerlakuSampai" />
         </p>
       </div>
     </div>

@@ -23,7 +23,6 @@ export const translations = {
     // MenuView
     scanQrTitle: 'Scan QR di meja kamu',
     scanQrDesc: 'Menu cuma bisa dibuka lewat QR yang ditempel di meja.',
-    panggilStaffLabel: 'Panggil Staff',
     semua: 'Semua',
     cariMenu: 'Cari menu...',
     belumAdaProduk: 'Belum ada produk.',
@@ -55,7 +54,7 @@ export const translations = {
     keranjang: 'Keranjang',
     keranjangKosong: 'Keranjang kamu masih kosong.',
     produk: 'Produk',
-    catatanPlaceholder: 'Catatan (opsional), misal: less ice',
+    catatanPlaceholder: 'Catatan, misal: less ice',
     perluDiperbarui: 'Perlu diperbarui',
     lanjutKePembayaran: 'Lanjut ke Pembayaran',
 
@@ -96,7 +95,7 @@ export const translations = {
       'Kode order salah, atau pesanannya sudah selesai. Status pesanan hanya bisa dilihat dari HP yang dipakai memesan, dan pesanan yang sudah selesai tidak bisa dibuka lagi — kalau perlu, tanyakan ke kasir dengan menyebutkan kode order.',
     pesananBerakhir: 'Pesanan sudah selesai',
     pesananBerakhirDesc:
-      'Pesanan yang sudah selesai tidak bisa dibuka lagi — struk digitalnya hanya bisa diunduh sesaat setelah pesanan selesai. Butuh struk? Minta ke kasir.',
+      'Pesanan yang sudah selesai tidak bisa dibuka lagi — struk digitalnya hanya tersedia 5 menit setelah pesanan selesai. Butuh struk? Minta ke kasir.',
     gagalMemuatStatus: 'Gagal memuat status pesanan',
     cobaLagiSebentar: 'Coba lagi sebentar.',
     cobaLagi: 'Coba Lagi',
@@ -192,13 +191,6 @@ export const translations = {
     billScopeNote:
       'Cuma pesanan meja ini yang masih diproses. Pesanan yang sudah selesai tidak ditampilkan lagi — struknya ada di HP pemesan.',
 
-    // CallStaffDialog
-    panggilStaffTitle: 'Panggil Staff',
-    mintaAirPutih: 'Minta Air Putih',
-    sendokGarpu: 'Sendok/Garpu',
-    tanyaSesuatu: 'Tanya Sesuatu',
-    lainnya: 'Lainnya',
-    staffSegeraKeMeja: 'Staff akan segera ke meja kamu',
 
     // VariantPickerDialog
     wajibPilih: 'Wajib pilih',
@@ -209,12 +201,14 @@ export const translations = {
     pesananKamu: 'Pesanan kamu',
     lihatStatus: 'Lihat status',
     lihatStruk: 'Lihat struk',
-    strukSiapSampai: 'Struk siap sampai {jam}',
+    strukHilangDalam: 'Struk hilang otomatis dalam',
+    // Versi pendek untuk kartu sempit — layar 360px memotong versi panjangnya
+    strukHilangSingkat: 'Hilang dalam',
 
     // StrukDigital (halaman status) + isi struk PNG/PDF (lib/struk.js)
     strukDigitalJudul: 'Struk digital kamu',
     strukDigitalDesc:
-      'Pesanan sudah selesai. Unduh struknya sebelum pukul {jam} — setelah itu, atau setelah struk ditutup, pesanan ini tidak bisa dibuka lagi.',
+      'Pesanan sudah selesai. Unduh struknya sekarang — setelah waktunya habis, atau setelah struk ditutup, pesanan ini tidak bisa dibuka lagi.',
     strukAlt: 'Struk pesanan {kode}',
     menyiapkanStruk: 'Menyiapkan struk…',
     gagalMembuatStruk: 'Struk gagal dibuat. Coba muat ulang halaman ini.',
@@ -232,6 +226,7 @@ export const translations = {
     strukTipe: 'Tipe',
     strukDipesan: 'Dipesan',
     strukBayar: 'Bayar',
+    strukKasir: 'Kasir',
     strukPajak: 'Pajak',
     strukTotal: 'TOTAL',
     strukTunai: 'Tunai',
@@ -263,7 +258,6 @@ export const translations = {
     scanQrTitle: 'Scan the QR at your table',
     scanQrDesc:
       'The menu can only be opened by scanning the QR code on your table.',
-    panggilStaffLabel: 'Call Staff',
     semua: 'All',
     cariMenu: 'Search menu...',
     belumAdaProduk: 'No items yet.',
@@ -294,7 +288,7 @@ export const translations = {
     keranjang: 'Cart',
     keranjangKosong: 'Your cart is empty.',
     produk: 'Item',
-    catatanPlaceholder: 'Notes (optional), e.g. less ice',
+    catatanPlaceholder: 'Notes, e.g. less ice',
     perluDiperbarui: 'Needs updating',
     lanjutKePembayaran: 'Continue to Payment',
 
@@ -331,7 +325,7 @@ export const translations = {
       "Wrong order code, or the order is already finished. An order's status can only be viewed on the phone that placed it, and finished orders can't be opened again — ask the cashier with your order code if needed.",
     pesananBerakhir: 'This order is finished',
     pesananBerakhirDesc:
-      "Finished orders can't be opened again — the digital receipt can only be downloaded shortly after the order is completed. Need a receipt? Ask the cashier.",
+      "Finished orders can't be opened again — the digital receipt is only available for 5 minutes after the order is completed. Need a receipt? Ask the cashier.",
     gagalMemuatStatus: 'Failed to load order status',
     cobaLagiSebentar: 'Please try again shortly.',
     cobaLagi: 'Try Again',
@@ -427,12 +421,6 @@ export const translations = {
     billScopeNote:
       "Only this table's orders that are still in progress. Finished orders are no longer shown — their receipt is on the phone that ordered.",
 
-    panggilStaffTitle: 'Call Staff',
-    mintaAirPutih: 'Request Water',
-    sendokGarpu: 'Spoon/Fork',
-    tanyaSesuatu: 'Ask Something',
-    lainnya: 'Other',
-    staffSegeraKeMeja: 'Staff will be at your table shortly',
 
     wajibPilih: 'Required',
     jumlah: 'Quantity',
@@ -441,11 +429,12 @@ export const translations = {
     pesananKamu: 'Your orders',
     lihatStatus: 'View status',
     lihatStruk: 'View receipt',
-    strukSiapSampai: 'Receipt ready until {jam}',
+    strukHilangDalam: 'Receipt disappears in',
+    strukHilangSingkat: 'Gone in',
 
     strukDigitalJudul: 'Your digital receipt',
     strukDigitalDesc:
-      'Your order is complete. Download the receipt before {jam} — after that, or once you close it, this order can no longer be opened.',
+      'Your order is complete. Download the receipt now — once the time runs out, or once you close it, this order can no longer be opened.',
     strukAlt: 'Receipt for order {kode}',
     menyiapkanStruk: 'Preparing receipt…',
     gagalMembuatStruk: 'Could not create the receipt. Try reloading this page.',
@@ -463,6 +452,7 @@ export const translations = {
     strukTipe: 'Type',
     strukDipesan: 'Ordered',
     strukBayar: 'Payment',
+    strukKasir: 'Cashier',
     strukPajak: 'Tax',
     strukTotal: 'TOTAL',
     strukTunai: 'Cash',

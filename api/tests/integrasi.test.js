@@ -216,6 +216,22 @@ test('shift bersamaan: pesanan & DP masuk ke shift staff yang menerima uangnya, 
   assert.equal(shiftB.expectedCash, 50000 + (await total(milikB)));
 });
 
+test('badge Laporan: jumlah shift selesai dihitung server tanpa memuat daftar shift', async (t) => {
+  if (lewati) return t.skip(lewati);
+  const staff = await akunTanpaPassword('zz_uji_badge');
+  dibuat.userIds.push(staff.id);
+  const sebelum = new Date(Date.now() - 1000);
+  const awal = await shiftService.jumlahSelesaiSejak(sebelum);
+  await shiftService.startShift(staff.id, 0, 'ZZ Uji Badge');
+  assert.equal(await shiftService.jumlahSelesaiSejak(sebelum), awal, 'shift yang masih berjalan tidak dihitung');
+  await shiftService.endShift(staff.id, 0);
+  assert.equal(await shiftService.jumlahSelesaiSejak(sebelum), awal + 1);
+  assert.equal(await shiftService.jumlahSelesaiSejak(new Date(Date.now() + 60000)), 0, 'tidak ada yang selesai di masa depan');
+  const { jumlahSelesaiQuerySchema } = require('../src/validators/shift.validator');
+  assert.equal(jumlahSelesaiQuerySchema.safeParse({ sejak: 'bukan-tanggal' }).success, false);
+  assert.equal(jumlahSelesaiQuerySchema.safeParse({ sejak: sebelum.toISOString(), limit: '9999' }).success, false, 'parameter asing ditolak');
+});
+
 test('poin member: void dan konfirmasi bersamaan tidak saling menimpa saldo', async (t) => {
   if (lewati) return t.skip(lewati);
   // Nomor 0800 (bebas pulsa) — tidak mungkin milik member sungguhan.
@@ -701,6 +717,11 @@ test('pesanan selesai: struk hanya untuk pemesan selama jendela struk, lalu hila
     assert.equal(new Date(struk.strukBerlakuSampai) - new Date(struk.berakhirPada), orderService.JENDELA_STRUK_MS);
     assert.equal(struk.cashReceived, total + 2000);
     assert.equal(struk.changeAmount, 2000);
+    // Nama kasir = nama yang diisi saat Mulai Shift oleh staff penerima
+    // pembayaran (test.before), di struk digital maupun struk cetak admin.
+    assert.equal(struk.kasir, 'ZZ Uji Integrasi');
+    const diAdmin = (await orderManagementService.list('all')).find((o) => o.kodeOrder === order.kodeOrder);
+    assert.equal(diAdmin.kasir, 'ZZ Uji Integrasi');
     await assert.rejects(orderService.getByCode(order.kodeOrder, perangkatB), (e) => e.statusCode === 404, 'perangkat lain');
     assert.ok(!(await kodeDiBill()).includes(order.kodeOrder), 'pesanan selesai tidak pernah tampil di bill meja');
     assert.ok(await diKartu(), 'selama jendela struk: masih di kartu Pesanan kamu');
@@ -735,6 +756,43 @@ test('pesanan selesai: struk hanya untuk pemesan selama jendela struk, lalu hila
     assert.ok(!(await kodeDiBill()).includes(berjalan.kodeOrder));
   } finally {
     await settingsService.updatePinVerifikasi(batasPinAsli);
+  }
+});
+
+test('sesi: request anonim ke alamat apa pun tidak membuat sesi; hanya /csrf-token (untuk login)', async (t) => {
+  if (lewati) return t.skip(lewati);
+  const http = require('node:http');
+  const app = require('../src/app');
+  const server = http.createServer(app);
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  // Sesi baru = kedaluwarsa ~30 menit lagi; dihitung begitu supaya sesi lama
+  // yang dibersihkan store di tengah tes tidak mengacaukan hitungan.
+  const sesiBaru = () => perawatan.session.count({ where: { expiresAt: { gt: new Date(Date.now() + 25 * 60 * 1000) } } });
+  try {
+    const sebelum = await sesiBaru();
+    for (const [method, p] of [['GET', '/apa-saja'], ['GET', '/api/admin/orders'], ['POST', '/api/public/tidak-ada'], ['GET', '/api/tidak-ada']]) {
+      const r = await fetch(base + p, { method });
+      assert.equal(r.headers.getSetCookie().filter((c) => c.startsWith('popside.sid=')).length, 0, `${method} ${p}: tanpa cookie sesi`);
+    }
+    assert.equal(await sesiBaru(), sebelum, 'tidak ada baris sesi baru di database');
+    // Fitur panggil staff sudah dihapus: 404, bukan diteruskan ke lapisan CSRF.
+    assert.equal((await fetch(base + '/api/public/call-staff', { method: 'POST' })).status, 404);
+
+    const token = await fetch(base + '/api/auth/csrf-token');
+    const cookie = token.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+    assert.ok(cookie.includes('popside.sid='), '/csrf-token tetap membuat sesi');
+    const { csrfToken } = await token.json();
+    // Login dengan token itu sampai di pemeriksaan sandi (401), bukan
+    // ditolak CSRF (403) — sesinya benar-benar tersimpan.
+    const login = await fetch(base + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie, 'x-csrf-token': csrfToken },
+      body: JSON.stringify({ username: `zz_tidak_ada_${Date.now()}`, password: 'salah-sekali-123' }),
+    });
+    assert.equal(login.status, 401);
+  } finally {
+    await new Promise((r) => server.close(r));
   }
 });
 

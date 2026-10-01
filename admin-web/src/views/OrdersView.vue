@@ -3,7 +3,6 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { useOrdersStore } from '@/stores/orders'
-import { useStaffCallsStore } from '@/stores/staffCalls'
 import { useProductsStore } from '@/stores/products'
 import { useSettingsStore } from '@/stores/settings'
 import { useActiveShiftStore } from '@/stores/activeShift'
@@ -47,7 +46,6 @@ import {
   CheckIcon,
   XIcon,
   BanIcon,
-  BellIcon,
   PlusIcon,
   ImageIcon,
   PackageXIcon,
@@ -67,7 +65,6 @@ const POLL_CADANGAN_MS = 30000
 const router = useRouter()
 const route = useRoute()
 const store = useOrdersStore()
-const calls = useStaffCallsStore()
 const products = useProductsStore()
 const settings = useSettingsStore()
 const activeShiftStore = useActiveShiftStore()
@@ -113,7 +110,6 @@ const cancelOpen = ref(false)
 const cancelTarget = ref(null)
 const cancelReason = ref('')
 const cancelling = ref(false)
-const resolvingCallId = ref(null)
 const buktiOrderId = ref(null)
 const receiptOrder = ref(null)
 // totalHarga already has discount subtracted and tax/service added
@@ -212,7 +208,6 @@ onMounted(() => {
   } else {
     store.fetchAll()
   }
-  calls.fetchPending()
   products.fetchAll()
   settings.fetchSettings()
   activeShiftStore.fetch()
@@ -220,8 +215,6 @@ onMounted(() => {
   berhentiDengar = [
     dengarkan('order:baru', segarkanPesanan),
     dengarkan('order:berubah', segarkanPesanan),
-    dengarkan('panggilan:baru', () => calls.fetchPending()),
-    dengarkan('panggilan:berubah', () => calls.fetchPending()),
   ]
   clockTimer = setInterval(() => {
     now.value = Date.now()
@@ -232,7 +225,6 @@ function jadwalkanPolling() {
   clearInterval(pollTimer)
   pollTimer = setInterval(() => {
     store.fetchAll()
-    calls.fetchPending()
     products.fetchAll()
   }, realtimeTersambung.value ? POLL_CADANGAN_MS : POLL_MS)
 }
@@ -262,18 +254,6 @@ function needsPaymentConfirm(order) {
     (order.metode === 'qris' && order.status === 'waiting_verif') ||
     (order.metode !== 'qris' && order.status === 'pending')
   )
-}
-
-async function onResolveCall(call) {
-  resolvingCallId.value = call.id
-  try {
-    await calls.resolve(call.id)
-  } catch (err) {
-    toast.error(formatApiError(err))
-    calls.fetchPending()
-  } finally {
-    resolvingCallId.value = null
-  }
 }
 
 // Same non-reactive-plain-variable pattern as pendingCancel below —
@@ -472,41 +452,6 @@ async function onCancelConfirm() {
         <PlusIcon class="size-4" />
         Pesanan Manual
       </Button>
-    </div>
-
-    <div
-      v-if="calls.items.length > 0"
-      class="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950"
-    >
-      <div
-        v-for="call in calls.items"
-        :key="call.id"
-        class="flex items-center justify-between gap-3"
-      >
-        <span class="flex items-center gap-2 text-sm">
-          <BellIcon
-            class="size-4 shrink-0 text-amber-600 dark:text-amber-400"
-          />
-          <span>
-            <span class="font-semibold">Meja {{ call.nomorMeja }}</span>
-            <span v-if="call.catatan" class="text-muted-foreground">
-              · {{ call.catatan }}</span
-            >
-          </span>
-        </span>
-        <Button
-          size="sm"
-          variant="outline"
-          :disabled="resolvingCallId === call.id"
-          @click="onResolveCall(call)"
-        >
-          <LoaderCircleIcon
-            v-if="resolvingCallId === call.id"
-            class="size-3.5 animate-spin"
-          />
-          Selesai
-        </Button>
-      </div>
     </div>
 
     <div
@@ -1009,6 +954,12 @@ async function onCancelConfirm() {
             <div class="flex justify-between">
               <span>Bayar</span>
               <span>{{ receiptOrder.metode.toUpperCase() }}</span>
+            </div>
+            <!-- Nama yang diisi kasir saat Mulai Shift (api shift.service.js
+            namaKasirUntuk) — sama dengan struk digital customer. -->
+            <div v-if="receiptOrder.kasir" class="flex justify-between gap-3">
+              <span>Kasir</span>
+              <span class="text-right">{{ receiptOrder.kasir }}</span>
             </div>
           </div>
           <div class="space-y-1.5 border-b border-dashed pb-3">

@@ -80,6 +80,11 @@ model Table {
 
 // A customer's "need help" tap — no order attached, since it's often
 // unrelated to any specific order (water refill, cutlery, a question).
+// Fitur "Panggil Staff" DIHAPUS 2026-10-01 atas permintaan client (tidak
+// sesuai alur bisnisnya): tidak ada lagi route/layanan/layar yang menulis
+// atau membaca tabel ini. Tabelnya sengaja dibiarkan — riwayat lama tetap
+// utuh dan hosting tidak butuh migrasi; table.service.js masih
+// memeriksanya sebelum menghapus meja (foreign key).
 model StaffCall {
   id             Int             @id @default(autoincrement())
   tableId        Int             @map("table_id")

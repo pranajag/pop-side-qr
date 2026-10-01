@@ -174,8 +174,8 @@ async function assertNoDoubleBooking(tx, tableId, tanggalReservasi, excludeId) {
 const VALID_STATUSES = new Set(['pending', 'confirmed', 'cancelled', 'completed']);
 
 // statusFilter comes straight from req.query.status — whitelisted before it
-// reaches Prisma's `where`, same rule as staffCall.service.js/
-// orderManagement.service.js (an unchecked value could otherwise smuggle a
+// reaches Prisma's `where`, same rule as orderManagement.service.js (an
+// unchecked value could otherwise smuggle a
 // Prisma operator object through Express's query parser).
 async function list(statusFilter) {
   if (statusFilter !== undefined && statusFilter !== 'all' && !VALID_STATUSES.has(statusFilter)) {

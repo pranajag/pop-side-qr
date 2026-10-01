@@ -3,6 +3,9 @@ const { generateCsrfToken } = require('../middleware/csrf');
 const { SESSION_COOKIE_NAME, SESSION_COOKIE_CLEAR_OPTIONS } = require('../utils/session');
 
 async function csrfToken(req, res) {
+  // Menandai sesi supaya tersimpan (app.js saveUninitialized: false): token
+  // CSRF terikat ke id sesi ini, jadi sesinya harus ada saat POST /login.
+  req.session.dibuat ??= Date.now();
   res.json({ csrfToken: generateCsrfToken(req, res) });
 }
 

@@ -19,4 +19,9 @@ const endShiftSchema = z.strictObject({
   grabfoodAmount: z.coerce.number().min(0).max(999999999).optional(),
 });
 
-module.exports = { startShiftSchema, endShiftSchema };
+// Badge sidebar "Laporan": berapa shift yang selesai sejak waktu ini.
+const jumlahSelesaiQuerySchema = z.strictObject({
+  sejak: z.coerce.date(),
+});
+
+module.exports = { startShiftSchema, endShiftSchema, jumlahSelesaiQuerySchema };
