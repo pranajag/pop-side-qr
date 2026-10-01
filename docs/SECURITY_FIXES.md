@@ -22,8 +22,8 @@ Arti status:
 
 | Perintah (dari `api/`) | Hasil terakhir (1 Okt 2026) |
 |---|---|
-| `npm test` | 63 tes: 60 lulus, 3 dilewati (tes OTP member — fitur member sedang mati di database lokal), 0 gagal |
-| `npm run pentest` | 59/59 aman |
+| `npm test` | 65 tes: 62 lulus, 3 dilewati (tes OTP member — fitur member sedang mati di database lokal), 0 gagal |
+| `npm run pentest` | 78/78 aman |
 | `npm run db:audit` | 0 temuan |
 | `npx prisma validate` | valid |
 | `npm run build` di `public-web/` dan `admin-web/` | sukses |
@@ -41,6 +41,7 @@ Tes integrasi (`tests/integrasi.test.js`) butuh MySQL hidup dan `DIRECT_URL` di 
 | Token kedaluwarsa (`expires_at` + nonce) dan rotasi harian | Diputuskan tetap | Keputusan #1: QR dicetak dan ditempel di meja; tetap statis per meja dengan reset per meja. |
 | Middleware `qrGuard` + cek open bill atomik | Tidak perlu | Semua route publik bertoken meja (menu meja, bill, order, cek nomor member) lewat satu fungsi, `tableService.verifyToken` (format, meja aktif, HMAC). Bill disimpan di baris meja itu sendiri (`isBillOpen`, `currentVisitStartedAt`), jadi satu meja secara struktur tidak bisa punya dua bill aktif. |
 | Info meja di web publik (cegah QR palsu) | Sudah ada | Halaman menu menampilkan nomor meja. Token tebakan dan token asli + karakter tambahan ditolak 404 (pentest #6). |
+| QR meja yang sedang direservasi | **Diperbaiki** (1 Okt) | Selama reservasi terkonfirmasi memegang meja, pesanan & bill dari QR meja yang tertempel ditolak; hanya QR rombongan (token per reservasi) yang bisa. Lihat [rincian 23](#23-reservasi-dp-pas--kunci-qr-meja-1-oktober). |
 
 ### B. Member & data pribadi
 
@@ -258,9 +259,7 @@ Tes: integrasi "log audit: aksi staff tercatat tanpa rahasia; akun aplikasi tida
 
 ### 18. DP reservasi di bawah aturan toko (keputusan #9)
 
-Mengurangi atau membebaskan DP di bawah aturan toko hanya boleh admin, dengan alasan wajib (min 3 karakter) yang tampil di daftar reservasi dan tercatat di log audit. Kasir ditolak 403; layar kasir mengunci tombol Simpan dan menjelaskan alasannya.
-
-Tes: integrasi "reservasi: DP di bawah aturan toko hanya boleh admin, wajib alasan"; diuji juga lewat web (kasir memanggil API langsung melewati layar → 403).
+**Diganti 1 Oktober (permintaan client) — lihat [rincian 23](#23-reservasi-dp-pas--kunci-qr-meja-1-oktober).** Dulu: mengurangi atau membebaskan DP di bawah aturan toko hanya boleh admin, dengan alasan wajib yang tercatat di log audit. Sekarang tidak ada lagi yang bisa mengubah DP wajib per reservasi, admin sekalipun; kolom `alasan_dp` hanya riwayat reservasi lama.
 
 ### 19. Upload di hosting: database
 
@@ -301,6 +300,20 @@ Seluruh simulasi serangan diulang setelah perubahan permintaan client (`npm run 
 - **Badge Laporan** memakai `GET /api/admin/shifts/jumlah-selesai` (admin saja, `sejak` divalidasi zod strict) yang hanya mengembalikan satu angka — dashboard tidak lagi menarik 50 shift lengkap dengan hitungan uangnya setiap 30 detik.
 - **`uuid` (turunan `exceljs`) — diperbaiki** lewat `overrides` di `api/package.json` (`uuid` ^11.1.1), bukan menurunkan `exceljs`. Export Excel laporan diuji tetap menghasilkan file yang benar.
 
+### 23. Reservasi: DP pas & kunci QR meja (1 Oktober)
+
+Permintaan client setelah presentasi, untuk admin maupun kasir: reservasi harus memenuhi syaratnya sendiri.
+
+- **DP wajib dari server.** `depositAmount` dan `alasanDp` dihapus dari schema request (strictObject → 400 kalau masih dikirim); DP wajib selalu `hitungDpWajib(aturan toko, jumlah tamu)`. Ini menutup jalan "admin membebaskan DP" ([rincian 18](#18-dp-reservasi-di-bawah-aturan-toko-keputusan-9)) dan sesuai aturan AGENTS.md: angka uang tidak pernah dipercaya dari klien.
+- **DP pas.** Uang DP (saat membuat reservasi maupun Bayar DP) harus sama persis dengan kekurangannya — kurang (dicicil) atau lebih ditolak `DP_TIDAK_PAS`, tanpa menyimpan apa pun. Pencatatannya tetap di dalam kunci baris reservasi (dua kasir tidak bisa sama-sama melunasi).
+- **Konfirmasi hanya setelah lunas.** `PATCH /:id/status` ke `confirmed` ditolak `DP_BELUM_LUNAS` selama DP wajib belum lunas — konfirmasi = meja resmi dipegang.
+- **Kunci QR meja.** Reservasi terkonfirmasi memegang meja dari 30 menit sebelum jamnya sampai 3 jam sesudahnya (atau sampai selesai/batal). Selama itu `GET /public/tables/:token` melaporkan `terkunci`, dan `POST /public/orders` serta `GET /public/tables/:token/bill` menolak `MEJA_DIRESERVASI` — di server, bukan cuma tombol yang dimatikan. Yang ditampilkan ke web publik hanya jam reservasinya: tanpa nama, nomor HP, atau acara pemesan.
+- **QR rombongan.** `?r=` = HMAC-SHA256 rahasia meja itu (`tables.token_secret`) atas `reservasi:<id>` — ranah berbeda dari token meja (`table:<id>`), jadi tidak bisa diturunkan dari QR yang tertempel, dibandingkan `timingSafeEqual`, dan ikut mati saat QR meja di-reset. Tanpa kolom atau migrasi baru. Hanya diterbitkan (`GET /admin/reservations/:id/link-rombongan` dan `/qr`, login + peran, `Cache-Control: no-store`) untuk reservasi terkonfirmasi yang punya meja dan DP-nya lunas. Token ini hanya berlaku di meja reservasinya sendiri, dan hanya membuka kunci untuk reservasi itu.
+- **Akses kasir tetap sempit.** Kasir sekarang bisa membaca daftar meja untuk form (`GET /admin/reservations/meja`: id, nomor, kapasitas, aktif, tanda bentrok — tanpa token/URL QR) dan kop struk (`GET /admin/settings/toko`: nama, alamat, telepon). `GET /admin/tables` (token QR) dan `GET /admin/settings` (pengaturan lengkap, PIN, pajak) tetap khusus admin — dicek pentest #18 dan tes RBAC.
+- Query `?r=` dan `waktu`/`kecuali` divalidasi zod strict (format token 64 hex, tanggal sah, parameter asing ditolak).
+
+Tes: integrasi "reservasi: DP dibayar pas…", "reservasi: daftar meja untuk form…", "kunci meja: QR meja terkunci selama reservasi terkonfirmasi…", "reservasi: DP wajib dihitung dari aturan toko…", RBAC "setiap router admin memasang pengecekan login dan peran"; pentest #18 (19 pemeriksaan: DP dari request, pembebasan DP, DP kurang/lebih, konfirmasi sebelum lunas, QR rombongan sebelum dikonfirmasi & tanpa login, pesanan/bill dari QR yang terkunci, token rombongan karangan, parameter rombongan rusak, akses kasir ke daftar meja admin & pengaturan lengkap, dan rombongan tetap bisa memesan).
+
 ## npm audit
 
 Tidak ada temuan critical di ketiga paket. `npm audit fix` (tanpa `--force`) tidak bisa mengubah apa pun, karena semua "perbaikan" yang ditawarkan npm adalah **penurunan** versi major. `npm audit fix --force` sengaja tidak dijalankan. Diperiksa ulang 1 Oktober: temuan `uuid` sudah ditutup lewat `overrides` ([rincian 22](#22-pemeriksaan-ulang-1-oktober)), sisanya sama.
@@ -335,7 +348,7 @@ Sepuluh poin yang di pass pertama berstatus "butuh keputusan", beserta keputusan
 | 6 | 2FA TOTP untuk admin | Dikerjakan sebelum admin dibuka di internet | [Rincian 15](#15-2fa-totp-untuk-admin-keputusan-6) |
 | 7 | zod `.strict()` | Cara yang disarankan | [Rincian 16](#16-zod-strict-di-semua-schema-keputusan-7) |
 | 8 | Tabel audit semua aksi admin | Cara yang disarankan | [Rincian 17](#17-log-audit-semua-aksi-staff-keputusan-8) |
-| 9 | Pembebasan DP reservasi | Cara yang disarankan | [Rincian 18](#18-dp-reservasi-di-bawah-aturan-toko-keputusan-9) |
+| 9 | Pembebasan DP reservasi | Cara yang disarankan — diganti 1 Oktober: DP wajib tidak bisa diubah siapa pun | [Rincian 18](#18-dp-reservasi-di-bawah-aturan-toko-keputusan-9), [23](#23-reservasi-dp-pas--kunci-qr-meja-1-oktober) |
 | 10 | Batas diskon manual kasir | Tetap bisa diatur, jangan diubah | Tidak diubah |
 
 ### Yang masih menunggu
