@@ -1,14 +1,15 @@
 # Security Fixes — Hardening September 2026
 
-Hardening keamanan dikerjakan dalam tiga tahap:
+Hardening keamanan dikerjakan dalam empat tahap:
 
 1. **Pass audit A–F** (21–25 September) — berdasarkan prompt audit "Senior Application Security Engineer", ditambah pengetatan database 23 September.
 2. **Keputusan pemilik** (26 September) — 10 poin yang di pass pertama berstatus "butuh keputusan" sudah diputuskan pemilik dan dikerjakan. Ringkasannya di [Keputusan pemilik](#keputusan-pemilik-26-september).
 3. **Realtime & hosting demo** (26–27 September) — notifikasi realtime (Socket.IO) dan deploy ke Vercel (dua website) + Railway (API dan MySQL). Lihat [bagian G](#g-realtime--hosting).
+4. **Pemeriksaan ulang 1 Oktober** — setelah presentasi ke client: simulasi serangan penuh diulang, celah banjir sesi anonim ditutup, dan fitur Panggil Staff dihapus atas permintaan client. Lihat [rincian 22](#22-pemeriksaan-ulang-1-oktober).
 
 Perbaikan bug logika bisnis ada di [`LOGIC_BUGS_FIX.md`](LOGIC_BUGS_FIX.md).
 
-Batasan yang dipegang: **tidak mengubah alur bisnis utama, tidak menambah payment gateway, tidak menghapus fitur** — kecuali yang diputuskan sendiri oleh pemilik di tahap 2.
+Batasan yang dipegang: **tidak mengubah alur bisnis utama, tidak menambah payment gateway, tidak menghapus fitur** — kecuali yang diputuskan sendiri oleh pemilik di tahap 2, atau diminta client (Panggil Staff, tahap 4).
 
 Arti status:
 
@@ -19,10 +20,10 @@ Arti status:
 
 ## Cara memeriksa ulang
 
-| Perintah (dari `api/`) | Hasil terakhir (26 Sep 2026) |
+| Perintah (dari `api/`) | Hasil terakhir (1 Okt 2026) |
 |---|---|
-| `npm test` | 57/57 lulus — 16 aturan bisnis, 17 keamanan, 24 integrasi database |
-| `npm run pentest` | 49/49 aman |
+| `npm test` | 63 tes: 60 lulus, 3 dilewati (tes OTP member — fitur member sedang mati di database lokal), 0 gagal |
+| `npm run pentest` | 59/59 aman |
 | `npm run db:audit` | 0 temuan |
 | `npx prisma validate` | valid |
 | `npm run build` di `public-web/` dan `admin-web/` | sukses |
@@ -38,7 +39,7 @@ Tes integrasi (`tests/integrasi.test.js`) butuh MySQL hidup dan `DIRECT_URL` di 
 |---|---|---|
 | Token QR pakai HMAC | Sudah ada | HMAC-SHA256 dengan secret unik per meja (`tables.token_secret`), dibandingkan dengan `crypto.timingSafeEqual`. Admin bisa me-reset QR satu meja kapan saja tanpa mengganggu meja lain. |
 | Token kedaluwarsa (`expires_at` + nonce) dan rotasi harian | Diputuskan tetap | Keputusan #1: QR dicetak dan ditempel di meja; tetap statis per meja dengan reset per meja. |
-| Middleware `qrGuard` + cek open bill atomik | Tidak perlu | Semua route publik bertoken meja (menu meja, bill, order, panggil staff, cek nomor member) lewat satu fungsi, `tableService.verifyToken` (format, meja aktif, HMAC). Bill disimpan di baris meja itu sendiri (`isBillOpen`, `currentVisitStartedAt`), jadi satu meja secara struktur tidak bisa punya dua bill aktif. |
+| Middleware `qrGuard` + cek open bill atomik | Tidak perlu | Semua route publik bertoken meja (menu meja, bill, order, cek nomor member) lewat satu fungsi, `tableService.verifyToken` (format, meja aktif, HMAC). Bill disimpan di baris meja itu sendiri (`isBillOpen`, `currentVisitStartedAt`), jadi satu meja secara struktur tidak bisa punya dua bill aktif. |
 | Info meja di web publik (cegah QR palsu) | Sudah ada | Halaman menu menampilkan nomor meja. Token tebakan dan token asli + karakter tambahan ditolak 404 (pentest #6). |
 
 ### B. Member & data pribadi
@@ -73,6 +74,7 @@ Tes integrasi (`tests/integrasi.test.js`) butuh MySQL hidup dan `DIRECT_URL` di 
 
 | Poin | Status | Keterangan |
 |---|---|---|
+| Sesi kosong untuk request anonim | **Diperbaiki** (1 Okt) | Request tanpa login tidak lagi membuat baris sesi. Lihat [rincian 22](#22-pemeriksaan-ulang-1-oktober). |
 | Session store + cookie `__Host-popside.sid` | **Diperbaiki** | Lihat [rincian 5](#5-sesi-disimpan-di-mysql). Redis tidak dipakai — tidak ada di tech stack AGENTS.md; tujuannya (sesi tidak hilang saat restart, tidak menumpuk di memori) tercapai dengan MySQL. |
 | `helmet` + HSTS | Sudah ada | CSP, HSTS, X-Frame-Options, nosniff (pentest #11). Di hosting, header yang sama dipasang Vercel untuk kedua frontend ([rincian 21](#21-hosting-demo-vercel--railway)). |
 | `trust proxy` yang benar | **Diperbaiki** | Lihat [rincian 6](#6-trust-proxy). |
@@ -120,7 +122,7 @@ File: `api/src/services/cart.service.js`, `api/src/controllers/cart.controller.j
 
 ### 2. Kunci rate limit dibakukan
 
-Semua limiter berjalan **sebelum** validasi, sementara validator men-`trim` isian. Akibatnya `"admin"`, `"admin "`, `"admin  "` lolos validasi sebagai akun yang sama tapi dihitung sebagai jatah terpisah — lockout 5x gagal login bisa dilewati tanpa batas hanya dengan menambah spasi. Hal yang sama berlaku untuk limiter per meja (buat order, panggil staff, cek nomor member).
+Semua limiter berjalan **sebelum** validasi, sementara validator men-`trim` isian. Akibatnya `"admin"`, `"admin "`, `"admin  "` lolos validasi sebagai akun yang sama tapi dihitung sebagai jatah terpisah — lockout 5x gagal login bisa dilewati tanpa batas hanya dengan menambah spasi. Hal yang sama berlaku untuk limiter per meja (buat order, cek nomor member, dan dulu panggil staff).
 
 Kunci login sekarang `trim` + huruf kecil (sesuai collation MySQL `_ci`); kunci per meja/kode order ikut di-`trim`. File: `api/src/middleware/rateLimit.js`. Tes: pentest #2 ("spasi tambahan di username tidak memberi jatah percobaan baru") dan #13.
 
@@ -280,7 +282,7 @@ File: `api/src/realtime.js`. Tes: integrasi "realtime: staff butuh token sah; cu
 
 - Kedua frontend memanggil `/api` di domainnya sendiri, lalu Vercel meneruskannya ke Railway (rewrite di `vercel.json`). Cookie sesi, CSRF, dan cookie perangkat tetap first-party `__Host-` + `sameSite=strict` — tidak perlu dilonggarkan ke `SameSite=None` (dicek di produksi: `__Host-popside.sid` dan `__Host-popside.csrf-token` terpasang `HttpOnly; Secure; SameSite=Strict` di domain website). WebSocket langsung ke Railway dengan token ([rincian 20](#20-realtime-socketio)); di produksi, origin kedua website tersambung dan origin lain ditolak.
 - Header dari Vercel: CSP ketat (`script-src 'self'` + hash satu-satunya skrip inline, `connect-src` hanya domain sendiri dan API), HSTS, `X-Frame-Options: DENY`, nosniff, Permissions-Policy.
-- `TRUST_PROXY=2`. Siapa pun yang menembak Railway langsung bisa memalsukan `X-Forwarded-For`, jadi batas yang paling penting tidak bergantung IP: gagal login 20/15 menit per username, order 20/10 menit per meja, panggil staff 10/10 menit per meja, OTP per nomor. Service API dikunci 1 replika, karena batas-batas itu dan kunci PIN disimpan di memori proses.
+- `TRUST_PROXY=2`. Siapa pun yang menembak Railway langsung bisa memalsukan `X-Forwarded-For`, jadi batas yang paling penting tidak bergantung IP: gagal login 20/15 menit per username, order 20/10 menit per meja, OTP per nomor. Service API dikunci 1 replika, karena batas-batas itu dan kunci PIN disimpan di memori proses.
 - Rahasia (`SESSION_SECRET`, `CSRF_SECRET`, `QR_HMAC_SECRET`, `DATA_ENC_KEY`, `DATA_HASH_KEY`) dibuat acak 32 byte oleh `scripts/siapkan-produksi.js --railway` dan dikirim ke variabel Railway satu per satu lewat stdin — tidak pernah muncul di layar, argumen perintah, repo, maupun chat. Cadangannya ditulis ke folder Documents pemilik. Skrip menolak berjalan lagi kalau service sudah punya kunci, supaya kunci tidak pernah tertimpa (kunci baru = data terenkripsi hilang).
 - Database produksi: MySQL Railway di region yang sama dengan API, **hanya bisa dijangkau lewat jaringan privat Railway** (`mysql.railway.internal`) — lebih tertutup dibanding database terkelola yang terbuka ke internet. Akun `popside_app` (DML saja; tabel log hanya `SELECT` + `INSERT`) dan `popside_migrate` dengan password acak; diuji sebelum dipakai: akun aplikasi bisa membaca data, tidak bisa mengubah `audit_log`. Untuk memindahkan data dari Aiven, dibuka TCP proxy sementara (koneksi TLS), lalu dihapus dan dipastikan tertutup.
 - Database cadangan Aiven (Bengaluru): TLS dengan verifikasi sertifikat CA Aiven (`sslaccept=strict`), path sertifikat dibuat absolut untuk Prisma Client (`api/src/utils/urlDatabase.js`) karena penafsiran path relatif saat runtime berbeda antar OS. Tidak dipakai lagi sejak 27 September (±240 ms per query dari Railway Singapura).
@@ -288,14 +290,25 @@ File: `api/src/realtime.js`. Tes: integrasi "realtime: staff butuh token sah; cu
 
 Pemeriksaan produksi (27 September): health, pengaturan toko, menu, gambar menu & QRIS dari database, cookie `__Host-`, WebSocket (origin sah tersambung, origin lain ditolak), dan *path traversal* di route gambar (404). Rata-rata respons lewat domain website 0,13–0,17 detik. Tes: security "database hosting: sertifikat CA dibaca dari folder prisma/, TLS tetap diverifikasi", "sesi: … cookie __Host- …".
 
+### 22. Pemeriksaan ulang 1 Oktober
+
+Seluruh simulasi serangan diulang setelah perubahan permintaan client (`npm run pentest`: 59 serangan dalam 17 kelompok — injeksi, IDOR, CSRF, rate limit, upload, mass assignment, RBAC, XSS, header, kebocoran error, enumerasi member, pelacakan order, log audit, WebSocket, struk & fitur yang dihapus), ditambah `npm test`, `db:audit`, dan `npm audit`.
+
+- **Banjir sesi anonim — diperbaiki.** Dulu `saveUninitialized: true`: setiap request tanpa cookie — termasuk ke alamat yang tidak ada — membuat satu baris di tabel `sessions` yang berlaku 30 menit. Siapa pun tanpa login bisa menumpuk baris sesi kosong sebanyak request yang dikirim, sampai volume MySQL hosting (maks 500 MB) penuh dan kafe berhenti. Ditemukan karena alamat lama `/api/public/call-staff` dijawab 403 (CSRF) — artinya request ke alamat yang sudah tidak ada pun masih melewati middleware sesi. Sekarang `saveUninitialized: false`, sesi baru hanya dibuat `GET /api/auth/csrf-token` (langkah pertama login), dan router publik & eksternal menjawab 404 untuk alamat yang tidak dikenal. Login, 2FA, dan CSRF tidak berubah. Tes: integrasi "sesi: request anonim ke alamat apa pun tidak membuat sesi; hanya /csrf-token (untuk login)".
+- **Fitur Panggil Staff dihapus** (permintaan client): tiga endpoint (`POST /api/public/call-staff`, `GET /api/admin/staff-calls`, `PATCH /api/admin/staff-calls/:id/resolve`), dua limiter, dan dua event realtime lebih sedikit untuk diserang. Pentest #17 memastikan endpoint publik dan admin-nya 404.
+- **Struk 5 menit.** Kode order yang terbaca orang lain makin cepat tidak berguna (perangkat lain memang sudah 404 — [rincian 13](#13-pelacakan-order-terikat-perangkat-keputusan-4)). Pentest #17: jendela tepat 300 detik, struk tidak memuat sidik perangkat/ID/akun staff, perangkat lain tidak bisa membuka atau menutup struk, bill meja tanpa pesanan selesai, dan setelah ditutup pemesannya pun 404.
+- **Nama kasir di struk** hanya `namaStaff` shift — nama yang diketik saat mulai shift — bukan username atau ID akun (username adalah separuh kredensial login).
+- **Badge Laporan** memakai `GET /api/admin/shifts/jumlah-selesai` (admin saja, `sejak` divalidasi zod strict) yang hanya mengembalikan satu angka — dashboard tidak lagi menarik 50 shift lengkap dengan hitungan uangnya setiap 30 detik.
+- **`uuid` (turunan `exceljs`) — diperbaiki** lewat `overrides` di `api/package.json` (`uuid` ^11.1.1), bukan menurunkan `exceljs`. Export Excel laporan diuji tetap menghasilkan file yang benar.
+
 ## npm audit
 
-Tidak ada temuan critical di ketiga paket. `npm audit fix` (tanpa `--force`) tidak bisa mengubah apa pun, karena semua "perbaikan" yang ditawarkan npm adalah **penurunan** versi major. `npm audit fix --force` sengaja tidak dijalankan. Diperiksa ulang 26 September — temuannya sama.
+Tidak ada temuan critical di ketiga paket. `npm audit fix` (tanpa `--force`) tidak bisa mengubah apa pun, karena semua "perbaikan" yang ditawarkan npm adalah **penurunan** versi major. `npm audit fix --force` sengaja tidak dijalankan. Diperiksa ulang 1 Oktober: temuan `uuid` sudah ditutup lewat `overrides` ([rincian 22](#22-pemeriksaan-ulang-1-oktober)), sisanya sama.
 
 | Paket | Temuan | Dampak di aplikasi ini |
 |---|---|---|
-| `api`: `prisma` → `@prisma/config` → `deepmerge-ts` | high | CLI Prisma (devDependency), hanya menggabungkan config milik sendiri di mesin developer/saat build — tidak ikut berjalan di API dan tidak menerima input luar. "Perbaikan" npm = turun ke `prisma` 6.12.0, tidak cocok dengan `@prisma/client` 6.19.3. |
-| `api`: `exceljs` → `uuid` | moderate | Celahnya hanya terjadi kalau argumen `buf` dipakai; `exceljs` memanggil `uuidv4()` tanpa argumen. "Perbaikan" = turun ke `exceljs` 3.4.0. |
+| `api`: `prisma` → `@prisma/config` → `deepmerge-ts` | high | CLI Prisma (devDependency), hanya menggabungkan config milik sendiri di mesin developer/saat build — tidak ikut berjalan di API dan tidak menerima input luar. Tetap muncul di `npm audit --omit=dev` karena `@prisma/client` mencantumkan `prisma` sebagai peer dependency, tapi dicek 1 Oktober: setelah seluruh API dimuat, `deepmerge-ts` maupun `@prisma/config` tidak ikut termuat. "Perbaikan" npm = turun ke `prisma` 6.12.0, tidak cocok dengan `@prisma/client` 6.19.3. |
+| `api`: `exceljs` → `uuid` | moderate | **Diperbaiki 1 Oktober** lewat `overrides` (`uuid` ^11.1.1). |
 | `public-web`, `admin-web`: `shadcn-vue` (7 paket turunan) | moderate | CLI untuk menambah komponen (devDependency), tidak diimpor kode aplikasi dan tidak masuk bundle (`npm audit --omit=dev`: 0 temuan). "Perbaikan" = turun ke 0.10.5. |
 
 ## Dicatat, sengaja tidak diubah
