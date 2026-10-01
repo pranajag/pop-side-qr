@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { api, formatApiError } from '@/lib/api'
 import { buatStruk, keBlob, pdfDariCanvas, unduh } from '@/lib/struk'
+import { dengarkan } from '@/lib/realtime'
 import { useLocaleStore } from '@/stores/locale'
 import HitungMundur from '@/components/HitungMundur.vue'
 import { Button } from '@/components/ui/button'
@@ -58,16 +59,29 @@ async function siapkan() {
   }
 }
 
-onMounted(async () => {
+// Kop struk dari info toko di Pengaturan dashboard — diambil saat struk
+// muncul, dan diambil ulang begitu admin menyimpan perubahan (event
+// 'toko:berubah', api settings.controller.js), supaya struk yang sedang
+// terbuka pun memakai info terbaru.
+async function muatToko() {
   try {
     toko.value = (await api.get('/public/settings')).settings
   } catch {
     // Struk tetap dibuat — tanpa alamat & telepon toko.
   }
+}
+let berhentiDengarToko = null
+onMounted(async () => {
+  berhentiDengarToko = dengarkan('toko:berubah', async () => {
+    await muatToko()
+    await siapkan()
+  })
+  await muatToko()
   await siapkan()
 })
 watch(() => [locale.locale, props.order.berakhirPada, props.order.strukBerlakuSampai, props.order.kasir], siapkan)
 onUnmounted(() => {
+  berhentiDengarToko?.()
   urutan += 1
   if (pratinjau.value) URL.revokeObjectURL(pratinjau.value)
 })

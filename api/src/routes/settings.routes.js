@@ -13,6 +13,11 @@ const { upload } = require('../middleware/upload');
 
 const router = Router();
 
+// Kop struk (nama, alamat, telepon toko) — dibaca semua staff, karena kasir
+// juga mencetak struk. Didaftarkan SEBELUM router.use admin di bawah; sisa
+// pengaturan (termasuk mengubah info toko ini) tetap khusus admin.
+router.get('/toko', requireAuth, requireRole('admin', 'kasir'), settingsController.getToko);
+
 router.use(requireAuth, requireRole('admin'));
 
 router.get('/', settingsController.get);

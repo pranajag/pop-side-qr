@@ -240,4 +240,8 @@ test('RBAC: setiap router admin memasang pengecekan login dan peran', () => {
   assert.deepEqual(tanpaPeran, []);
   const produk = fs.readFileSync(path.join(folder, 'product.routes.js'), 'utf8');
   assert.match(produk, /router\.delete\('\/:id', requireRole\('admin'\)/);
+  // Kop struk (GET /toko) boleh dibaca kasir; sisa pengaturan khusus admin.
+  const pengaturan = fs.readFileSync(path.join(folder, 'settings.routes.js'), 'utf8');
+  assert.match(pengaturan, /router\.get\('\/toko', requireAuth, requireRole\('admin', 'kasir'\)/);
+  assert.match(pengaturan, /router\.use\(requireAuth, requireRole\('admin'\)\)/);
 });

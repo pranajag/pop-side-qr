@@ -58,5 +58,14 @@ export const useSettingsStore = defineStore('settings', {
       const data = await api.put('/admin/settings/toko', payload)
       this.applySettings(data.settings)
     },
+    // Kop struk saja (nama, alamat, telepon) — boleh dibaca kasir juga.
+    // GET /admin/settings di atas khusus admin; dulu struk kasir memakainya
+    // dan gagal diam-diam, jadi struknya hanya bertulisan "POPSIDE".
+    async fetchToko() {
+      const { toko } = await api.get('/admin/settings/toko')
+      this.namaToko = toko.namaToko
+      this.alamat = toko.alamat
+      this.telepon = toko.telepon
+    },
   },
 })

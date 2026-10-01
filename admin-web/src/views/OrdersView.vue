@@ -209,12 +209,16 @@ onMounted(() => {
     store.fetchAll()
   }
   products.fetchAll()
-  settings.fetchSettings()
+  // Kop struk (nama/alamat/telepon toko) — dibaca semua peran; dimuat ulang
+  // begitu admin menyimpan info toko di Pengaturan, di perangkat mana pun.
+  const muatToko = () => settings.fetchToko().catch(() => {})
+  muatToko()
   activeShiftStore.fetch()
   jadwalkanPolling()
   berhentiDengar = [
     dengarkan('order:baru', segarkanPesanan),
     dengarkan('order:berubah', segarkanPesanan),
+    dengarkan('toko:berubah', muatToko),
   ]
   clockTimer = setInterval(() => {
     now.value = Date.now()

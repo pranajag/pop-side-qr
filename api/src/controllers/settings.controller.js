@@ -1,5 +1,6 @@
 const settingsService = require('../services/settings.service');
 const shiftService = require('../services/shift.service');
+const realtime = require('../realtime');
 
 async function get(req, res) {
   const [settings, pinVerifikasiMinimal] = await Promise.all([
@@ -28,8 +29,19 @@ async function updateQris(req, res) {
   res.json({ settings });
 }
 
+// Info toko untuk kop struk — hanya tiga kolom ini, bukan seluruh pengaturan.
+async function getToko(req, res) {
+  const { namaToko, alamat, telepon } = await settingsService.getSettings();
+  res.json({ toko: { namaToko, alamat, telepon } });
+}
+
 async function updateStoreInfo(req, res) {
   const settings = await settingsService.updateStoreInfo(req.body);
+  // Struk yang sedang terbuka — di dashboard staff lain maupun struk digital
+  // di HP customer — langsung memuat ulang info toko. Isi event kosong:
+  // layar mengambil datanya lewat API biasa (AGENTS.md aturan 22).
+  realtime.keStaff('toko:berubah');
+  realtime.kePublik('toko:berubah');
   res.json({ settings });
 }
 
@@ -49,4 +61,4 @@ async function updatePinVerifikasi(req, res) {
   res.json({ pinVerifikasi: await settingsService.updatePinVerifikasi(req.body.minimal) });
 }
 
-module.exports = { get, getPublic, updateQris, updateStoreInfo, updateMemberEnabled, updateAturanDp, updatePinVerifikasi };
+module.exports = { get, getPublic, getToko, updateQris, updateStoreInfo, updateMemberEnabled, updateAturanDp, updatePinVerifikasi };
