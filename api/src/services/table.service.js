@@ -17,6 +17,18 @@ function tableUrl(qrToken) {
   return `${PUBLIC_WEB_URL}/t/${qrToken}`;
 }
 
+// QR rombongan reservasi (permintaan client 1 Oktober): QR meja biasa
+// ditambah `?r=<token satu reservasi>`. Selama reservasi terkonfirmasi
+// memegang meja, QR meja biasa tidak bisa dipakai memesan — hanya QR ini,
+// yang ditunjukkan kasir lewat tombol "Mulai Pesanan" (reservation.service.js
+// aksesMejaPublik). Diturunkan dari rahasia meja itu sendiri dengan ranah
+// berbeda dari token meja ("reservasi:" vs "table:"), jadi tidak perlu kolom
+// baru, tidak bisa diturunkan dari token meja yang tertempel, dan ikut
+// berganti saat QR meja di-reset.
+function computeTokenRombongan(reservationId, tokenSecret) {
+  return crypto.createHmac('sha256', tokenSecret).update(`reservasi:${reservationId}`).digest('hex');
+}
+
 // Explicit allowlist, not a spread — table rows carry tokenSecret, the
 // per-table HMAC key, which must never leave the server (AGENTS.md rule
 // #9's whole point). qrToken itself is fine to return: it's the value
@@ -222,12 +234,18 @@ function timingSafeHexEqual(a, b) {
   return crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
 }
 
+const POLA_TOKEN = /^[0-9a-f]{64}$/;
+
 // Public — called when a customer scans a table's QR. The unique index on
 // qrToken is the real gate (an attacker without the right token can't even
 // reach a row); the HMAC recompute below is defense-in-depth against the
 // token column being tampered with directly (bypassing resetToken()).
-async function verifyToken(token) {
-  if (!/^[0-9a-f]{64}$/.test(token)) {
+//
+// Mengembalikan baris meja LENGKAP, termasuk tokenSecret — hanya untuk
+// pemeriksaan di server (token rombongan, cocokkanRombongan di bawah).
+// Jangan pernah dikirim ke klien: verifyToken yang menyaringnya.
+async function mejaDariToken(token) {
+  if (typeof token !== 'string' || !POLA_TOKEN.test(token)) {
     return null;
   }
 
@@ -241,7 +259,48 @@ async function verifyToken(token) {
     return null;
   }
 
+  return table;
+}
+
+async function verifyToken(token) {
+  const table = await mejaDariToken(token);
+  if (!table) return null;
   return { id: table.id, nomorMeja: table.nomorMeja, currentVisitStartedAt: table.currentVisitStartedAt };
 }
 
-module.exports = { list, create, update, remove, resetToken, setBillOpen, clearVisit, generateQrImage, verifyToken };
+// Reservasi mana (di antara `reservationIds`, semuanya milik meja ini) yang
+// dipegang token rombongan ini — null kalau tidak ada yang cocok.
+function cocokkanRombongan(meja, reservationIds, tokenRombongan) {
+  if (typeof tokenRombongan !== 'string' || !POLA_TOKEN.test(tokenRombongan)) return null;
+  return (
+    reservationIds.find((id) => timingSafeHexEqual(computeTokenRombongan(id, meja.tokenSecret), tokenRombongan)) ?? null
+  );
+}
+
+async function urlRombongan(tableId, reservationId) {
+  const table = await prisma.table.findUnique({ where: { id: tableId } });
+  if (!table) {
+    throw new AppError(404, 'Meja tidak ditemukan');
+  }
+  return `${tableUrl(table.qrToken)}?r=${computeTokenRombongan(reservationId, table.tokenSecret)}`;
+}
+
+async function generateQrRombongan(tableId, reservationId) {
+  return QRCode.toBuffer(await urlRombongan(tableId, reservationId), { type: 'png', margin: 2, width: 400 });
+}
+
+module.exports = {
+  list,
+  create,
+  update,
+  remove,
+  resetToken,
+  setBillOpen,
+  clearVisit,
+  generateQrImage,
+  verifyToken,
+  mejaDariToken,
+  cocokkanRombongan,
+  urlRombongan,
+  generateQrRombongan,
+};

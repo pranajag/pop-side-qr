@@ -14,7 +14,10 @@ const locale = useLocaleStore()
 const failed = ref(false)
 
 onMounted(async () => {
-  const ok = await table.verify(route.params.token)
+  // `?r=` hanya ada di QR rombongan reservasi dari kasir.
+  const r = route.query.r
+  const rombongan = typeof r === 'string' && /^[0-9a-f]{64}$/.test(r) ? r : null
+  const ok = await table.verify(route.params.token, rombongan)
   if (ok) {
     router.replace({ name: 'menu' })
   } else {

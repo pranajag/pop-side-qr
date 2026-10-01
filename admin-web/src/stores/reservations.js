@@ -39,6 +39,7 @@ export const useReservationsStore = defineStore('reservations', {
       const data = await api.put(`/admin/reservations/${id}`, payload)
       const idx = this.items.findIndex((r) => r.id === id)
       if (idx !== -1) this.items[idx] = data.reservation
+      return data.reservation
     },
     async updateStatus(id, status) {
       const data = await api.patch(`/admin/reservations/${id}/status`, {
@@ -65,6 +66,24 @@ export const useReservationsStore = defineStore('reservations', {
     async remove(id) {
       await api.del(`/admin/reservations/${id}`)
       this.items = this.items.filter((r) => r.id !== id)
+    },
+    // Pilihan meja di form (kasir juga bisa — GET /admin/tables khusus
+    // admin). `waktu`: jadwal yang sedang diisi, supaya meja yang sudah
+    // direservasi di sekitar jam itu ditandai; `kecuali`: reservasi yang
+    // sedang diedit.
+    async fetchMeja({ waktu, kecuali } = {}) {
+      const q = new URLSearchParams()
+      if (waktu) q.set('waktu', waktu)
+      if (kecuali) q.set('kecuali', String(kecuali))
+      const qs = q.toString()
+      const data = await api.get(`/admin/reservations/meja${qs ? `?${qs}` : ''}`)
+      return data.meja
+    },
+    // Link QR rombongan ("Mulai Pesanan") — satu-satunya QR yang bisa dipakai
+    // memesan di meja yang sedang dipegang reservasi ini.
+    async linkRombongan(id) {
+      const data = await api.get(`/admin/reservations/${id}/link-rombongan`)
+      return data.url
     },
   },
 })

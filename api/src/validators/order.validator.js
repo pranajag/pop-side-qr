@@ -15,6 +15,10 @@ const orderItemsSchema = z
 
 const createOrderSchema = z.strictObject({
   token: z.string().regex(/^[0-9a-f]{64}$/, 'Token meja tidak valid'),
+  // QR rombongan reservasi (`?r=` saat scan) — satu-satunya jalan memesan di
+  // meja yang sedang dipegang reservasi terkonfirmasi (reservation.service.js
+  // aksesMejaPublik). Tidak memberi hak apa pun di meja lain.
+  tokenRombongan: z.string().regex(/^[0-9a-f]{64}$/, 'Token rombongan tidak valid').optional(),
   metode: z.enum(['qris', 'tunai', 'debit']),
   catatan: z.string().trim().max(200).optional(),
   items: orderItemsSchema,

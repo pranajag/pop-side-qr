@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import QtyStepper from '@/components/QtyStepper.vue'
+import ReservasiNotice from '@/components/ReservasiNotice.vue'
 import {
   ArrowLeftIcon,
   ImageOffIcon,
@@ -32,6 +33,9 @@ const router = useRouter()
 // ada staff yang jaga. Isinya tetap disimpan — begitu staff mulai shift,
 // customer tinggal lanjut tanpa mengulang dari awal.
 const tutup = computed(() => cafeStatus.tutup)
+// Meja sedang dipegang rombongan reservasi: keranjang tetap tersimpan, tapi
+// tidak bisa lanjut ke checkout dari QR meja ini.
+const terkunci = computed(() => table.terkunci)
 
 const summary = ref(null) // last server response: { items, total, issues }
 const loading = ref(false)
@@ -109,7 +113,7 @@ function unitPrice(item) {
 }
 
 function onCheckout() {
-  if (tutup.value) return
+  if (tutup.value || terkunci.value) return
   router.push({ name: 'checkout' })
 }
 </script>
@@ -138,6 +142,7 @@ function onCheckout() {
     </header>
 
     <main class="px-4 py-4">
+      <ReservasiNotice v-if="terkunci" class="mb-4" />
       <div
         v-if="tutup"
         class="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5"
@@ -241,10 +246,16 @@ function onCheckout() {
       <Button
         size="lg"
         class="h-12 w-full bg-primary text-primary-foreground hover:bg-primary/90"
-        :disabled="tutup || (summary?.issues?.length ?? 0) > 0"
+        :disabled="tutup || terkunci || (summary?.issues?.length ?? 0) > 0"
         @click="onCheckout"
       >
-        {{ tutup ? locale.t('kafeTutupTombol') : locale.t('lanjutKePembayaran') }}
+        {{
+          tutup
+            ? locale.t('kafeTutupTombol')
+            : terkunci
+              ? locale.t('mejaDireservasiTombol')
+              : locale.t('lanjutKePembayaran')
+        }}
       </Button>
     </div>
   </div>

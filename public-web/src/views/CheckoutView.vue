@@ -102,6 +102,9 @@ const clearCheckoutDraft = hapusDraft
 // (order.service.js); this just stops the customer filling in a whole
 // checkout before finding out.
 const tutup = computed(() => cafeStatus.loaded && !cafeStatus.sedangBuka)
+// Meja sedang dipegang rombongan reservasi dan perangkat ini bukan
+// rombongannya — server menolak pesanannya (MEJA_DIRESERVASI).
+const terkunci = computed(() => table.terkunci)
 
 const summary = ref(null)
 const loadingSummary = ref(false)
@@ -264,10 +267,13 @@ const selectedMethod = computed(() =>
 async function onSubmit() {
   // Status bisa berubah selagi dialog konfirmasi terbuka — tombol yang
   // membukanya sudah dimatikan, ini penjaga untuk jeda di antaranya.
-  if (tutup.value || teleponBermasalah.value) return
+  if (tutup.value || terkunci.value || teleponBermasalah.value) return
   submitting.value = true
   const payload = {
     token: table.token,
+    // QR rombongan reservasi — tanpa ini, meja yang sedang dipegang
+    // reservasi menolak pesanan.
+    tokenRombongan: table.rombongan ?? undefined,
     metode: metode.value,
     catatan: catatan.value || undefined,
     items: cart.items.map((i) => ({
@@ -305,6 +311,9 @@ async function onSubmit() {
       // misleading "too many attempts". Reflect the refusal locally so the
       // screen locks itself, exactly as if they had arrived after closing.
       if (err?.code === 'CAFE_CLOSED') cafeStatus.sedangBuka = false
+      // Meja ini baru saja dipegang reservasi selagi customer mengisi
+      // checkout: kunci layarnya, jelaskan lewat banner reservasi.
+      if (err?.code === 'MEJA_DIRESERVASI') table.tandaiTerkunci()
       toast.error(formatApiError(err))
     }
   } finally {
@@ -653,11 +662,17 @@ async function onSubmit() {
       <Button
         size="lg"
         class="h-12 w-full"
-        :disabled="submitting || hasIssues || loadingSummary || tutup || teleponBermasalah"
+        :disabled="submitting || hasIssues || loadingSummary || tutup || terkunci || teleponBermasalah"
         @click="confirmOpen = true"
       >
         <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
-        {{ tutup ? locale.t('kafeTutupTombol') : locale.t('pesanSekarang') }}
+        {{
+          tutup
+            ? locale.t('kafeTutupTombol')
+            : terkunci
+              ? locale.t('mejaDireservasiTombol')
+              : locale.t('pesanSekarang')
+        }}
       </Button>
     </div>
 
@@ -672,7 +687,7 @@ async function onSubmit() {
                 metode: selectedMethod?.label,
               })
             }}
-            <span v-if="table.reservasi" class="mt-2 block font-medium text-foreground">
+            <span v-if="table.reservasi && !table.reservasi.rombongan" class="mt-2 block font-medium text-foreground">
               {{ locale.t('reservasiKonfirmasi', { meja: table.nomorMeja }) }}
             </span>
           </AlertDialogDescription>

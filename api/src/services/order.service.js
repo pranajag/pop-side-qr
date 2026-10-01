@@ -5,12 +5,12 @@ const { isUniqueConstraintError } = require('../utils/prismaErrors');
 const { resolveProductVariants } = require('../utils/productVariants');
 const { jakartaDayBoundsUTC } = require('../utils/jakartaTime');
 const { NON_TERMINAL_STATUSES, TERMINAL_STATUSES } = require('../utils/orderStatus');
-const tableService = require('./table.service');
 const paymentProof = require('./paymentProof.service');
 const customerService = require('./customer.service');
 const settingsService = require('./settings.service');
 const webhookService = require('./webhook.service');
 const shiftService = require('./shift.service');
+const reservationService = require('./reservation.service');
 const { samaAman } = require('../utils/kripto');
 const realtime = require('../realtime');
 
@@ -176,13 +176,29 @@ async function buildOrderItems(tx, items) {
 // with the checkout preview so both quote the same total.
 const { computeTaxAndService } = settingsService;
 
+// Meja yang sedang dipegang reservasi terkonfirmasi: QR meja biasa tidak
+// bisa dipakai — hanya QR rombongan dari kasir (reservation.service.js
+// aksesMejaPublik). Kode MEJA_DIRESERVASI: layar web publik mengunci diri
+// dan menjelaskan, bukan sekadar menampilkan error.
+function tolakMejaDireservasi(nomorMeja, untuk) {
+  return new AppError(
+    409,
+    `Meja ${nomorMeja} sedang dipakai rombongan reservasi — ${untuk}. Pilih meja lain atau hubungi kasir.`,
+    'MEJA_DIRESERVASI'
+  );
+}
+
 async function createOrder(
-  { token, metode, catatan, items, idempotencyKey, customerPhone },
+  { token, tokenRombongan, metode, catatan, items, idempotencyKey, customerPhone },
   { deviceHash = null, memberTerverifikasi = false, diskonMemberBoleh = memberTerverifikasi } = {}
 ) {
-  const table = await tableService.verifyToken(token);
-  if (!table) {
+  const akses = await reservationService.aksesMejaPublik(token, tokenRombongan);
+  if (!akses) {
     throw new AppError(404, 'Meja tidak valid. Coba scan ulang QR.');
+  }
+  const table = akses.meja;
+  if (akses.reservasi?.terkunci) {
+    throw tolakMejaDireservasi(table.nomorMeja, 'QR meja ini tidak bisa dipakai memesan');
   }
 
   // Nobody clocked in means nobody can confirm the payment, cook the food,
@@ -699,10 +715,16 @@ async function tutupStruk(kodeOrder, deviceHash) {
 // ikut — riwayatnya tidak boleh terlihat oleh customer lain di meja yang
 // sama, dan pemesannya sendiri sudah menerima struk digital (lihat
 // JENDELA_STRUK_MS di atas).
-async function getTableBill(token) {
-  const table = await tableService.verifyToken(token);
-  if (!table) {
+async function getTableBill(token, tokenRombongan) {
+  const akses = await reservationService.aksesMejaPublik(token, tokenRombongan);
+  if (!akses) {
     throw new AppError(404, 'Meja tidak valid. Coba scan ulang QR.');
+  }
+  const table = akses.meja;
+  // Bill rombongan reservasi bukan urusan siapa pun yang kebetulan memindai
+  // QR meja yang tertempel.
+  if (akses.reservasi?.terkunci) {
+    throw tolakMejaDireservasi(table.nomorMeja, 'bill-nya hanya bisa dibuka lewat QR rombongan');
   }
 
   // Lower bound is the table's current visit (see bumpVisitIfTableIsFree),

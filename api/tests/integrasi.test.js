@@ -46,10 +46,20 @@ function nomorUji() {
   return `0800${String(Date.now()).slice(-6)}${String(urutNomor).padStart(2, '0')}`;
 }
 
-// Reservasi uji dibuat tanpa DP. Di bawah aturan DP toko itu = pembebasan,
-// yang hanya boleh admin dengan alasan — jadi tes melakukannya sebagai admin,
-// supaya tetap jalan apa pun aturan DP toko saat tes dijalankan.
-const BEBAS_DP = { depositAmount: 0, alasanDp: 'ZZ uji otomatis' };
+// DP wajib reservasi selalu dari aturan toko (permintaan client 1 Oktober —
+// tidak bisa diisi lewat request), jadi selama tes aturan DP toko di-set
+// Rp 0 (reservasi uji tanpa DP), kecuali tes yang mengaturnya sendiri lewat
+// denganAturanDp. Aturan aslinya dikembalikan di test.after.
+const TANPA_DP = { nominal: 0, perTamu: false };
+let aturanDpAsli = null;
+async function denganAturanDp(aturan, kerja) {
+  await settingsService.updateAturanDp(aturan);
+  try {
+    return await kerja();
+  } finally {
+    await settingsService.updateAturanDp(TANPA_DP);
+  }
+}
 const ADMIN_UJI = { id: null, role: 'admin' };
 
 // Jadwal reservasi uji: jauh di masa depan (tahun 2099), jadi tidak mungkin
@@ -79,6 +89,8 @@ test.before(async () => {
     return;
   }
   perawatan = new PrismaClient({ datasources: { db: { url: process.env.DIRECT_URL } } });
+  aturanDpAsli = await settingsService.getAturanDp();
+  await settingsService.updateAturanDp(TANPA_DP);
 
   const kasir = await akunTanpaPassword('zz_uji_integrasi');
   dibuat.userIds.push(kasir.id);
@@ -92,6 +104,7 @@ test.before(async () => {
 
 test.after(async () => {
   if (!perawatan) return;
+  if (aturanDpAsli) await settingsService.updateAturanDp(aturanDpAsli);
   await perawatan.$transaction(async (tx) => {
     const oid = dibuat.orderIds;
     if (oid.length) {
@@ -196,12 +209,14 @@ test('shift bersamaan: pesanan & DP masuk ke shift staff yang menerima uangnya, 
   await orderManagementService.confirmPayment(milikA.id, a.id, await total(milikA));
   await orderManagementService.confirmPayment(milikB.id, b.id, await total(milikB));
   // DP tunai diterima staff A.
-  await reservationService.create(
-    {
-      namaCustomer: 'ZZ Uji DP Shift', jumlahTamu: 2, tanggalReservasi: jadwalUji(24), tableId: dibuat.tableId,
-      depositAmount: 30000, alasanDp: 'ZZ uji otomatis', dpDibayarSekarang: 30000, metodeDp: 'tunai',
-    },
-    { id: a.id, role: 'admin' }
+  await denganAturanDp({ nominal: 30000, perTamu: false }, () =>
+    reservationService.create(
+      {
+        namaCustomer: 'ZZ Uji DP Shift', jumlahTamu: 2, tanggalReservasi: jadwalUji(24), tableId: dibuat.tableId,
+        dpDibayarSekarang: 30000, metodeDp: 'tunai',
+      },
+      { id: a.id, role: 'admin' }
+    )
   );
 
   const shiftA = await shiftService.getMyActiveShift(a.id);
@@ -316,7 +331,7 @@ test('reservasi: tiga staff membooking meja & jam yang sama bersamaan — hanya 
   const jam = jadwalUji(10);
   const hasil = await Promise.allSettled(
     [1, 2, 3].map((i) =>
-      reservationService.create({ namaCustomer: `ZZ Uji Booking ${i}`, jumlahTamu: 2, tanggalReservasi: jam, tableId: dibuat.tableId, ...BEBAS_DP }, ADMIN_UJI)
+      reservationService.create({ namaCustomer: `ZZ Uji Booking ${i}`, jumlahTamu: 2, tanggalReservasi: jam, tableId: dibuat.tableId }, ADMIN_UJI)
     )
   );
   assert.equal(hasil.filter((h) => h.status === 'fulfilled').length, 1);
@@ -327,20 +342,25 @@ test('reservasi: menghidupkan lagi reservasi batal yang jadwalnya sudah diambil 
   if (lewati) return t.skip(lewati);
   const jam = jadwalUji(12);
   const { reservation: lama } = await reservationService.create({
-    namaCustomer: 'ZZ Uji Lama', jumlahTamu: 2, tanggalReservasi: jam, tableId: dibuat.tableId, ...BEBAS_DP,
+    namaCustomer: 'ZZ Uji Lama', jumlahTamu: 2, tanggalReservasi: jam, tableId: dibuat.tableId,
   }, ADMIN_UJI);
   await reservationService.updateStatus(lama.id, 'cancelled');
-  await reservationService.create({ namaCustomer: 'ZZ Uji Baru', jumlahTamu: 2, tanggalReservasi: jam, tableId: dibuat.tableId, ...BEBAS_DP }, ADMIN_UJI);
+  await reservationService.create({ namaCustomer: 'ZZ Uji Baru', jumlahTamu: 2, tanggalReservasi: jam, tableId: dibuat.tableId }, ADMIN_UJI);
   await assert.rejects(reservationService.updateStatus(lama.id, 'pending'), (err) => err.statusCode === 409);
 });
 
 test('reservasi: DP wajib dihitung dari aturan toko di database, bukan dari request', async (t) => {
   if (lewati) return t.skip(lewati);
-  const aturan = await settingsService.getAturanDp();
-  const { reservation } = await reservationService.create({
-    namaCustomer: 'ZZ Uji DP', jumlahTamu: 3, tanggalReservasi: jadwalUji(14), tableId: dibuat.tableId,
-  });
-  assert.equal(reservation.depositAmount, aturan.perTamu ? aturan.nominal * 3 : aturan.nominal);
+  const { createReservationSchema, updateReservationSchema } = require('../src/validators/reservation.validator');
+  const isian = { namaCustomer: 'ZZ', jumlahTamu: 2, tanggalReservasi: jadwalUji(14).toISOString() };
+  assert.equal(createReservationSchema.safeParse(isian).success, true);
+  assert.equal(createReservationSchema.safeParse({ ...isian, depositAmount: 0 }).success, false, 'DP wajib dari request ditolak');
+  assert.equal(createReservationSchema.safeParse({ ...isian, alasanDp: 'ZZ bebas DP' }).success, false, 'pembebasan DP sudah tidak ada');
+  assert.equal(updateReservationSchema.safeParse({ depositAmount: 10000 }).success, false);
+  const { reservation } = await denganAturanDp({ nominal: 25000, perTamu: true }, () =>
+    reservationService.create({ namaCustomer: 'ZZ Uji DP', jumlahTamu: 3, tanggalReservasi: jadwalUji(14), tableId: dibuat.tableId }, ADMIN_UJI)
+  );
+  assert.equal(reservation.depositAmount, 75000);
 });
 
 test('nomor HP member: tidak ada nomor polos di database, tetap bisa dicari', async (t) => {
@@ -368,7 +388,7 @@ test('nomor HP member: tidak ada nomor polos di database, tetap bisa dicari', as
 test('reservasi: nomor HP customer tersimpan terenkripsi', async (t) => {
   if (lewati) return t.skip(lewati);
   const { reservation } = await reservationService.create(
-    { namaCustomer: 'ZZ Uji Telepon', telepon: '0812-0000-1234', jumlahTamu: 2, tanggalReservasi: jadwalUji(16), tableId: dibuat.tableId, ...BEBAS_DP },
+    { namaCustomer: 'ZZ Uji Telepon', telepon: '0812-0000-1234', jumlahTamu: 2, tanggalReservasi: jadwalUji(16), tableId: dibuat.tableId },
     ADMIN_UJI
   );
   assert.equal(reservation.telepon, '0812-0000-1234');
@@ -376,33 +396,149 @@ test('reservasi: nomor HP customer tersimpan terenkripsi', async (t) => {
   assert.ok(!Object.values(baris).some((v) => String(v).includes('0812-0000-1234')), 'nomor polos di database');
 });
 
-test('reservasi: DP di bawah aturan toko hanya boleh admin, wajib alasan', async (t) => {
+test('reservasi: DP dibayar pas — tidak bisa dicicil atau lebih; konfirmasi hanya setelah lunas', async (t) => {
   if (lewati) return t.skip(lewati);
-  const aturanAsli = await settingsService.getAturanDp();
-  const KASIR = { id: dibuat.userIds[0], role: 'kasir' };
-  try {
-    await settingsService.updateAturanDp({ nominal: 50000, perTamu: false });
-    const dasar = { namaCustomer: 'ZZ Uji Aturan DP', jumlahTamu: 2, tableId: dibuat.tableId };
+  const staff = await akunTanpaPassword('zz_uji_dp_pas');
+  dibuat.userIds.push(staff.id);
+  await shiftService.startShift(staff.id, 0, 'ZZ Uji DP Pas');
+  const KASIR = { id: staff.id, role: 'kasir' };
+  const ADMIN = { id: staff.id, role: 'admin' };
+  const dasar = { namaCustomer: 'ZZ Uji DP Pas', jumlahTamu: 2, tableId: dibuat.tableId };
+  const tidakPas = (e) => e.statusCode === 400 && e.code === 'DP_TIDAK_PAS';
 
-    await assert.rejects(reservationService.create({ ...dasar, tanggalReservasi: jadwalUji(18), depositAmount: 0 }, KASIR), (e) => e.statusCode === 403);
-    await assert.rejects(reservationService.create({ ...dasar, tanggalReservasi: jadwalUji(18), depositAmount: 10000 }, ADMIN_UJI), (e) => e.statusCode === 400);
-    const { reservation: dibebaskan } = await reservationService.create(
-      { ...dasar, tanggalReservasi: jadwalUji(18), depositAmount: 0, alasanDp: 'ZZ tamu langganan' },
-      ADMIN_UJI
+  await denganAturanDp({ nominal: 50000, perTamu: false }, async () => {
+    // Kurang atau lebih ditolak — untuk kasir maupun admin — tanpa menyimpan apa pun.
+    await assert.rejects(reservationService.create({ ...dasar, tanggalReservasi: jadwalUji(18), dpDibayarSekarang: 30000, metodeDp: 'tunai' }, KASIR), tidakPas);
+    await assert.rejects(reservationService.create({ ...dasar, tanggalReservasi: jadwalUji(18), dpDibayarSekarang: 60000, metodeDp: 'tunai' }, ADMIN), tidakPas);
+    assert.equal(await prisma.reservation.count({ where: { namaCustomer: dasar.namaCustomer } }), 0);
+
+    // Tanpa DP: tersimpan Pending dan belum bisa dikonfirmasi manual.
+    const { reservation: belum } = await reservationService.create({ ...dasar, tanggalReservasi: jadwalUji(18) }, KASIR);
+    assert.equal(belum.depositAmount, 50000);
+    assert.equal(belum.status, 'pending');
+    await assert.rejects(reservationService.updateStatus(belum.id, 'confirmed'), (e) => e.statusCode === 409 && e.code === 'DP_BELUM_LUNAS');
+    await assert.rejects(reservationService.linkRombongan(belum.id), (e) => e.statusCode === 409, 'QR rombongan baru ada setelah DP lunas');
+    await assert.rejects(reservationService.catatPembayaranDp(belum.id, { amount: 20000, metode: 'tunai' }, staff.id), tidakPas);
+    await assert.rejects(reservationService.catatPembayaranDp(belum.id, { amount: 70000, metode: 'tunai' }, staff.id), tidakPas);
+    const pas = await reservationService.catatPembayaranDp(belum.id, { amount: 50000, metode: 'tunai' }, staff.id);
+    assert.equal(pas.reservation.dp.status, 'lunas');
+    assert.equal(pas.reservation.status, 'confirmed', 'lunas -> otomatis dikonfirmasi');
+
+    // DP pas saat membuat: langsung lunas & dikonfirmasi.
+    const langsung = await reservationService.create({ ...dasar, tanggalReservasi: jadwalUji(20), dpDibayarSekarang: 50000, metodeDp: 'qris' }, KASIR);
+    assert.equal(langsung.reservation.status, 'confirmed');
+  });
+
+  await denganAturanDp({ nominal: 20000, perTamu: true }, async () => {
+    const { reservation } = await reservationService.create(
+      { ...dasar, jumlahTamu: 2, tanggalReservasi: jadwalUji(22), dpDibayarSekarang: 40000, metodeDp: 'tunai' },
+      KASIR
     );
-    assert.equal(dibebaskan.alasanDp, 'ZZ tamu langganan');
-    const { reservation: biasa } = await reservationService.create({ ...dasar, tanggalReservasi: jadwalUji(20) }, KASIR);
-    assert.equal(biasa.depositAmount, 50000, 'kasir tanpa isian DP -> ikut aturan toko');
+    assert.equal(reservation.status, 'confirmed');
+    // Tamu bertambah: DP wajib naik, syaratnya belum terpenuhi lagi -> Pending
+    // sampai sisanya dibayar pas.
+    const naik = await reservationService.update(reservation.id, { jumlahTamu: 3 });
+    assert.equal(naik.depositAmount, 60000);
+    assert.equal(naik.status, 'pending');
+    assert.equal(naik.dp.kurang, 20000);
+    // Tamu berkurang sampai DP wajib di bawah DP terbayar: kelebihan DP tidak
+    // bisa dikembalikan lewat sistem.
+    await assert.rejects(reservationService.update(reservation.id, { jumlahTamu: 1 }), (e) => e.statusCode === 409);
+    await assert.rejects(reservationService.catatPembayaranDp(reservation.id, { amount: 10000, metode: 'tunai' }, staff.id), tidakPas);
+    const lunas = await reservationService.catatPembayaranDp(reservation.id, { amount: 20000, metode: 'tunai' }, staff.id);
+    assert.equal(lunas.reservation.status, 'confirmed');
+  });
+});
 
-    // Aturan per tamu: menaikkan jumlah tamu sambil membiarkan DP kecil = memotong DP.
-    await settingsService.updateAturanDp({ nominal: 20000, perTamu: true });
-    const { reservation: kecil } = await reservationService.create({ ...dasar, jumlahTamu: 1, tanggalReservasi: jadwalUji(22) }, KASIR);
-    assert.equal(kecil.depositAmount, 20000);
-    await assert.rejects(reservationService.update(kecil.id, { jumlahTamu: 4 }, KASIR), (e) => e.statusCode === 403);
-    const naik = await reservationService.update(kecil.id, { jumlahTamu: 4, depositAmount: 80000 }, KASIR);
-    assert.equal(naik.depositAmount, 80000);
+test('reservasi: daftar meja untuk form — tanpa token QR, meja yang sudah direservasi ditandai', async (t) => {
+  if (lewati) return t.skip(lewati);
+  const jam = jadwalUji(30);
+  const { reservation } = await reservationService.create(
+    { namaCustomer: 'ZZ Uji Pilih Meja', jumlahTamu: 2, tanggalReservasi: jam, tableId: dibuat.tableId },
+    ADMIN_UJI
+  );
+  const mejaUji = (daftar) => daftar.find((x) => x.id === dibuat.tableId);
+  const dekat = await reservationService.mejaUntukForm({ waktu: new Date(jam.getTime() + 60 * 60 * 1000) });
+  assert.equal(mejaUji(dekat).direservasi?.namaCustomer, 'ZZ Uji Pilih Meja');
+  for (const meja of dekat) {
+    assert.deepEqual(Object.keys(meja).sort(), ['direservasi', 'id', 'isActive', 'kapasitas', 'nomorMeja'], 'tanpa token/URL QR');
+  }
+  const sendiri = await reservationService.mejaUntukForm({ waktu: jam, kecuali: reservation.id });
+  assert.equal(mejaUji(sendiri).direservasi, null, 'reservasi yang sedang diedit tidak bentrok dengan dirinya sendiri');
+  const jauh = await reservationService.mejaUntukForm({ waktu: new Date(jam.getTime() + 4 * 60 * 60 * 1000) });
+  assert.equal(mejaUji(jauh).direservasi, null);
+  const { mejaReservasiQuerySchema } = require('../src/validators/reservation.validator');
+  assert.equal(mejaReservasiQuerySchema.safeParse({ waktu: 'bukan-tanggal' }).success, false);
+  assert.equal(mejaReservasiQuerySchema.safeParse({ token: 'x' }).success, false, 'parameter asing ditolak');
+});
+
+test('kunci meja: QR meja terkunci selama reservasi terkonfirmasi; QR rombongan tetap bisa memesan & membuka bill', async (t) => {
+  if (lewati) return t.skip(lewati);
+  const produk = await prisma.product.create({
+    data: { categoryId: dibuat.categoryId, nama: 'ZZ Uji Kunci Meja', harga: 10000, stok: 0, trackStock: false, isAvailable: true },
+  });
+  dibuat.productIds.push(produk.id);
+  const items = [{ productId: produk.id, qty: 1 }];
+  const pesan = async (isi) => {
+    const o = await orderService.createOrder({ metode: 'tunai', items, ...isi });
+    dibuat.orderIds.push(o.id);
+    return o;
+  };
+  const terkunci = (e) => e.statusCode === 409 && e.code === 'MEJA_DIRESERVASI';
+
+  const { reservation } = await reservationService.create(
+    { namaCustomer: 'ZZ Uji Kunci', jumlahTamu: 2, tanggalReservasi: new Date(Date.now() + 10 * 60 * 1000), tableId: dibuat.tableId },
+    ADMIN_UJI
+  );
+  try {
+    // Pending = syarat belum terpenuhi: hanya pemberitahuan, QR meja tetap jalan.
+    let akses = await reservationService.aksesMejaPublik(dibuat.tableToken);
+    assert.equal(akses.reservasi.terkunci, false);
+    await pesan({ token: dibuat.tableToken });
+
+    await reservationService.updateStatus(reservation.id, 'confirmed');
+    akses = await reservationService.aksesMejaPublik(dibuat.tableToken);
+    assert.equal(akses.reservasi.terkunci, true);
+    assert.deepEqual(Object.keys(akses.reservasi).sort(), ['rombongan', 'sudahMulai', 'terkunci', 'waktu'], 'tanpa nama/nomor pemesan');
+    await assert.rejects(pesan({ token: dibuat.tableToken }), terkunci);
+    await assert.rejects(orderService.getTableBill(dibuat.tableToken), terkunci);
+    await assert.rejects(pesan({ token: dibuat.tableToken, tokenRombongan: 'a'.repeat(64) }), terkunci, 'token rombongan karangan');
+
+    const url = new URL(await reservationService.linkRombongan(reservation.id));
+    const tokenRombongan = url.searchParams.get('r');
+    assert.ok(url.pathname.endsWith(`/t/${dibuat.tableToken}`), 'QR rombongan = QR meja yang sama + token rombongan');
+    assert.match(tokenRombongan, /^[0-9a-f]{64}$/);
+    assert.notEqual(tokenRombongan, dibuat.tableToken);
+    akses = await reservationService.aksesMejaPublik(dibuat.tableToken, tokenRombongan);
+    assert.equal(akses.reservasi.terkunci, false);
+    assert.equal(akses.reservasi.rombongan, true);
+    const milikRombongan = await pesan({ token: dibuat.tableToken, tokenRombongan });
+    const bill = await orderService.getTableBill(dibuat.tableToken, tokenRombongan);
+    assert.ok(bill.orders.some((o) => o.kodeOrder === milikRombongan.kodeOrder));
+
+    // Reset QR meja: semua QR lama meja itu — termasuk QR rombongannya — mati.
+    const baru = await tableService.resetToken(dibuat.tableId);
+    dibuat.tableToken = baru.qrToken;
+    akses = await reservationService.aksesMejaPublik(dibuat.tableToken, tokenRombongan);
+    assert.equal(akses.reservasi.terkunci, true, 'token rombongan dari QR lama tidak berlaku lagi');
+    const tokenBaru = new URL(await reservationService.linkRombongan(reservation.id)).searchParams.get('r');
+    assert.notEqual(tokenBaru, tokenRombongan);
+
+    // Reservasi selesai: kunci lepas, QR meja biasa jalan lagi.
+    await reservationService.updateStatus(reservation.id, 'completed');
+    akses = await reservationService.aksesMejaPublik(dibuat.tableToken);
+    assert.equal(akses.reservasi, null);
+    await pesan({ token: dibuat.tableToken });
+
+    const { createOrderSchema } = require('../src/validators/order.validator');
+    const { aksesMejaQuerySchema } = require('../src/validators/table.validator');
+    const dasarOrder = { token: dibuat.tableToken, metode: 'tunai', items };
+    assert.equal(createOrderSchema.safeParse({ ...dasarOrder, tokenRombongan }).success, true);
+    assert.equal(createOrderSchema.safeParse({ ...dasarOrder, tokenRombongan: 'bukan-token' }).success, false);
+    assert.equal(aksesMejaQuerySchema.safeParse({ r: 'bukan-token' }).success, false);
+    assert.equal(aksesMejaQuerySchema.safeParse({ lain: '1' }).success, false, 'parameter asing ditolak');
   } finally {
-    await settingsService.updateAturanDp(aturanAsli);
+    await prisma.reservation.updateMany({ where: { id: reservation.id, status: { in: ['pending', 'confirmed'] } }, data: { status: 'cancelled' } });
   }
 });
 
@@ -411,9 +547,11 @@ test('reservasi: DP tanpa shift ditolak (PERLU_SHIFT) tanpa menyimpan setengah j
   const staff = await akunTanpaPassword('zz_uji_dp_shift');
   dibuat.userIds.push(staff.id);
   const pelaku = { id: staff.id, role: 'admin' };
+  await settingsService.updateAturanDp({ nominal: 40000, perTamu: false });
+  t.after(() => settingsService.updateAturanDp(TANPA_DP));
   const isi = {
     namaCustomer: 'ZZ Uji DP Tanpa Shift', jumlahTamu: 2, tanggalReservasi: jadwalUji(26), tableId: dibuat.tableId,
-    depositAmount: 40000, alasanDp: 'ZZ uji otomatis', dpDibayarSekarang: 40000, metodeDp: 'tunai',
+    dpDibayarSekarang: 40000, metodeDp: 'tunai',
   };
   const jumlah = () => prisma.reservation.count({ where: { namaCustomer: isi.namaCustomer } });
 

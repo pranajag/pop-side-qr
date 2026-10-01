@@ -35,12 +35,19 @@ export const translations = {
     kafeTutupTombol: 'Tutup — belum bisa pesan',
     reservasiSedangTitle: 'Meja {meja} sedang dipakai untuk reservasi',
     reservasiSedangDesc:
-      'Rombongan reservasi mulai pukul {jam}. Kalau kamu bukan bagian dari rombongan ini, pindah ke meja lain atau panggil staff, ya.',
+      'Rombongan reservasi mulai pukul {jam}. Kalau kamu bukan bagian dari rombongan ini, pindah ke meja lain atau hubungi kasir, ya.',
     reservasiSegeraTitle: 'Meja {meja} sudah direservasi pukul {jam}',
     reservasiSegeraDesc:
-      'Sebentar lagi meja ini dipakai rombongan reservasi. Kalau kamu bukan bagian dari rombongan ini, pilih meja lain atau panggil staff, ya.',
+      'Sebentar lagi meja ini dipakai rombongan reservasi. Kalau kamu bukan bagian dari rombongan ini, pilih meja lain atau hubungi kasir, ya.',
     reservasiKonfirmasi:
       'Meja {meja} sedang dipakai reservasi — pastikan kamu bagian dari rombongannya.',
+    // Meja dipegang reservasi terkonfirmasi — QR meja terkunci (ReservasiNotice)
+    mejaDireservasiTitle: 'Meja {meja} sedang direservasi',
+    mejaDireservasiDesc:
+      'Meja ini dipegang rombongan reservasi (pukul {jam}), jadi QR meja ini tidak bisa dipakai memesan. Menu tetap bisa dilihat — silakan pilih meja lain atau hubungi kasir.',
+    mejaDireservasiTombol: 'Meja sedang direservasi',
+    rombonganTitle: 'QR rombongan reservasi',
+    rombonganDesc: 'Kamu memesan sebagai rombongan reservasi Meja {meja} (pukul {jam}). Selamat menikmati!',
     tidakAdaMenuCocok: 'Tidak ada menu yang cocok dengan "{q}".',
     habis: 'Habis',
     pilih: 'Pilih',
@@ -186,6 +193,8 @@ export const translations = {
     billLabel: 'Bill',
     billTitle: 'Bill Meja {meja}',
     billKosong: 'Belum ada pesanan yang sedang diproses di meja ini.',
+    billMejaDireservasi:
+      'Meja {meja} sedang dipegang rombongan reservasi — bill-nya hanya bisa dibuka lewat QR rombongan dari kasir.',
     billTotalKeseluruhan: 'Total Keseluruhan',
     billJumlahPesanan: '{n} pesanan',
     billScopeNote:
@@ -270,12 +279,18 @@ export const translations = {
     kafeTutupTombol: 'Closed — ordering unavailable',
     reservasiSedangTitle: 'Table {meja} is in use for a reservation',
     reservasiSedangDesc:
-      'The reserved party starts at {jam}. If you are not part of this party, please move to another table or call a staff member.',
+      'The reserved party starts at {jam}. If you are not part of this party, please move to another table or ask the cashier.',
     reservasiSegeraTitle: 'Table {meja} is reserved for {jam}',
     reservasiSegeraDesc:
-      'A reserved party will use this table shortly. If you are not part of it, please choose another table or call a staff member.',
+      'A reserved party will use this table shortly. If you are not part of it, please choose another table or ask the cashier.',
     reservasiKonfirmasi:
       'Table {meja} is in use for a reservation — make sure you are part of that party.',
+    mejaDireservasiTitle: 'Table {meja} is reserved',
+    mejaDireservasiDesc:
+      'This table is held for a reservation ({jam}), so its QR code can’t be used to order. You can still browse the menu — please choose another table or ask the cashier.',
+    mejaDireservasiTombol: 'Table is reserved',
+    rombonganTitle: 'Reservation group QR',
+    rombonganDesc: 'You are ordering as the reservation group for Table {meja} ({jam}). Enjoy!',
     tidakAdaMenuCocok: 'No menu items match "{q}".',
     habis: 'Sold Out',
     pilih: 'Choose',
@@ -416,6 +431,8 @@ export const translations = {
     billLabel: 'Bill',
     billTitle: 'Table {meja} Bill',
     billKosong: 'No orders in progress at this table.',
+    billMejaDireservasi:
+      'Table {meja} is held for a reservation group — its bill can only be opened with the group QR from the cashier.',
     billTotalKeseluruhan: 'Grand Total',
     billJumlahPesanan: '{n} orders',
     billScopeNote:

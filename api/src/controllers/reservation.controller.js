@@ -17,7 +17,7 @@ async function create(req, res) {
 }
 
 async function update(req, res) {
-  const reservation = await reservationService.update(req.params.id, req.body, req.session.user);
+  const reservation = await reservationService.update(req.params.id, req.body);
   res.json({ reservation });
 }
 
@@ -40,4 +40,23 @@ async function remove(req, res) {
   res.status(204).end();
 }
 
-module.exports = { list, get, create, update, updateStatus, catatPembayaranDp, aturanDp, remove };
+async function meja(req, res) {
+  res.json({ meja: await reservationService.mejaUntukForm(req.validQuery) });
+}
+
+async function linkRombongan(req, res) {
+  res.json({ url: await reservationService.linkRombongan(req.params.id) });
+}
+
+async function qrRombongan(req, res) {
+  const buffer = await reservationService.qrRombongan(req.params.id);
+  res.set('Content-Type', 'image/png');
+  // Sama seperti QR meja (table.controller.js qrImage): dimuat lewat <img>
+  // dari origin dashboard; tanpa ini Helmet membuat browser menolaknya.
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  // QR ini kunci rombongan — jangan sampai tersimpan di cache bersama.
+  res.set('Cache-Control', 'no-store');
+  res.send(buffer);
+}
+
+module.exports = { list, get, create, update, updateStatus, catatPembayaranDp, aturanDp, remove, meja, linkRombongan, qrRombongan };

@@ -42,7 +42,7 @@ async function milikPerangkat(req, res) {
 }
 
 async function bill(req, res) {
-  const bill = await orderService.getTableBill(req.params.token);
+  const bill = await orderService.getTableBill(req.params.token, req.validQuery.r);
   res.json({ bill });
 }
 

@@ -19,7 +19,17 @@ const initial = loadJSON(sessionStorage, STORAGE_KEY, {
   token: null,
   id: null,
   nomorMeja: null,
+  rombongan: null,
 })
+
+// `rombongan`: token QR rombongan reservasi (`?r=` di QR dari tombol "Mulai
+// Pesanan" kasir). Selama reservasi terkonfirmasi memegang meja ini, hanya
+// perangkat yang membawanya yang bisa memesan & membuka bill — server yang
+// memutuskan setiap kali (api reservation.service.js aksesMejaPublik).
+function urlMeja(token, rombongan) {
+  const dasar = `/public/tables/${encodeURIComponent(token)}`
+  return rombongan ? `${dasar}?r=${encodeURIComponent(rombongan)}` : dasar
+}
 
 export const useTableStore = defineStore('table', {
   // reservasi tidak ikut disimpan ke sessionStorage: itu fakta "saat ini",
@@ -33,15 +43,20 @@ export const useTableStore = defineStore('table', {
   }),
   getters: {
     isVerified: (state) => state.id !== null,
+    // Meja sedang dipegang rombongan reservasi dan perangkat ini bukan
+    // rombongannya: menu hanya bisa dilihat.
+    terkunci: (state) => state.reservasi?.terkunci === true,
   },
   actions: {
-    async verify(token) {
+    async verify(token, rombonganBaru = null) {
       this.verifying = true
+      // Scan ulang QR meja yang sama tanpa `?r=` (mis. stiker di meja) tidak
+      // membuang token rombongan yang sudah dibawa perangkat ini.
+      const rombongan = rombonganBaru ?? (token === this.token ? this.rombongan : null)
       try {
-        const data = await api.get(
-          `/public/tables/${encodeURIComponent(token)}`
-        )
+        const data = await api.get(urlMeja(token, rombongan))
         this.token = token
+        this.rombongan = rombongan
         this.id = data.table.id
         this.nomorMeja = data.table.nomorMeja
         this.reservasi = data.table.reservasi ?? null
@@ -59,6 +74,7 @@ export const useTableStore = defineStore('table', {
         this.token = null
         this.id = null
         this.nomorMeja = null
+        this.rombongan = null
         this.reservasi = null
         this.persist()
         return false
@@ -66,24 +82,39 @@ export const useTableStore = defineStore('table', {
         this.verifying = false
       }
     },
-    async perbaruiReservasi() {
+    // paksa: server baru saja menolak karena meja dipegang reservasi
+    // (MEJA_DIRESERVASI) — jangan tunggu jeda cek berikutnya.
+    async perbaruiReservasi({ paksa = false } = {}) {
       if (!this.token) return
-      if (Date.now() - this.reservasiDicek < JEDA_CEK_RESERVASI_MS) return
+      if (!paksa && Date.now() - this.reservasiDicek < JEDA_CEK_RESERVASI_MS) return
       // Dicatat sebelum request supaya dua pemanggilan beruntun (menu lalu
       // checkout) tidak sama-sama mengirim.
       this.reservasiDicek = Date.now()
       try {
-        const data = await api.get(`/public/tables/${encodeURIComponent(this.token)}`)
+        const data = await api.get(urlMeja(this.token, this.rombongan))
         this.reservasi = data.table.reservasi ?? null
       } catch {
         // Kena rate limit atau jaringan putus: pakai yang terakhir diketahui.
       }
+    },
+    // Server menolak dengan MEJA_DIRESERVASI: kunci layar seketika, lalu
+    // ambil detail reservasinya (jam) dari server.
+    async tandaiTerkunci() {
+      const sebelumnya = this.reservasi
+      this.reservasi = {
+        waktu: sebelumnya?.waktu ?? new Date().toISOString(),
+        sudahMulai: sebelumnya?.sudahMulai ?? true,
+        terkunci: true,
+        rombongan: false,
+      }
+      await this.perbaruiReservasi({ paksa: true })
     },
     persist() {
       saveJSON(sessionStorage, STORAGE_KEY, {
         token: this.token,
         id: this.id,
         nomorMeja: this.nomorMeja,
+        rombongan: this.rombongan,
       })
     },
   },

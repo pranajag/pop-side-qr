@@ -68,9 +68,13 @@ const visibleCategories = computed(() => {
 // Tombolnya sudah dimatikan di template; ini penjaga kalau event tetap
 // sampai (mis. status berubah tepat saat tombol ditekan).
 const tutup = computed(() => cafeStatus.tutup)
+// Meja sedang dipegang rombongan reservasi (dan perangkat ini bukan
+// rombongannya): sama seperti tutup, menu hanya bisa dilihat.
+const terkunci = computed(() => table.terkunci)
+const tidakBisaPesan = computed(() => tutup.value || terkunci.value)
 
 function onTambahClick(product) {
-  if (tutup.value) return
+  if (tidakBisaPesan.value) return
   if (product.variantGroups.length > 0) {
     pickerProduct.value = product
     pickerOpen.value = true
@@ -86,11 +90,12 @@ watch(
   () => table.reservasi,
   (r) => {
     if (!r) return
-    const kunci = `${r.waktu}|${r.sudahMulai}`
+    const kunci = `${r.waktu}|${r.sudahMulai}|${r.terkunci}|${r.rombongan}`
     if (table.reservasiDiberitahu === kunci) return
     table.reservasiDiberitahu = kunci
     const teks = teksReservasi(locale, table.nomorMeja, r)
-    toast.warning(teks.judul, { description: teks.isi, duration: 8000 })
+    const tampil = teks.jenis === 'terkunci' ? toast.error : teks.jenis === 'rombongan' ? toast.success : toast.warning
+    tampil(teks.judul, { description: teks.isi, duration: 8000 })
   },
   { immediate: true }
 )
@@ -401,7 +406,7 @@ const estimatedTotal = computed(() =>
                     size="sm"
                     variant="outline"
                     class="h-9 active:border-primary/50 active:bg-accent"
-                    :disabled="tutup"
+                    :disabled="tidakBisaPesan"
                     @click="onTambahClick(product)"
                   >
                     {{
@@ -413,7 +418,7 @@ const estimatedTotal = computed(() =>
                   <QtyStepper
                     v-else
                     :qty="cart.qtyFor(product.id, [])"
-                    :max="tutup ? cart.qtyFor(product.id, []) : maxQty(product)"
+                    :max="tidakBisaPesan ? cart.qtyFor(product.id, []) : maxQty(product)"
                     @update:qty="(q) => cart.setQty(product.id, [], q)"
                   />
                 </div>
@@ -430,7 +435,7 @@ const estimatedTotal = computed(() =>
     >
       <button
         type="button"
-        :disabled="tutup"
+        :disabled="tidakBisaPesan"
         class="flex w-full items-center gap-3 rounded-2xl bg-primary p-3 pr-4 shadow-lg shadow-black/15 transition-all hover:brightness-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:shadow-none disabled:saturate-[0.3] disabled:hover:brightness-100 disabled:active:scale-100"
         @click="router.push({ name: 'cart' })"
       >
@@ -455,6 +460,9 @@ const estimatedTotal = computed(() =>
         >
           <template v-if="tutup">
             {{ locale.t('kafeTutupTombol') }}
+          </template>
+          <template v-else-if="terkunci">
+            {{ locale.t('mejaDireservasiTombol') }}
           </template>
           <template v-else>
             {{ locale.t('checkout') }}

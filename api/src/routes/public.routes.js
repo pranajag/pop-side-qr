@@ -6,8 +6,10 @@ const tableController = require('../controllers/table.controller');
 const orderController = require('../controllers/order.controller');
 const memberOtpController = require('../controllers/memberOtp.controller');
 const validate = require('../middleware/validate');
+const { validateQuery } = require('../middleware/validate');
 const { cartTotalSchema } = require('../validators/cart.validator');
 const { createOrderSchema } = require('../validators/order.validator');
+const { aksesMejaQuerySchema } = require('../validators/table.validator');
 const { mintaOtpSchema, verifikasiOtpSchema } = require('../validators/memberOtp.validator');
 const {
   createOrderLimiter,
@@ -49,8 +51,8 @@ router.get('/settings/qris-photo/:filename', publicImageLimiter, settingsImage.s
 
 router.get('/menu', publicReadLimiter, menuController.getMenu);
 router.get('/settings', publicReadLimiter, settingsController.getPublic);
-router.get('/tables/:token', tableVerifyLimiter, tableController.verifyToken);
-router.get('/tables/:token/bill', tableVerifyLimiter, orderController.bill);
+router.get('/tables/:token', tableVerifyLimiter, validateQuery(aksesMejaQuerySchema), tableController.verifyToken);
+router.get('/tables/:token/bill', tableVerifyLimiter, validateQuery(aksesMejaQuerySchema), orderController.bill);
 // memberLookupLimiter only bites when the body carries a phone number —
 // see its comment in rateLimit.js. Both run: the generic public budget
 // still applies to the cart arithmetic itself.

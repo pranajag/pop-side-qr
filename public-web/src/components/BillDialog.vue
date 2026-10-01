@@ -21,16 +21,26 @@ const table = useTableStore()
 const locale = useLocaleStore()
 const loading = ref(false)
 const bill = ref(null)
+// Meja sedang dipegang rombongan reservasi: bill-nya hanya untuk QR rombongan.
+const terkunci = ref(false)
 
 async function load() {
   loading.value = true
+  terkunci.value = false
   try {
+    const qs = table.rombongan ? `?r=${encodeURIComponent(table.rombongan)}` : ''
     const data = await api.get(
-      `/public/tables/${encodeURIComponent(table.token)}/bill`
+      `/public/tables/${encodeURIComponent(table.token)}/bill${qs}`
     )
     bill.value = data.bill
   } catch (err) {
-    toast.error(formatApiError(err))
+    if (err?.code === 'MEJA_DIRESERVASI') {
+      bill.value = null
+      terkunci.value = true
+      table.tandaiTerkunci()
+    } else {
+      toast.error(formatApiError(err))
+    }
   } finally {
     loading.value = false
   }
@@ -63,6 +73,13 @@ watch(
       <div v-if="loading" class="flex justify-center py-8">
         <LoaderCircleIcon class="size-6 animate-spin text-muted-foreground" />
       </div>
+
+      <p
+        v-else-if="terkunci"
+        class="py-6 text-center text-sm text-muted-foreground"
+      >
+        {{ locale.t('billMejaDireservasi', { meja: table.nomorMeja }) }}
+      </p>
 
       <p
         v-else-if="!bill || bill.orders.length === 0"

@@ -20,17 +20,10 @@ const reservationFields = z.strictObject({
   tanggalReservasi: z.coerce.date(),
   tableId: tableIdSchema.optional(),
   catatan: z.preprocess((v) => (v === '' ? undefined : v), z.string().trim().max(300).optional()),
-  // Deposit/DP to secure the booking — optional, 0 (no deposit) unless
-  // staff sets one. Empty string from a cleared form field means "no
-  // deposit", not "reject the request".
-  depositAmount: z.preprocess(
-    (v) => (v === '' || v === undefined ? undefined : v),
-    z.coerce.number().int().min(0).max(999999999).optional()
-  ),
-  // Wajib (dan hanya admin yang boleh) kalau DP wajib di bawah aturan toko —
-  // reservation.service.js yang menentukan, karena hanya ia yang tahu
-  // aturan DP-nya.
-  alasanDp: z.preprocess((v) => (v === '' || v === null ? undefined : v), z.string().trim().min(3).max(200).optional()),
+  // Sengaja TIDAK ada depositAmount/alasanDp: DP wajib selalu dihitung
+  // server dari aturan toko (permintaan client 1 Oktober — reservation.
+  // service.js). Request yang masih mengirimnya ditolak (strictObject),
+  // bukan diam-diam diabaikan.
 });
 
 const METODE = ['qris', 'tunai', 'debit'];
@@ -67,10 +60,19 @@ const catatPembayaranDpSchema = z.strictObject({
   metode: z.enum(METODE),
 });
 
+// GET /meja — pilihan meja di form reservasi. `waktu` = jadwal yang sedang
+// diisi (untuk menandai meja yang sudah direservasi), `kecuali` = reservasi
+// yang sedang diedit (supaya tidak bentrok dengan dirinya sendiri).
+const mejaReservasiQuerySchema = z.strictObject({
+  waktu: z.coerce.date().optional(),
+  kecuali: z.coerce.number().int().positive().optional(),
+});
+
 module.exports = {
   createReservationSchema,
   updateReservationSchema,
   updateReservationStatusSchema,
   catatPembayaranDpSchema,
+  mejaReservasiQuerySchema,
   RESERVATION_STATUSES,
 };

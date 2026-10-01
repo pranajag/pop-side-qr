@@ -2,6 +2,7 @@ const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
 const shiftService = require('./shift.service');
 const settingsService = require('./settings.service');
+const tableService = require('./table.service');
 const { enkripsi, dekripsi } = require('../utils/kripto');
 const realtime = require('../realtime');
 
@@ -20,21 +21,20 @@ function pelakuDari(pelaku) {
   return pelaku && typeof pelaku === 'object' ? pelaku : { id: pelaku ?? null, role: null };
 }
 
-// DP wajib di bawah aturan toko = keputusan soal uang toko: hanya admin
-// yang boleh, dan alasannya wajib tercatat (juga masuk log audit lewat
-// request-nya). Tanpa ini kasir bisa diam-diam membebaskan DP siapa pun.
-function periksaPotonganDp({ depositAmount, dpAturan, pelaku, alasanDp }) {
-  if (depositAmount >= dpAturan) return null;
-  if (pelaku.role !== 'admin') {
+// Syarat reservasi (permintaan client 1 Oktober), untuk admin maupun kasir:
+// - DP wajib selalu dihitung dari aturan toko — tidak bisa diisi atau diubah
+//   lewat request, admin sekalipun (dulu admin boleh menurunkannya dengan
+//   alasan; kolom alasan_dp sekarang hanya riwayat reservasi lama);
+// - DP dibayar PAS: tidak bisa dicicil, tidak bisa lebih. Reservasi boleh
+//   disimpan tanpa DP (Pending — meja belum dipegang), lalu DP dibayar pas.
+function assertDpPas(amount, harus, sisa = false) {
+  if (amount !== harus) {
     throw new AppError(
-      403,
-      `DP wajib reservasi ini ${rupiah(dpAturan)} (aturan toko). Hanya admin yang bisa mengurangi atau membebaskannya.`
+      400,
+      `DP harus dibayar pas ${rupiah(harus)}${sisa ? ' (sisa DP reservasi ini)' : ''} — tidak bisa kurang (dicicil) atau lebih.`,
+      'DP_TIDAK_PAS'
     );
   }
-  if (!alasanDp) {
-    throw new AppError(400, `Isi alasan kenapa DP di bawah aturan toko (${rupiah(dpAturan)}).`);
-  }
-  return alasanDp;
 }
 
 const INCLUDE_TABLE = {
@@ -201,24 +201,20 @@ async function get(id) {
 async function create(data, pelakuMentah) {
   const pelaku = pelakuDari(pelakuMentah);
   const userId = pelaku.id;
-  const { dpDibayarSekarang, metodeDp, alasanDp, ...sisa } = data;
+  const { dpDibayarSekarang, metodeDp, ...sisa } = data;
   const isi = denganTeleponTerenkripsi(sisa);
   await assertTableFits(isi.tableId ?? null, isi.jumlahTamu);
-  // DP wajib yang tidak diisi staff mengikuti aturan toko. Yang diisi di
-  // bawah aturan itu (termasuk 0 = dibebaskan) hanya boleh oleh admin,
-  // dengan alasan.
-  const dpAturan = hitungDpWajib(await settingsService.getAturanDp(), isi.jumlahTamu);
-  if (isi.depositAmount === undefined) isi.depositAmount = dpAturan;
-  isi.alasanDp = periksaPotonganDp({ depositAmount: isi.depositAmount, dpAturan, pelaku, alasanDp });
+  // DP wajib selalu dari aturan toko (validator tidak menerima depositAmount).
+  isi.depositAmount = hitungDpWajib(await settingsService.getAturanDp(), isi.jumlahTamu);
   const bayar = dpDibayarSekarang ?? 0;
   if (bayar > 0) {
-    await assertShiftBerjalan(userId);
     if (isi.depositAmount <= 0) {
-      throw new AppError(400, 'Reservasi ini tidak memerlukan DP — isi DP wajibnya dulu kalau memang ada DP.');
+      throw new AppError(400, 'Reservasi ini tidak memerlukan DP (aturan DP toko Rp 0).');
     }
-    if (bayar > isi.depositAmount) {
-      throw new AppError(400, `DP yang dibayar (${rupiah(bayar)}) melebihi DP wajib (${rupiah(isi.depositAmount)}).`);
-    }
+    // Jumlahnya dulu, baru shift: tidak ada gunanya menawarkan mulai shift
+    // untuk DP yang toh akan ditolak.
+    assertDpPas(bayar, isi.depositAmount);
+    await assertShiftBerjalan(userId);
   }
 
   let hasilBayar = { baruLunas: false, dikonfirmasiOtomatis: false };
@@ -257,14 +253,15 @@ async function catatDalamTransaksi(tx, id, amount, metode, userId) {
   }
   const { wajib, dibayar, kurang } = ringkasanDp(r);
   if (wajib <= 0) {
-    throw new AppError(400, 'Reservasi ini tidak memerlukan DP — isi DP wajibnya dulu kalau memang ada DP.');
+    throw new AppError(400, 'Reservasi ini tidak memerlukan DP (aturan DP toko Rp 0).');
   }
   if (kurang <= 0) {
     throw new AppError(409, 'DP reservasi ini sudah lunas.');
   }
-  if (amount > kurang) {
-    throw new AppError(400, `Melebihi kekurangan DP — sisa yang harus dibayar ${rupiah(kurang)}.`);
-  }
+  // Pas = seluruh kekurangannya sekaligus. Untuk reservasi baru itu seluruh
+  // DP wajib; "sisa" hanya ada di reservasi lama yang dulu dicicil, atau
+  // yang jumlah tamunya bertambah (aturan DP per tamu, lihat update()).
+  assertDpPas(amount, kurang, dibayar > 0);
 
   await tx.reservationDepositPayment.create({
     data: { reservationId: id, amount, metode, recordedBy: userId },
@@ -319,10 +316,8 @@ async function denganReservasiTerkunci(id, kerja) {
   }, TRANSAKSI_DP);
 }
 
-async function update(id, dataMentah, pelakuMentah) {
-  const pelaku = pelakuDari(pelakuMentah);
-  const { alasanDp, ...sisa } = dataMentah;
-  const data = denganTeleponTerenkripsi(sisa);
+async function update(id, dataMentah) {
+  const data = denganTeleponTerenkripsi(dataMentah);
   const reservation = await denganReservasiTerkunci(id, async (tx, existing) => {
     const nextTableId = data.tableId !== undefined ? data.tableId : existing.tableId;
     const nextJumlahTamu = data.jumlahTamu !== undefined ? data.jumlahTamu : existing.jumlahTamu;
@@ -331,30 +326,35 @@ async function update(id, dataMentah, pelakuMentah) {
     await assertNoDoubleBooking(tx, nextTableId, nextTanggal, id);
 
     let isi = data;
-    // Diperiksa setiap kali DP wajib ATAU jumlah tamu berubah — bukan hanya
-    // DP-nya: menaikkan jumlah tamu (aturan DP per tamu) sambil membiarkan
-    // DP tetap kecil sama saja dengan membebaskan sebagian DP.
-    if (data.depositAmount !== undefined || data.jumlahTamu !== undefined) {
-      const dpAturan = hitungDpWajib(await settingsService.getAturanDp(tx), nextJumlahTamu);
-      const dpBaru = data.depositAmount !== undefined ? data.depositAmount : Number(existing.depositAmount ?? 0);
-      isi = { ...isi, alasanDp: periksaPotonganDp({ depositAmount: dpBaru, dpAturan, pelaku, alasanDp: alasanDp ?? existing.alasanDp }) };
-    }
-
-    // DP wajib boleh diubah, tapi ringkasan lunasnya ikut dihitung ulang —
-    // dan tidak boleh turun di bawah uang yang sudah diterima (kalau tidak,
-    // reservasi tercatat "lebih bayar" tanpa ada yang mengembalikan).
-    if (data.depositAmount !== undefined) {
-      const payments = await tx.reservationDepositPayment.findMany({ where: { reservationId: id }, select: { amount: true } });
-      const dibayar = payments.reduce((s, pb) => s + Number(pb.amount), 0);
-      if (data.depositAmount < dibayar) {
-        throw new AppError(400, `DP wajib tidak boleh lebih kecil dari DP yang sudah dibayar (${rupiah(dibayar)}).`);
+    // DP wajib ditetapkan saat reservasi dibuat dan tidak bisa diubah lewat
+    // request. Satu-satunya yang menggesernya: aturan DP per tamu, saat
+    // jumlah tamu berubah — DP wajib dihitung ulang dari aturan toko.
+    if (data.jumlahTamu !== undefined && data.jumlahTamu !== existing.jumlahTamu) {
+      const aturan = await settingsService.getAturanDp(tx);
+      if (aturan.perTamu) {
+        const dpBaru = hitungDpWajib(aturan, nextJumlahTamu);
+        const payments = await tx.reservationDepositPayment.findMany({ where: { reservationId: id }, select: { amount: true } });
+        const dibayar = payments.reduce((s, pb) => s + Number(pb.amount), 0);
+        // Kelebihan DP tidak bisa dikembalikan lewat sistem — reservasi
+        // tercatat "lebih bayar" tanpa ada yang menanganinya.
+        if (dpBaru < dibayar) {
+          throw new AppError(
+            409,
+            `DP yang sudah dibayar (${rupiah(dibayar)}) lebih besar dari DP wajib untuk ${nextJumlahTamu} tamu (${rupiah(dpBaru)}). Kelebihan DP tidak bisa dikembalikan lewat sistem — kalau tamunya memang berkurang, batalkan reservasi ini lalu buat yang baru.`
+          );
+        }
+        const lunas = dpBaru > 0 && dibayar >= dpBaru;
+        isi = {
+          ...isi,
+          depositAmount: dpBaru,
+          depositPaid: lunas,
+          depositPaidAt: lunas ? existing.depositPaidAt ?? new Date() : null,
+          // DP yang kembali kurang = syarat reservasi belum terpenuhi lagi:
+          // meja dilepas (kembali Pending, QR meja tidak terkunci) sampai
+          // kekurangannya dibayar pas — begitu lunas, otomatis dikonfirmasi.
+          ...(!lunas && dpBaru > 0 && existing.status === 'confirmed' ? { status: 'pending' } : {}),
+        };
       }
-      const lunas = data.depositAmount > 0 && dibayar >= data.depositAmount;
-      isi = {
-        ...isi,
-        depositPaid: lunas,
-        depositPaidAt: lunas ? existing.depositPaidAt ?? new Date() : null,
-      };
     }
 
     return tx.reservation.update({ where: { id }, data: isi, include: INCLUDE_TABLE });
@@ -369,6 +369,21 @@ async function updateStatus(id, status) {
     // mejanya lagi — bisa saja meja & jam itu sudah diambil reservasi lain.
     if (STATUS_AKTIF.has(status) && !STATUS_AKTIF.has(existing.status)) {
       await assertNoDoubleBooking(tx, existing.tableId, existing.tanggalReservasi, id);
+    }
+    // Dikonfirmasi = meja resmi dipegang reservasi ini (QR mejanya terkunci
+    // untuk customer lain, QR rombongan tersedia) — hanya kalau syaratnya
+    // terpenuhi: DP wajib sudah lunas. Tanpa DP wajib (aturan Rp 0),
+    // konfirmasi manual tetap boleh.
+    if (status === 'confirmed' && existing.status !== 'confirmed') {
+      const depositPayments = await tx.reservationDepositPayment.findMany({ where: { reservationId: id }, select: { amount: true } });
+      const { wajib, kurang } = ringkasanDp({ ...existing, depositPayments });
+      if (wajib > 0 && kurang > 0) {
+        throw new AppError(
+          409,
+          `DP reservasi ini belum lunas — kurang ${rupiah(kurang)}. Catat DP-nya (pas) lewat Bayar DP; reservasi otomatis dikonfirmasi begitu lunas.`,
+          'DP_BELUM_LUNAS'
+        );
+      }
     }
     return tx.reservation.update({ where: { id }, data: { status }, include: INCLUDE_TABLE });
   });
@@ -425,4 +440,117 @@ async function reservasiUntukMejaPublik(tableId, sekarang = new Date()) {
   };
 }
 
-module.exports = { list, get, create, update, updateStatus, catatPembayaranDp, remove, reservasiUntukMejaPublik };
+// Kunci QR meja (permintaan client 1 Oktober). Selama reservasi
+// TERKONFIRMASI (DP lunas) memegang meja — JEDA_SEBELUM_MS sebelum jamnya
+// sampai BOOKING_WINDOW_MS sesudahnya, atau sampai ditandai selesai/batal —
+// QR meja yang tertempel tidak bisa dipakai memesan atau membuka bill.
+// Rombongannya memakai QR rombongan (`?r=`, table.service.js) dari tombol
+// "Mulai Pesanan" kasir. Reservasi Pending tidak mengunci: syaratnya belum
+// terpenuhi, cukup pemberitahuan biasa (reservasiUntukMejaPublik).
+//
+// Dipakai di setiap pintu masuk web publik yang memakai token meja: buka
+// meja, buat order, bill. Mengembalikan null kalau token mejanya tidak sah.
+async function aksesMejaPublik(token, tokenRombongan, sekarang = new Date()) {
+  const meja = await tableService.mejaDariToken(token);
+  if (!meja) return null;
+  const [info, terkonfirmasi] = await Promise.all([
+    reservasiUntukMejaPublik(meja.id, sekarang),
+    // Yang belum lewat — rombongan yang datang lebih awal tetap dikenali.
+    prisma.reservation.findMany({
+      where: { tableId: meja.id, status: 'confirmed', tanggalReservasi: { gte: new Date(sekarang.getTime() - BOOKING_WINDOW_MS) } },
+      orderBy: { tanggalReservasi: 'desc' },
+      select: { id: true, tanggalReservasi: true },
+    }),
+  ]);
+  const idRombongan = tableService.cocokkanRombongan(meja, terkonfirmasi.map((r) => r.id), tokenRombongan);
+  const pemegang = terkonfirmasi.filter((r) => r.tanggalReservasi.getTime() <= sekarang.getTime() + JEDA_SEBELUM_MS);
+  const terkunci = pemegang.length > 0 && !pemegang.some((r) => r.id === idRombongan);
+  const milikRombongan = terkunci ? null : terkonfirmasi.find((r) => r.id === idRombongan) ?? null;
+
+  // Yang ditampilkan: reservasi pemegang meja (terkunci), reservasi milik
+  // rombongan ini, atau pemberitahuan biasa — jam mulainya saja.
+  const tampil = terkunci ? pemegang[0] : milikRombongan;
+  const dasar = tampil ? { waktu: tampil.tanggalReservasi, sudahMulai: tampil.tanggalReservasi <= sekarang } : info;
+  return {
+    meja: { id: meja.id, nomorMeja: meja.nomorMeja, currentVisitStartedAt: meja.currentVisitStartedAt },
+    reservasi: dasar ? { ...dasar, terkunci, rombongan: Boolean(milikRombongan) } : null,
+  };
+}
+
+// Daftar meja untuk form reservasi — boleh dibaca kasir (GET /admin/tables
+// khusus admin karena memuat token & URL QR meja, yang tidak dibutuhkan di
+// sini). Meja yang sudah dipegang reservasi aktif lain di sekitar `waktu`
+// (jendela yang sama dengan assertNoDoubleBooking) ditandai, supaya form
+// tidak menawarkannya — server tetap menolaknya kalau dikirim juga.
+async function mejaUntukForm({ waktu, kecuali } = {}) {
+  const [tables, bentrok] = await Promise.all([
+    prisma.table.findMany({
+      orderBy: { id: 'asc' },
+      select: { id: true, nomorMeja: true, kapasitas: true, isActive: true },
+    }),
+    waktu
+      ? prisma.reservation.findMany({
+          where: {
+            tableId: { not: null },
+            status: { in: [...STATUS_AKTIF] },
+            ...(kecuali ? { id: { not: kecuali } } : {}),
+            tanggalReservasi: {
+              gte: new Date(waktu.getTime() - BOOKING_WINDOW_MS),
+              lte: new Date(waktu.getTime() + BOOKING_WINDOW_MS),
+            },
+          },
+          orderBy: { tanggalReservasi: 'asc' },
+          select: { tableId: true, namaCustomer: true, tanggalReservasi: true, status: true },
+        })
+      : [],
+  ]);
+  return tables.map((t) => {
+    const r = bentrok.find((b) => b.tableId === t.id);
+    return { ...t, direservasi: r ? { namaCustomer: r.namaCustomer, waktu: r.tanggalReservasi, status: r.status } : null };
+  });
+}
+
+// QR rombongan hanya untuk reservasi yang syaratnya terpenuhi: dikonfirmasi,
+// punya meja, dan DP wajibnya lunas.
+async function reservasiSiapRombongan(id) {
+  const r = await prisma.reservation.findUnique({ where: { id }, include: { depositPayments: { select: { amount: true } } } });
+  if (!r) {
+    throw new AppError(404, 'Reservasi tidak ditemukan');
+  }
+  if (r.status !== 'confirmed') {
+    throw new AppError(409, 'QR rombongan baru tersedia setelah reservasi dikonfirmasi (DP lunas).');
+  }
+  if (!r.tableId) {
+    throw new AppError(409, 'Reservasi ini belum punya meja — pilih mejanya dulu.');
+  }
+  const { wajib, kurang } = ringkasanDp(r);
+  if (wajib > 0 && kurang > 0) {
+    throw new AppError(409, `DP reservasi ini belum lunas — kurang ${rupiah(kurang)}.`, 'DP_BELUM_LUNAS');
+  }
+  return r;
+}
+
+async function linkRombongan(id) {
+  const r = await reservasiSiapRombongan(id);
+  return tableService.urlRombongan(r.tableId, r.id);
+}
+
+async function qrRombongan(id) {
+  const r = await reservasiSiapRombongan(id);
+  return tableService.generateQrRombongan(r.tableId, r.id);
+}
+
+module.exports = {
+  list,
+  get,
+  create,
+  update,
+  updateStatus,
+  catatPembayaranDp,
+  remove,
+  reservasiUntukMejaPublik,
+  aksesMejaPublik,
+  mejaUntukForm,
+  linkRombongan,
+  qrRombongan,
+};

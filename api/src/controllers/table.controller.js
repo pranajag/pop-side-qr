@@ -51,12 +51,11 @@ async function qrImage(req, res) {
 }
 
 async function verifyToken(req, res) {
-  const table = await tableService.verifyToken(req.params.token);
-  if (!table) {
-    throw new AppError(404, 'QR tidak valid atau meja tidak aktif. Coba scan ulang atau panggil staff.');
+  const akses = await reservationService.aksesMejaPublik(req.params.token, req.validQuery.r);
+  if (!akses) {
+    throw new AppError(404, 'QR tidak valid atau meja tidak aktif. Coba scan ulang atau hubungi kasir.');
   }
-  const reservasi = await reservationService.reservasiUntukMejaPublik(table.id);
-  res.json({ table: { ...table, reservasi } });
+  res.json({ table: { ...akses.meja, reservasi: akses.reservasi } });
 }
 
 module.exports = { list, create, update, remove, resetToken, setBillOpen, clearVisit, qrImage, verifyToken };

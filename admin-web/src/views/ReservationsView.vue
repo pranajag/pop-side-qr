@@ -2,7 +2,6 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { useReservationsStore } from '@/stores/reservations'
-import { useTablesStore } from '@/stores/tables'
 import { useAuthStore } from '@/stores/auth'
 import { useActiveShiftStore } from '@/stores/activeShift'
 import { dengarkan } from '@/lib/realtime'
@@ -57,10 +56,11 @@ import {
   WalletIcon,
   CircleCheckIcon,
   TriangleAlertIcon,
+  CopyIcon,
+  ExternalLinkIcon,
 } from '@lucide/vue'
 
 const store = useReservationsStore()
-const tables = useTablesStore()
 const auth = useAuthStore()
 const activeShiftStore = useActiveShiftStore()
 
@@ -118,17 +118,47 @@ const statusBusyId = ref(null)
 // per-visit scoping (table.service.js) already keeps whatever this table
 // ordered before today's reservation out of the new party's bill — no new
 // billing concept needed for that part.
+//
+// Sejak 1 Oktober (permintaan client) ini QR ROMBONGAN, bukan QR meja biasa:
+// selama reservasi terkonfirmasi memegang mejanya, QR yang tertempel di meja
+// tidak bisa dipakai memesan oleh customer lain — hanya QR ini
+// (api reservation.service.js aksesMejaPublik). Hanya untuk reservasi yang
+// syaratnya terpenuhi: dikonfirmasi, punya meja, DP lunas.
 const qrReservation = ref(null)
-function qrImageUrl(tableId) {
-  return `${API_URL}/admin/tables/${tableId}/qr`
+const qrLink = ref('')
+const qrVersi = ref(0)
+function qrImageUrl(id) {
+  return `${API_URL}/admin/reservations/${id}/qr?v=${qrVersi.value}`
+}
+function bisaMulaiPesanan(r) {
+  return r.status === 'confirmed' && !!r.tableId && (r.dp?.status === 'lunas' || r.dp?.status === 'tidak_perlu')
+}
+async function bukaQrRombongan(r) {
+  try {
+    qrLink.value = await store.linkRombongan(r.id)
+    qrVersi.value = Date.now()
+    qrReservation.value = r
+  } catch (err) {
+    toast.error(formatApiError(err))
+  }
+}
+async function salinLinkRombongan() {
+  try {
+    await navigator.clipboard.writeText(qrLink.value)
+    toast.success('Link QR rombongan disalin', {
+      description: 'Bagikan hanya ke rombongan reservasi ini.',
+    })
+  } catch {
+    toast.error('Gagal menyalin link')
+  }
 }
 
 const METODE_LABEL = { tunai: 'Tunai', qris: 'QRIS', debit: 'Debit' }
 
 // ---------- Aturan DP toko ----------
-// Mengisi DP wajib otomatis saat reservasi baru dibuat. Diubah admin saja
-// (server menolak kasir); kasir tetap melihatnya dan tetap bisa
-// menyesuaikan DP wajib satu reservasi tertentu di form.
+// DP wajib setiap reservasi baru, dihitung server — tidak bisa diubah per
+// reservasi oleh siapa pun (permintaan client 1 Oktober). Aturannya sendiri
+// diubah admin saja (server menolak kasir).
 function dpDariAturan(jumlahTamu) {
   const a = store.aturanDp
   return a.perTamu ? a.nominal * (Number(jumlahTamu) || 0) : a.nominal
@@ -204,11 +234,10 @@ function openBayar(r) {
   bayarForm.metode = 'tunai'
 }
 const bayarAmount = computed(() => Number(bayarForm.amount) || 0)
-const bayarSisa = computed(() =>
-  bayarTarget.value ? Math.max(0, bayarTarget.value.dp.kurang - bayarAmount.value) : 0
-)
-const bayarMelebihi = computed(
-  () => !!bayarTarget.value && bayarAmount.value > bayarTarget.value.dp.kurang
+// DP dibayar pas — tidak bisa dicicil, tidak bisa lebih (server menolaknya
+// juga: reservation.service.js assertDpPas).
+const bayarTidakPas = computed(
+  () => !!bayarTarget.value && bayarAmount.value > 0 && bayarAmount.value !== bayarTarget.value.dp.kurang
 )
 const bayarMelunasi = computed(
   () =>
@@ -218,14 +247,11 @@ const bayarMelunasi = computed(
 )
 function onBayarClick() {
   const r = bayarTarget.value
-  if (bayarMelunasi.value) {
-    mintaKonfirmasiLunas(
-      { nama: r.namaCustomer, total: r.dp.wajib, pending: r.status === 'pending' },
-      catatBayar
-    )
-    return
-  }
-  catatBayar()
+  if (!bayarMelunasi.value) return
+  mintaKonfirmasiLunas(
+    { nama: r.namaCustomer, total: r.dp.wajib, pending: r.status === 'pending' },
+    catatBayar
+  )
 }
 function catatBayar() {
   if (belumShift.value) {
@@ -248,16 +274,10 @@ async function kirimBayar() {
   savingBayar.value = true
   try {
     const hasil = await store.catatPembayaranDp(r.id, { amount, metode: bayarForm.metode })
-    if (hasil.baruLunas) {
-      toast.success(
-        `DP ${r.namaCustomer} lunas${hasil.dikonfirmasiOtomatis ? ' — reservasi dikonfirmasi' : ''}`,
-        { description: 'Uangnya sudah tercatat di DP reservasi shift yang sedang berjalan.' }
-      )
-    } else {
-      toast.success(`Pembayaran DP ${formatRupiah(amount)} dicatat`, {
-        description: `Kurang ${formatRupiah(hasil.kurang)} lagi. Sudah tercatat di DP reservasi shift ini.`,
-      })
-    }
+    toast.success(
+      `DP ${r.namaCustomer} ${formatRupiah(amount)} lunas${hasil.dikonfirmasiOtomatis ? ' — reservasi dikonfirmasi' : ''}`,
+      { description: 'Uangnya sudah tercatat di DP reservasi shift yang sedang berjalan.' }
+    )
     bayarTarget.value = null
   } catch (err) {
     // Shift diakhiri di tab/perangkat lain sejak halaman ini dimuat.
@@ -315,51 +335,58 @@ const form = reactive({
   tanggalReservasi: '',
   tableId: 'none',
   catatan: '',
-  depositAmount: '',
-  // Wajib (dan hanya admin yang boleh) kalau DP wajib di bawah aturan toko.
-  alasanDp: '',
   // Hanya dipakai saat MEMBUAT reservasi: DP yang dibayar customer saat itu.
   dpDibayarSekarang: '',
   metodeDp: 'tunai',
 })
 
-// DP wajib ikut aturan toko dan jumlah tamu — sampai staff mengetik
-// angkanya sendiri; setelah itu tidak lagi ditimpa.
-const dpManual = ref(false)
-watch(
-  () => form.jumlahTamu,
-  (n) => {
-    if (editingId.value !== null || dpManual.value || restoringDraft) return
-    const wajib = dpDariAturan(n)
-    form.depositAmount = wajib > 0 ? String(wajib) : ''
+// Reservasi yang sedang diedit, seperti saat dibuka.
+const asliEdit = reactive({ depositAmount: 0, jumlahTamu: 0, dibayar: 0, status: 'pending' })
+
+// DP wajib selalu dari aturan toko — form hanya menampilkannya (server yang
+// menghitung; request tidak bisa membawa angka DP wajib). Saat mengedit: DP
+// wajib reservasi itu sendiri, kecuali aturannya per tamu dan jumlah
+// tamunya diubah — dihitung ulang dari aturan, sama seperti di server.
+const tamuBerubah = computed(
+  () => editingId.value !== null && Number(form.jumlahTamu) !== asliEdit.jumlahTamu
+)
+const dpWajibForm = computed(() => {
+  if (editingId.value === null) return dpDariAturan(form.jumlahTamu)
+  if (store.aturanDp.perTamu && tamuBerubah.value) return dpDariAturan(form.jumlahTamu)
+  return asliEdit.depositAmount
+})
+const dpDihitungUlang = computed(
+  () => tamuBerubah.value && store.aturanDp.perTamu && dpWajibForm.value !== asliEdit.depositAmount
+)
+// Jumlah tamu dikurangi sampai DP wajib di bawah DP yang sudah dibayar:
+// kelebihannya tidak bisa dikembalikan lewat sistem, server menolaknya.
+const dpEditDiBawahDibayar = computed(
+  () => dpDihitungUlang.value && dpWajibForm.value < asliEdit.dibayar
+)
+// Jumlah tamu ditambah sampai DP wajib naik: kurang lagi, reservasi yang
+// sudah dikonfirmasi kembali Pending sampai kekurangannya dibayar pas.
+const dpEditJadiKurang = computed(
+  () => dpDihitungUlang.value && dpWajibForm.value > asliEdit.dibayar
+)
+const keteranganDpWajib = computed(() => {
+  const a = store.aturanDp
+  if (editingId.value !== null && !dpDihitungUlang.value) {
+    return 'DP wajib reservasi ini, ditetapkan saat dibuat. Tidak bisa diubah.'
   }
-)
-const dpWajibForm = computed(() => Number(form.depositAmount) || 0)
-// DP di bawah aturan toko = memotong/membebaskan DP: keputusan admin, wajib
-// alasan. Server yang menentukan (reservation.service.js); layar ini
-// menjelaskannya lebih dulu supaya tidak ada yang kaget ditolak.
-const dpAturanForm = computed(() => dpDariAturan(form.jumlahTamu))
-// Saat mengedit, DP/jumlah tamu yang TIDAK diubah tidak diperiksa ulang
-// (dan tidak dikirim) — kasir tetap bisa mengubah catatan/jam reservasi
-// lama yang DP-nya kebetulan di bawah aturan yang baru.
-const asliEdit = reactive({ depositAmount: 0, jumlahTamu: 0 })
-const dpAtauTamuBerubah = computed(
-  () =>
-    editingId.value === null ||
-    dpWajibForm.value !== asliEdit.depositAmount ||
-    Number(form.jumlahTamu) !== asliEdit.jumlahTamu
-)
-const dpDiBawahAturan = computed(() => dpAtauTamuBerubah.value && dpWajibForm.value < dpAturanForm.value)
-const dpDitolakUntukKasir = computed(() => dpDiBawahAturan.value && !auth.isAdmin)
+  if (!a.nominal) return 'Aturan DP toko Rp 0 — reservasi ini tidak perlu DP.'
+  const rumus = a.perTamu
+    ? `${formatRupiah(a.nominal)} × ${Number(form.jumlahTamu) || 0} tamu`
+    : `${formatRupiah(a.nominal)} per reservasi`
+  return `Dari aturan toko: ${rumus}. Tidak bisa diubah per reservasi.`
+})
+// DP dibayar PAS (permintaan client 1 Oktober): kosong = belum bayar
+// (reservasi Pending), selain itu harus sama persis dengan DP wajib.
 const dpBayarForm = computed(() => Number(form.dpDibayarSekarang) || 0)
-const dpBayarMelebihi = computed(() => dpBayarForm.value > dpWajibForm.value)
-const dpSisaForm = computed(() => Math.max(0, dpWajibForm.value - dpBayarForm.value))
+const dpBayarTidakPas = computed(
+  () => editingId.value === null && dpBayarForm.value > 0 && dpBayarForm.value !== dpWajibForm.value
+)
 const dpAkanLunas = computed(
-  () =>
-    editingId.value === null &&
-    dpWajibForm.value > 0 &&
-    dpBayarForm.value >= dpWajibForm.value &&
-    !dpBayarMelebihi.value
+  () => editingId.value === null && dpWajibForm.value > 0 && dpBayarForm.value === dpWajibForm.value
 )
 
 // reka-ui's SelectItem forbids value="" (reserved to mean "cleared"), so
@@ -425,13 +452,13 @@ const berhentiDengarShift = dengarkan('shift:berubah', () => {
 })
 onUnmounted(() => {
   clearTimeout(tundaMuat)
+  clearTimeout(tundaMeja)
   berhentiDengar()
   berhentiDengarShift()
 })
 
 onMounted(() => {
   store.fetchAll()
-  tables.fetchAll()
   store.fetchAturanDp().catch(() => {})
   activeShiftStore.fetch().catch(() => {})
 })
@@ -477,20 +504,64 @@ function localInputToIso(value) {
   ).toISOString()
 }
 
-// Active tables, plus — while editing — the reservation's own currently-
-// assigned table even if it's since been deactivated. Without that second
-// part, reka-ui's Select falls back to the placeholder for a model value
-// that matches no rendered option, so an inactive-but-still-assigned table
-// reads as "Belum ditentukan" (looks unassigned) instead of showing what
-// it actually is.
-const tableOptions = computed(() => {
-  const active = tables.items.filter((t) => t.isActive)
-  const currentId = Number(form.tableId)
-  if (form.tableId !== NO_TABLE && !active.some((t) => t.id === currentId)) {
-    const current = tables.items.find((t) => t.id === currentId)
-    if (current) return [...active, current]
+// ---------- Pilihan meja ----------
+// Dari GET /admin/reservations/meja — bisa dibaca kasir (dulu dari
+// /admin/tables yang khusus admin, jadi untuk kasir daftarnya kosong dan meja
+// tidak pernah bisa dipilih). Dimuat ulang setiap jadwalnya berubah, karena
+// meja yang sudah direservasi di sekitar jam itu tidak bisa dipilih.
+const mejaList = ref([])
+const memuatMeja = ref(false)
+let urutMeja = 0
+async function muatMeja() {
+  const ini = ++urutMeja
+  memuatMeja.value = true
+  try {
+    const hasil = await store.fetchMeja({
+      waktu: localInputToIso(form.tanggalReservasi) || undefined,
+      kecuali: editingId.value ?? undefined,
+    })
+    if (ini === urutMeja) mejaList.value = hasil
+  } catch (err) {
+    if (ini === urutMeja) toast.error(formatApiError(err))
+  } finally {
+    if (ini === urutMeja) memuatMeja.value = false
   }
-  return active
+}
+let tundaMeja = null
+watch(
+  () => form.tanggalReservasi,
+  () => {
+    if (!formOpen.value) return
+    clearTimeout(tundaMeja)
+    tundaMeja = setTimeout(muatMeja, 300)
+  }
+)
+
+// Kenapa sebuah meja tidak bisa dipilih untuk isian form saat ini.
+function alasanMeja(t) {
+  if (!t.isActive) return 'nonaktif'
+  if (t.direservasi) {
+    return `sudah direservasi ${t.direservasi.namaCustomer} (${formatDateTime(t.direservasi.waktu)})`
+  }
+  const tamu = Number(form.jumlahTamu) || 0
+  if (tamu > t.kapasitas) return `tidak muat ${tamu} orang`
+  return null
+}
+
+// Meja aktif, plus — saat mengedit — meja reservasi itu sendiri walau sudah
+// dinonaktifkan. Tanpa yang kedua, Select reka-ui menampilkan placeholder
+// untuk nilai yang tidak ada di daftar, sehingga meja nonaktif yang masih
+// dipakai terbaca "Belum ditentukan" (terlihat belum ada meja).
+const tableOptions = computed(() => {
+  const currentId = Number(form.tableId)
+  return mejaList.value
+    .filter((t) => t.isActive || (form.tableId !== NO_TABLE && t.id === currentId))
+    .map((t) => ({ ...t, alasan: alasanMeja(t) }))
+})
+const mejaTerpilihBermasalah = computed(() => {
+  if (form.tableId === NO_TABLE) return null
+  const t = tableOptions.value.find((x) => String(x.id) === form.tableId)
+  return t?.alasan ? `Meja ${t.nomorMeja} ${t.alasan} — pilih meja lain.` : null
 })
 
 function openCreate() {
@@ -504,18 +575,11 @@ function openCreate() {
   form.tanggalReservasi = draft?.tanggalReservasi ?? ''
   form.tableId = draft?.tableId ?? NO_TABLE
   form.catatan = draft?.catatan ?? ''
-  form.depositAmount = draft?.depositAmount ?? ''
-  form.alasanDp = draft?.alasanDp ?? ''
   form.dpDibayarSekarang = draft?.dpDibayarSekarang ?? ''
   form.metodeDp = draft?.metodeDp ?? 'tunai'
-  // Draf yang sudah membawa angka DP wajib dianggap isian staff sendiri.
-  dpManual.value = !!draft?.depositAmount
-  if (!dpManual.value) {
-    const wajib = dpDariAturan(form.jumlahTamu)
-    form.depositAmount = wajib > 0 ? String(wajib) : ''
-  }
   restoringDraft = false
   formOpen.value = true
+  muatMeja()
   if (draft) {
     toast.info('Draf reservasi yang belum tersimpan dipulihkan')
   }
@@ -530,13 +594,13 @@ function openEdit(r) {
   form.tanggalReservasi = isoToLocalInput(r.tanggalReservasi)
   form.tableId = r.tableId ? String(r.tableId) : NO_TABLE
   form.catatan = r.catatan || ''
-  form.depositAmount = r.depositAmount > 0 ? String(r.depositAmount) : ''
-  form.alasanDp = r.alasanDp || ''
   form.dpDibayarSekarang = ''
   asliEdit.depositAmount = r.depositAmount || 0
   asliEdit.jumlahTamu = r.jumlahTamu
-  dpManual.value = true
+  asliEdit.dibayar = r.dp?.dibayar ?? 0
+  asliEdit.status = r.status
   formOpen.value = true
+  muatMeja()
 }
 
 function onSubmit() {
@@ -574,21 +638,21 @@ async function kirimForm({ tanpaDp = false } = {}) {
   submitting.value = true
   try {
     const { dpDibayarSekarang, metodeDp, ...isi } = form
+    // Tanpa angka DP wajib — selalu dihitung server dari aturan toko.
     const payload = {
       ...isi,
       tableId: form.tableId === NO_TABLE ? '' : form.tableId,
       tanggalReservasi: localInputToIso(form.tanggalReservasi),
-      // Kosong = 0: reservasi tanpa DP wajib, dikirim eksplisit supaya
-      // server tidak mengisinya dari aturan toko.
-      depositAmount: form.depositAmount === '' ? 0 : form.depositAmount,
     }
     if (editingId.value) {
-      if (!dpAtauTamuBerubah.value) {
-        delete payload.depositAmount
-        delete payload.jumlahTamu
+      const sesudah = await store.update(editingId.value, payload)
+      if (asliEdit.status === 'confirmed' && sesudah?.status === 'pending') {
+        toast.warning('Reservasi kembali Pending', {
+          description: `DP wajib jadi ${formatRupiah(sesudah.dp.wajib)} — kurang ${formatRupiah(sesudah.dp.kurang)}. Catat lewat Bayar DP (pas); reservasi otomatis dikonfirmasi lagi.`,
+        })
+      } else {
+        toast.success('Reservasi diperbarui')
       }
-      await store.update(editingId.value, payload)
-      toast.success('Reservasi diperbarui')
     } else {
       const bayar = tanpaDp ? 0 : Number(dpDibayarSekarang) || 0
       if (bayar > 0) Object.assign(payload, { dpDibayarSekarang: bayar, metodeDp })
@@ -596,10 +660,6 @@ async function kirimForm({ tanpaDp = false } = {}) {
       if (hasil.baruLunas) {
         toast.success('Reservasi ditambahkan — DP lunas', {
           description: `${hasil.dikonfirmasiOtomatis ? 'Reservasi langsung dikonfirmasi. ' : ''}Uang DP sudah tercatat di shift yang sedang berjalan.`,
-        })
-      } else if (bayar > 0) {
-        toast.success(`Reservasi ditambahkan — DP ${formatRupiah(bayar)} dicatat`, {
-          description: `Kurang ${formatRupiah(hasil.kurang)} lagi. Uangnya sudah tercatat di shift ini.`,
         })
       } else if (tanpaDp) {
         toast.success('Reservasi ditambahkan — DP belum dicatat', {
@@ -789,22 +849,24 @@ async function onDeleteConfirm() {
                   <WalletIcon class="size-3.5" />
                   Bayar DP
                 </Button>
+                <!-- Konfirmasi manual hanya kalau syaratnya terpenuhi (tanpa DP
+                wajib, atau DP sudah lunas). Yang DP-nya belum lunas
+                dikonfirmasi otomatis begitu Bayar DP melunasinya. -->
                 <Button
-                  v-if="r.status === 'pending'"
+                  v-if="r.status === 'pending' && (r.dp?.status === 'tidak_perlu' || r.dp?.status === 'lunas')"
                   size="sm"
                   variant="outline"
-                 
                   :disabled="statusBusyId === r.id"
                   @click="onChangeStatus(r, 'confirmed')"
                 >
                   Konfirmasi
                 </Button>
                 <Button
-                  v-if="r.status === 'confirmed' && r.tableId"
+                  v-if="bisaMulaiPesanan(r)"
                   size="sm"
                   variant="outline"
                   class="gap-1.5"
-                  @click="qrReservation = r"
+                  @click="bukaQrRombongan(r)"
                 >
                   <QrCodeIcon class="size-3.5" />
                   Mulai Pesanan
@@ -850,8 +912,8 @@ async function onDeleteConfirm() {
             {{ editingId ? 'Ubah Reservasi' : 'Tambah Reservasi' }}
           </DialogTitle>
           <DialogDescription>
-            Meja yang dipilih harus muat untuk jumlah tamu, dan deposit dicatat
-            sebagai pembayaran di muka.
+            Meja harus muat dan belum direservasi di sekitar jam itu. DP wajib
+            mengikuti aturan toko dan dibayar pas.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -886,7 +948,9 @@ async function onDeleteConfirm() {
               placeholder="08xxxxxxxxxx"
             />
           </div>
-          <div class="grid grid-cols-2 gap-4">
+          <!-- Satu kolom di HP: input tanggal & jam bawaan browser terlalu sempit
+          di setengah lebar dialog 360px — jamnya terpotong. -->
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div class="space-y-2">
               <Label for="jumlahTamu">Jumlah Tamu</Label>
               <Input
@@ -921,11 +985,19 @@ async function onDeleteConfirm() {
                   v-for="t in tableOptions"
                   :key="t.id"
                   :value="String(t.id)"
+                  :disabled="!!t.alasan"
                 >
-                  Meja {{ t.nomorMeja }} (maks {{ t.kapasitas }} orang){{ !t.isActive ? ' — nonaktif' : '' }}
+                  Meja {{ t.nomorMeja }} (maks {{ t.kapasitas }} orang){{ t.alasan ? ` — ${t.alasan}` : '' }}
                 </SelectItem>
               </SelectContent>
             </Select>
+            <p v-if="mejaTerpilihBermasalah" class="text-xs font-medium text-destructive">
+              {{ mejaTerpilihBermasalah }}
+            </p>
+            <p v-else-if="!form.tanggalReservasi" class="text-xs text-muted-foreground">
+              Isi tanggal &amp; jam dulu supaya meja yang sudah direservasi di jam itu ditandai.
+            </p>
+            <p v-else-if="memuatMeja" class="text-xs text-muted-foreground">Memeriksa meja…</p>
           </div>
           <div class="space-y-2">
             <Label for="catatan">Catatan (opsional)</Label>
@@ -936,43 +1008,25 @@ async function onDeleteConfirm() {
               placeholder="Mis. butuh dekorasi tambahan"
             />
           </div>
-          <div class="space-y-2">
-            <Label for="depositAmount">DP wajib</Label>
-            <Input
-              id="depositAmount"
-              v-model="form.depositAmount"
-              type="number"
-              min="0"
-              step="1000"
-              placeholder="0"
-              @input="dpManual = true"
-            />
-            <p class="text-xs text-muted-foreground">
-              <template v-if="editingId === null && !dpManual && store.aturanDp.nominal">
-                Otomatis dari aturan:
-                {{
-                  store.aturanDp.perTamu
-                    ? `${formatRupiah(store.aturanDp.nominal)} × ${form.jumlahTamu || 0} tamu`
-                    : `${formatRupiah(store.aturanDp.nominal)} per reservasi`
-                }}. Boleh diubah untuk reservasi ini.
-              </template>
-              <template v-else-if="!store.aturanDp.nominal">Isi 0 atau kosongkan kalau reservasi ini tidak perlu DP.</template>
+          <!-- DP wajib hanya ditampilkan: selalu dari aturan toko, tidak bisa
+          diubah per reservasi oleh siapa pun (server yang menghitung). -->
+          <div class="space-y-1 rounded-md border p-3">
+            <div class="flex items-center justify-between gap-3 text-sm">
+              <span class="text-muted-foreground">DP wajib</span>
+              <span class="font-semibold">{{
+                dpWajibForm > 0 ? formatRupiah(dpWajibForm) : 'Tidak perlu DP'
+              }}</span>
+            </div>
+            <p class="text-xs text-muted-foreground">{{ keteranganDpWajib }}</p>
+            <p v-if="dpEditDiBawahDibayar" class="text-xs font-medium text-destructive">
+              DP yang sudah dibayar ({{ formatRupiah(asliEdit.dibayar) }}) lebih besar dari DP
+              wajib untuk {{ form.jumlahTamu }} tamu. Kelebihannya tidak bisa dikembalikan lewat
+              sistem — kalau tamunya memang berkurang, batalkan reservasi ini lalu buat yang baru.
             </p>
-            <p v-if="dpDitolakUntukKasir" class="text-xs text-destructive">
-              Di bawah aturan toko ({{ formatRupiah(dpAturanForm) }}). Hanya admin yang bisa
-              mengurangi atau membebaskan DP.
-            </p>
-          </div>
-          <div v-if="dpDiBawahAturan && auth.isAdmin" class="space-y-2">
-            <Label for="alasanDp">Alasan DP di bawah aturan toko (wajib)</Label>
-            <Input
-              id="alasanDp"
-              v-model="form.alasanDp"
-              maxlength="200"
-              placeholder="Mis. pelanggan tetap, acara kantor rekanan"
-            />
-            <p class="text-xs text-muted-foreground">
-              Aturan toko {{ formatRupiah(dpAturanForm) }}. Alasan ini dicatat di reservasi dan log audit.
+            <p v-else-if="dpEditJadiKurang" class="text-xs font-medium text-status-waiting-verif">
+              Kurang {{ formatRupiah(dpWajibForm - asliEdit.dibayar) }} — setelah disimpan,
+              catat lewat Bayar DP (pas).<template v-if="asliEdit.status === 'confirmed'">
+                Reservasi kembali Pending sampai kekurangannya dibayar.</template>
             </p>
           </div>
           <div
@@ -1005,25 +1059,23 @@ async function onDeleteConfirm() {
                 </Select>
               </div>
             </div>
-            <p v-if="dpBayarMelebihi" class="text-xs font-medium text-destructive">
-              Melebihi DP wajib {{ formatRupiah(dpWajibForm) }}.
+            <p v-if="dpBayarTidakPas" class="text-xs font-medium text-destructive">
+              DP harus dibayar pas {{ formatRupiah(dpWajibForm) }} — tidak bisa kurang (dicicil)
+              atau lebih.
             </p>
             <p
               v-else-if="dpAkanLunas"
               class="flex items-center gap-1.5 text-xs font-medium text-status-completed"
             >
               <CircleCheckIcon class="size-3.5 shrink-0" />
-              Lunas — reservasi langsung dikonfirmasi.
-            </p>
-            <p v-else-if="dpBayarForm > 0" class="text-xs font-medium text-status-waiting-verif">
-              Kurang {{ formatRupiah(dpSisaForm) }} — bisa dilunasi nanti lewat tombol Bayar DP.
+              Lunas — reservasi langsung dikonfirmasi dan mejanya dipegang.
             </p>
             <p v-else class="text-xs text-muted-foreground">
-              Kosongkan kalau customer belum membayar DP. Uang yang dicatat di
-              sini langsung masuk DP reservasi di shift yang sedang berjalan.
+              Kosongkan kalau customer belum membayar — reservasi disimpan Pending: meja belum
+              dipegang dan QR rombongan belum tersedia sampai DP dibayar pas lewat Bayar DP.
             </p>
             <p
-              v-if="belumShift && dpBayarForm > 0 && !dpBayarMelebihi"
+              v-if="belumShift && dpAkanLunas"
               class="flex items-start gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400"
             >
               <TriangleAlertIcon class="mt-px size-3.5 shrink-0" />
@@ -1036,7 +1088,7 @@ async function onDeleteConfirm() {
           <Button
             type="submit"
             form="reservation-form"
-            :disabled="submitting || (editingId === null && dpBayarMelebihi) || dpDitolakUntukKasir || (dpDiBawahAturan && form.alasanDp.trim().length < 3)"
+            :disabled="submitting || dpBayarTidakPas || !!mejaTerpilihBermasalah || dpEditDiBawahDibayar"
           >
             <LoaderCircleIcon v-if="submitting" class="size-4 animate-spin" />
             Simpan
@@ -1070,19 +1122,32 @@ async function onDeleteConfirm() {
     </AlertDialog>
 
     <Dialog :open="!!qrReservation" @update:open="(v) => !v && (qrReservation = null)">
-      <DialogContent class="sm:max-w-xs">
+      <DialogContent class="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Meja {{ qrReservation?.nomorMeja }} — {{ qrReservation?.namaCustomer }}</DialogTitle>
+          <DialogTitle>QR Rombongan — Meja {{ qrReservation?.nomorMeja }}</DialogTitle>
           <DialogDescription class="text-xs">
-            Sama seperti QR yang tertempel di meja — tunjukkan ini ke tamu untuk mulai pesan, atau scan sendiri kalau mau bantu input.
+            Khusus rombongan {{ qrReservation?.namaCustomer }}. Selama reservasi ini berlangsung,
+            QR yang tertempel di meja terkunci untuk customer lain — rombongan memesan lewat QR
+            ini. Tunjukkan ke tamu, atau bagikan link-nya hanya ke rombongan.
           </DialogDescription>
         </DialogHeader>
         <img
           v-if="qrReservation"
-          :src="qrImageUrl(qrReservation.tableId)"
-          alt="QR Meja"
+          :src="qrImageUrl(qrReservation.id)"
+          alt="QR rombongan reservasi"
           class="mx-auto w-full max-w-56 rounded-lg border"
         />
+        <p class="break-all text-center text-xs text-muted-foreground">{{ qrLink }}</p>
+        <DialogFooter class="grid grid-cols-2">
+          <Button variant="outline" class="gap-2" @click="salinLinkRombongan">
+            <CopyIcon class="size-4" />
+            Salin Link
+          </Button>
+          <Button as="a" :href="qrLink" target="_blank" rel="noopener" variant="outline" class="gap-2">
+            <ExternalLinkIcon class="size-4" />
+            Buka Menu
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
 
@@ -1092,8 +1157,8 @@ async function onDeleteConfirm() {
         <DialogHeader>
           <DialogTitle>Bayar DP — {{ bayarTarget?.namaCustomer }}</DialogTitle>
           <DialogDescription>
-            Catat uang DP yang diterima sekarang. Uangnya langsung masuk DP
-            reservasi di shift yang sedang berjalan.
+            Catat uang DP yang diterima sekarang — harus pas sebesar kekurangannya.
+            Uangnya langsung masuk DP reservasi di shift yang sedang berjalan.
           </DialogDescription>
         </DialogHeader>
         <div v-if="bayarTarget" class="space-y-4">
@@ -1151,18 +1216,17 @@ async function onDeleteConfirm() {
               </Select>
             </div>
           </div>
-          <p v-if="bayarMelebihi" class="text-xs font-medium text-destructive">
-            Melebihi kekurangan DP — maksimal {{ formatRupiah(bayarTarget.dp.kurang) }}.
+          <p v-if="bayarTidakPas" class="text-xs font-medium text-destructive">
+            DP harus dibayar pas {{ formatRupiah(bayarTarget.dp.kurang) }} — tidak bisa dicicil
+            atau lebih.
           </p>
           <p
             v-else-if="bayarMelunasi"
             class="flex items-center gap-1.5 text-xs font-medium text-status-completed"
           >
             <CircleCheckIcon class="size-3.5 shrink-0" />
-            Pembayaran ini melunasi DP.
-          </p>
-          <p v-else-if="bayarAmount > 0" class="text-xs font-medium text-status-waiting-verif">
-            Setelah ini masih kurang {{ formatRupiah(bayarSisa) }}.
+            Pembayaran ini melunasi DP<template v-if="bayarTarget.status === 'pending'">
+              — reservasi langsung dikonfirmasi</template>.
           </p>
           <p
             v-if="belumShift"
@@ -1177,7 +1241,7 @@ async function onDeleteConfirm() {
           <Button variant="outline" :disabled="savingBayar" @click="bayarTarget = null">
             Batal
           </Button>
-          <Button :disabled="savingBayar || bayarAmount <= 0 || bayarMelebihi" @click="onBayarClick">
+          <Button :disabled="savingBayar || !bayarMelunasi" @click="onBayarClick">
             <LoaderCircleIcon v-if="savingBayar" class="size-4 animate-spin" />
             Catat Pembayaran
           </Button>
@@ -1223,8 +1287,8 @@ async function onDeleteConfirm() {
           <DialogTitle>Aturan DP reservasi</DialogTitle>
           <DialogDescription>
             Berapa yang wajib dibayar untuk membuka reservasi. Dipakai sebagai
-            DP wajib otomatis setiap reservasi baru — tetap bisa disesuaikan
-            per reservasi.
+            DP wajib setiap reservasi baru dan tidak bisa diubah per
+            reservasi — DP-nya dibayar pas.
           </DialogDescription>
         </DialogHeader>
         <div class="space-y-4">
