@@ -291,7 +291,9 @@ function printQr() {
             {{ qrTarget.url }}
           </p>
         </div>
-        <DialogFooter class="print:hidden">
+        <!-- 2×2, bukan satu baris: empat tombol tidak muat di lebar dialog ini
+        (sm:max-w-sm) — dulu meluber keluar dialog dan menggeser QR dari tengah. -->
+        <DialogFooter class="grid grid-cols-2 print:hidden">
           <!-- Membuka menu meja ini di tab baru — sama seperti memindai QR-nya,
           untuk mencoba atau mempresentasikan tampilan customer dari laptop. -->
           <Button as="a" :href="qrTarget?.url" target="_blank" rel="noopener" variant="outline" class="gap-2">
