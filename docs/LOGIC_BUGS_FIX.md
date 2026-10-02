@@ -120,6 +120,10 @@ Tes: integrasi "reservasi: DP dibayar pas…", "reservasi: daftar meja untuk for
 
 **Status pesanan bisa dibuka lagi setelah "Kembali ke Menu" — diperbaiki (2 Oktober, temuan uji pemilik).** Kartu "Pesanan kamu" hanya ada di tampilan menu yang mejanya sudah terverifikasi di tab itu. Kalau sesi meja tab hilang (tab ditutup lalu dibuka lagi dari riwayat, browser HP memuat ulang halaman, dsb.), "Kembali ke Menu" berujung di layar "Scan QR di meja kamu" tanpa jalan kembali ke status pesanan — padahal server masih mengenali pesanan perangkat itu (cookie perangkat). Kartunya sekarang komponen sendiri (`public-web/src/components/PesananKamu.vue`) yang tampil di menu maupun di layar Scan QR, jadi pesanan yang belum selesai selalu bisa dibuka lagi statusnya dari perangkat pemesannya. Uji web: pesan → status → Kembali ke Menu → (sesi meja dihapus) → layar Scan QR menampilkan "Pesanan kamu · Menunggu Pembayaran · Lihat status" → status terbuka lagi.
 
+**Permintaan kafe (3 Oktober).**
+- **Struk tanpa alamat & nomor telepon toko.** Struk digital (layar, PNG, PDF — `public-web/src/lib/struk.js`) dan struk cetak dashboard (`OrdersView.vue`) sekarang hanya mencetak nama toko. Isian alamat & telepon di Pengaturan tetap tersimpan sebagai info toko; keterangannya menjelaskan bahwa keduanya tidak dicetak.
+- **Produk nonaktif tampil sebagai "Habis".** Dulu produk yang status-nya dimatikan di dashboard hilang dari menu customer. Sekarang `GET /api/public/menu` tetap mengirimnya dengan `isAvailable: false`, dan web menu menampilkannya dengan foto abu-abu (grayscale), nama redup, label "Habis", tanpa tombol Tambah — sama seperti produk yang stoknya 0. Memesannya tetap ditolak server (order & total keranjang memeriksa `isAvailable`). Uji web: produk nonaktif berfoto tampil abu-abu tanpa tombol; struk digital & struk cetak hanya bertuliskan nama toko. Tes: integrasi "menu publik: produk nonaktif tetap tampil sebagai habis, tapi tidak bisa dipesan".
+
 Tes: "OTP member: kode hanya untuk member bertier, sekali pakai, salah 5x hangus", "OTP member: tanpa verifikasi tidak ada diskon, detail member, maupun saldo poin".
 
 ### [10] Audit log bisa dihapus — diperbaiki
