@@ -118,6 +118,8 @@ Staff tetap melihat semuanya di dashboard; laporan tidak berubah. Uji web (lokal
 
 Tes: integrasi "reservasi: DP dibayar pas…", "reservasi: daftar meja untuk form…", "kunci meja: QR meja terkunci selama reservasi terkonfirmasi…", "reservasi: DP wajib dihitung dari aturan toko di database, bukan dari request"; pentest #18.
 
+**Status pesanan bisa dibuka lagi setelah "Kembali ke Menu" — diperbaiki (2 Oktober, temuan uji pemilik).** Kartu "Pesanan kamu" hanya ada di tampilan menu yang mejanya sudah terverifikasi di tab itu. Kalau sesi meja tab hilang (tab ditutup lalu dibuka lagi dari riwayat, browser HP memuat ulang halaman, dsb.), "Kembali ke Menu" berujung di layar "Scan QR di meja kamu" tanpa jalan kembali ke status pesanan — padahal server masih mengenali pesanan perangkat itu (cookie perangkat). Kartunya sekarang komponen sendiri (`public-web/src/components/PesananKamu.vue`) yang tampil di menu maupun di layar Scan QR, jadi pesanan yang belum selesai selalu bisa dibuka lagi statusnya dari perangkat pemesannya. Uji web: pesan → status → Kembali ke Menu → (sesi meja dihapus) → layar Scan QR menampilkan "Pesanan kamu · Menunggu Pembayaran · Lihat status" → status terbuka lagi.
+
 Tes: "OTP member: kode hanya untuk member bertier, sekali pakai, salah 5x hangus", "OTP member: tanpa verifikasi tidak ada diskon, detail member, maupun saldo poin".
 
 ### [10] Audit log bisa dihapus — diperbaiki
