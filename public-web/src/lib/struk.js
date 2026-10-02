@@ -88,9 +88,9 @@ function barisStruk({ order, toko, t, bahasa }) {
   const redup = { warna: WARNA.redup }
 
   baris.push({ jenis: 'logo', ukuran: 52 })
+  // Kop struk: nama toko saja — alamat & nomor telepon toko sengaja tidak
+  // dicetak (permintaan kafe, 3 Oktober), sama dengan struk cetak dashboard.
   teks(toko?.namaToko || 'POPSIDE', { ukuran: 17, tebal: true, rata: 'tengah' })
-  if (toko?.alamat) teks(toko.alamat, { ukuran: 11, rata: 'tengah', ...redup })
-  if (toko?.telepon) teks(toko.telepon, { ukuran: 11, rata: 'tengah', ...redup })
   baris.push({ jenis: 'jarak', tinggi: 10 })
   baris.push({ jenis: 'lencana', teks: t('strukLunasSelesai'), ukuran: 12, warna: WARNA.hijau })
   garis()

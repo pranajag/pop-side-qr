@@ -209,7 +209,7 @@ onMounted(() => {
     store.fetchAll()
   }
   products.fetchAll()
-  // Kop struk (nama/alamat/telepon toko) — dibaca semua peran; dimuat ulang
+  // Kop struk (nama toko) — dibaca semua peran; dimuat ulang
   // begitu admin menyimpan info toko di Pengaturan, di perangkat mana pun.
   const muatToko = () => settings.fetchToko().catch(() => {})
   muatToko()
@@ -936,9 +936,9 @@ async function onCancelConfirm() {
             class="flex flex-col items-center gap-1.5 border-b border-dashed pb-3 text-center"
           >
             <img :src="logoUrl" alt="Popside" class="size-10 rounded-md" />
+            <!-- Nama toko saja: alamat & nomor telepon toko tidak dicetak
+            (permintaan kafe, 3 Oktober) — sama dengan struk digital customer. -->
             <p class="text-sm font-bold">{{ settings.namaToko || 'POPSIDE' }}</p>
-            <p v-if="settings.alamat" class="text-muted-foreground">{{ settings.alamat }}</p>
-            <p v-if="settings.telepon" class="text-muted-foreground">{{ settings.telepon }}</p>
             <p class="text-muted-foreground">
               {{ formatDateTime(receiptOrder.createdAt) }}
             </p>

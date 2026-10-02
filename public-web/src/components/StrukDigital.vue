@@ -67,7 +67,7 @@ async function muatToko() {
   try {
     toko.value = (await api.get('/public/settings')).settings
   } catch {
-    // Struk tetap dibuat — tanpa alamat & telepon toko.
+    // Struk tetap dibuat — dengan nama toko bawaan.
   }
 }
 let berhentiDengarToko = null

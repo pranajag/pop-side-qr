@@ -279,9 +279,10 @@ async function onSave() {
           Informasi Toko
         </h2>
         <p class="mt-1 text-xs text-muted-foreground">
-          Dicetak di kop struk. Pajak/service charge (opsional) ditambahkan
-          otomatis ke total setiap order baru — kosongkan/isi 0 kalau harga
-          menu sudah termasuk semuanya.
+          Nama toko dicetak di kop struk; alamat & nomor telepon hanya
+          disimpan sebagai info toko dan tidak dicetak di struk. Pajak/service
+          charge (opsional) ditambahkan otomatis ke total setiap order baru —
+          kosongkan/isi 0 kalau harga menu sudah termasuk semuanya.
         </p>
       </div>
 
