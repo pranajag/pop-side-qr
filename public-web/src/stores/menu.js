@@ -22,8 +22,10 @@ export const useMenuStore = defineStore('menu', {
       return null
     },
     // null = no stock cap (either untracked, or product not loaded yet).
+    // Produk yang dinonaktifkan di dashboard: 0 — tidak bisa ditambah lagi.
     maxQty(productId) {
       const product = this.findProduct(productId)
+      if (product?.isAvailable === false) return 0
       return product?.trackStock ? product.stok : null
     },
   },

@@ -576,6 +576,27 @@ test('reservasi: DP tanpa shift ditolak (PERLU_SHIFT) tanpa menyimpan setengah j
   assert.equal(shift.depositTotal, dpDibayarSekarang * 2, 'kedua DP masuk kas shift pencatatnya');
 });
 
+test('menu publik: produk nonaktif tetap tampil sebagai habis, tapi tidak bisa dipesan', async (t) => {
+  if (lewati) return t.skip(lewati);
+  const menuService = require('../src/services/menu.service');
+  const kategori = await prisma.category.create({ data: { nama: 'ZZ Uji Menu Habis', urutan: 998, isActive: true } });
+  try {
+    const produk = await prisma.product.create({
+      data: { categoryId: kategori.id, nama: 'ZZ Uji Nonaktif', harga: 10000, stok: 0, trackStock: false, isAvailable: false },
+    });
+    const menu = await menuService.getPublicMenu();
+    const tampil = menu.find((c) => c.id === kategori.id)?.products.find((x) => x.id === produk.id);
+    assert.equal(tampil?.isAvailable, false, 'tetap dikirim ke web menu, ditandai tidak tersedia');
+    const items = [{ productId: produk.id, qty: 1 }];
+    await assert.rejects(orderService.createOrder({ token: dibuat.tableToken, metode: 'tunai', items }), (e) => e.statusCode >= 400 && e.statusCode < 500);
+    const total = await cartService.computeTotal(items);
+    assert.ok(total.issues.some((i) => i.productId === produk.id), 'keranjang menandainya tidak tersedia');
+  } finally {
+    await prisma.product.deleteMany({ where: { categoryId: kategori.id } });
+    await prisma.category.delete({ where: { id: kategori.id } });
+  }
+});
+
 test('log audit: aksi staff tercatat tanpa rahasia; akun aplikasi tidak bisa mengubah/menghapusnya', async (t) => {
   if (lewati) return t.skip(lewati);
   const express = require('express');

@@ -71,7 +71,7 @@ const terkunci = computed(() => table.terkunci)
 const tidakBisaPesan = computed(() => tutup.value || terkunci.value)
 
 function onTambahClick(product) {
-  if (tidakBisaPesan.value) return
+  if (tidakBisaPesan.value || isSoldOut(product)) return
   if (product.variantGroups.length > 0) {
     pickerProduct.value = product
     pickerOpen.value = true
@@ -111,8 +111,11 @@ function photoUrl(filename) {
   return `${API_URL}/public/products/photo/${filename}`
 }
 
+// Habis = dinonaktifkan di dashboard (status produk), atau stoknya 0.
+// Tampil abu-abu dengan label Habis dan tanpa tombol pesan; server tetap
+// menolak pesanannya walau dikirim langsung.
 function isSoldOut(product) {
-  return product.trackStock && product.stok <= 0
+  return product.isAvailable === false || (product.trackStock && product.stok <= 0)
 }
 
 function maxQty(product) {
@@ -319,17 +322,24 @@ const estimatedTotal = computed(() =>
                 :src="photoUrl(product.foto)"
                 :alt="product.nama"
                 loading="lazy"
-                class="size-20 shrink-0 rounded-2xl object-cover"
+                class="size-20 shrink-0 rounded-2xl object-cover transition"
+                :class="{ 'opacity-50 grayscale': isSoldOut(product) }"
               />
               <div
                 v-else
                 class="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-muted"
+                :class="{ 'opacity-50': isSoldOut(product) }"
               >
                 <ImageOffIcon class="size-5 text-muted-foreground" />
               </div>
 
               <div class="min-w-0 flex-1">
-                <p class="truncate text-sm font-medium">{{ product.nama }}</p>
+                <p
+                  class="truncate text-sm font-medium"
+                  :class="{ 'text-muted-foreground': isSoldOut(product) }"
+                >
+                  {{ product.nama }}
+                </p>
                 <p class="text-sm text-muted-foreground">
                   {{ formatRupiah(product.harga) }}
                 </p>
