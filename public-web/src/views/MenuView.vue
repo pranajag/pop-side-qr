@@ -1,22 +1,20 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { useRouter } from 'vue-router'
 import { useTableStore } from '@/stores/table'
 import { useMenuStore } from '@/stores/menu'
 import { useCartStore } from '@/stores/cart'
-import { useRecentOrdersStore } from '@/stores/recentOrders'
 import { useLocaleStore } from '@/stores/locale'
 import { useThemeStore } from '@/stores/theme'
 import { useCafeStatusStore } from '@/stores/cafeStatus'
 import { formatRupiah } from '@/lib/format'
-import { STATUS_LABEL_KEY, STATUS_COLOR } from '@/lib/orderStatus'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import QtyStepper from '@/components/QtyStepper.vue'
 import ReservasiNotice from '@/components/ReservasiNotice.vue'
-import HitungMundur from '@/components/HitungMundur.vue'
+import PesananKamu from '@/components/PesananKamu.vue'
 import { teksReservasi } from '@/lib/reservasi'
 import VariantPickerDialog from '@/components/VariantPickerDialog.vue'
 import BillDialog from '@/components/BillDialog.vue'
@@ -35,7 +33,6 @@ import logoUrl from '@/assets/pop-side-logo.jpg'
 const table = useTableStore()
 const menu = useMenuStore()
 const cart = useCartStore()
-const recentOrders = useRecentOrdersStore()
 const locale = useLocaleStore()
 const theme = useThemeStore()
 const cafeStatus = useCafeStatusStore()
@@ -100,17 +97,6 @@ watch(
   { immediate: true }
 )
 
-// "Pesanan kamu" di atas menu: status pesanan milik perangkat ini, dari
-// server — tetap ada setelah halaman status ditutup. Pesanan yang sudah
-// selesai hanya muncul selama struk digitalnya masih bisa diambil; tidak ada
-// riwayat pesanan selesai. Diperbarui berkala selama halaman terlihat, dan
-// langsung begitu kembali ke tab ini.
-const JEDA_RIWAYAT_MS = 30000
-let timerRiwayat = null
-function segarkanRiwayat() {
-  if (document.visibilityState !== 'hidden') recentOrders.muat()
-}
-
 onMounted(() => {
   // Setelah scan QR info reservasinya masih segar; setelah reload halaman
   // belum pernah dicek — perbaruiReservasi sendiri yang memutuskan.
@@ -119,25 +105,7 @@ onMounted(() => {
     menu.fetchMenu()
   }
   cafeStatus.fetch()
-  recentOrders.muat()
-  timerRiwayat = setInterval(segarkanRiwayat, JEDA_RIWAYAT_MS)
-  document.addEventListener('visibilitychange', segarkanRiwayat)
 })
-onUnmounted(() => {
-  clearInterval(timerRiwayat)
-  document.removeEventListener('visibilitychange', segarkanRiwayat)
-})
-
-// Struk pesanan selesai hilang sendiri setelah 5 menit — begitu hitung
-// mundurnya habis, entrinya langsung lenyap dari kartu (server juga sudah
-// tidak mengembalikannya di muat berikutnya).
-function strukHabis(kodeOrder) {
-  recentOrders.pesanan = recentOrders.pesanan.filter((o) => o.kodeOrder !== kodeOrder)
-}
-
-function bukaPesanan(kodeOrder) {
-  router.push({ name: 'order', params: { kodeOrder } })
-}
 
 function photoUrl(filename) {
   return `${API_URL}/public/products/photo/${filename}`
@@ -182,6 +150,9 @@ const estimatedTotal = computed(() =>
       <h1 class="text-lg font-semibold">{{ locale.t('scanQrTitle') }}</h1>
       <p class="text-sm text-muted-foreground">{{ locale.t('scanQrDesc') }}</p>
     </div>
+    <!-- Sesi meja tab ini hilang, tapi pesanan perangkat ini tetap dikenali
+    server (cookie perangkat) — statusnya harus tetap bisa dibuka dari sini. -->
+    <PesananKamu class="w-full max-w-sm" />
   </div>
 
   <div v-else class="mx-auto min-h-svh max-w-md pb-28 sm:max-w-2xl lg:max-w-5xl">
@@ -257,36 +228,7 @@ const estimatedTotal = computed(() =>
     <main class="px-4 py-4">
       <ReservasiNotice class="mb-4" />
 
-      <section
-        v-if="recentOrders.pesanan.length > 0"
-        class="mb-4 space-y-2 rounded-2xl border border-primary/40 bg-primary/10 p-3"
-      >
-        <p class="px-0.5 text-xs font-semibold">{{ locale.t('pesananKamu') }}</p>
-        <button
-          v-for="order in recentOrders.pesanan"
-          :key="order.kodeOrder"
-          type="button"
-          class="flex w-full items-center gap-2.5 rounded-xl bg-card px-3 py-2.5 text-left transition-colors hover:bg-accent active:bg-accent"
-          @click="bukaPesanan(order.kodeOrder)"
-        >
-          <ReceiptTextIcon v-if="order.status === 'completed'" class="size-4 shrink-0 text-status-completed" />
-          <span v-else class="size-2.5 shrink-0 rounded-full" :class="STATUS_COLOR[order.status]" />
-          <span class="min-w-0 flex-1">
-            <span class="block text-sm font-medium">{{ locale.t(STATUS_LABEL_KEY[order.status]) }}</span>
-            <span
-              v-if="order.status === 'completed' && order.strukBerlakuSampai"
-              class="block truncate text-xs text-muted-foreground"
-              >{{ locale.t('strukHilangSingkat') }}
-              <HitungMundur :sampai="order.strukBerlakuSampai" @habis="strukHabis(order.kodeOrder)"
-            /></span>
-            <span v-else class="block truncate font-mono text-xs text-muted-foreground">{{ order.kodeOrder }}</span>
-          </span>
-          <span class="shrink-0 text-xs font-semibold text-primary-strong">{{
-            locale.t(order.status === 'completed' ? 'lihatStruk' : 'lihatStatus')
-          }}</span>
-          <ChevronRightIcon class="size-4 shrink-0 text-muted-foreground" />
-        </button>
-      </section>
+      <PesananKamu class="mb-4" />
 
       <div
         v-if="tutup"
